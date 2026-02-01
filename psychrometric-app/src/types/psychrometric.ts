@@ -23,6 +23,15 @@ export interface StatePoint {
   color?: string;
 }
 
+export type StatePointValueKey =
+  | 'dryBulbTemp'
+  | 'wetBulbTemp'
+  | 'relativeHumidity'
+  | 'humidity'
+  | 'enthalpy'
+  | 'dewPoint'
+  | 'specificVolume';
+
 /**
  * 状態点の入力タイプ
  */

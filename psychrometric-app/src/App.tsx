@@ -8,8 +8,25 @@ import { DesignConditionsEditor } from './components/DesignConditions/DesignCond
 import { ExportDialog } from './components/Export/ExportDialog';
 import { ProjectManager } from './components/Project/ProjectManager';
 import { StatePointConverter } from './lib/psychrometric/conversions';
+import { PsychrometricCalculator } from './lib/psychrometric/properties';
+import { STANDARD_PRESSURE } from './lib/psychrometric/constants';
 import { Process } from './types/process';
 import { DesignConditions } from './types/designConditions';
+import { StatePointValueKey } from './types/psychrometric';
+
+const STATE_POINT_INPUT_OPTIONS: Array<{
+  key: StatePointValueKey;
+  label: string;
+  unit: string;
+  placeholder: string;
+}> = [
+  { key: 'dryBulbTemp', label: '乾球温度', unit: '°C', placeholder: '乾球温度 (°C)' },
+  { key: 'wetBulbTemp', label: '湿球温度', unit: '°C', placeholder: '湿球温度 (°C)' },
+  { key: 'relativeHumidity', label: '相対湿度', unit: '%', placeholder: '相対湿度 (%)' },
+  { key: 'humidity', label: '絶対湿度', unit: "kg/kg'", placeholder: "絶対湿度 (kg/kg')" },
+  { key: 'enthalpy', label: 'エンタルピー', unit: "kJ/kg'", placeholder: "エンタルピー (kJ/kg')" },
+  { key: 'dewPoint', label: '露点温度', unit: '°C', placeholder: '露点温度 (°C)' },
+];
 
 function App() {
   const {
@@ -47,14 +64,22 @@ function App() {
   const [editingProcess, setEditingProcess] = useState<Process | null>(null);
 
   // New point form state
-  const [newPointTemp, setNewPointTemp] = useState('25');
-  const [newPointRH, setNewPointRH] = useState('60');
+  const [inputTypeA, setInputTypeA] = useState<StatePointValueKey>('dryBulbTemp');
+  const [inputTypeB, setInputTypeB] = useState<StatePointValueKey>('relativeHumidity');
+  const [inputValueA, setInputValueA] = useState('25');
+  const [inputValueB, setInputValueB] = useState('60');
   const [newPointName, setNewPointName] = useState('');
   const [newPointSeason, setNewPointSeason] = useState<'summer' | 'winter' | 'both'>(activeSeason);
 
   // Active tab for sidebar
   const [activeTab, setActiveTab] = useState<'points' | 'processes'>('points');
   const [chartSize, setChartSize] = useState({ width: 900, height: 600 });
+  const inputOptionA =
+    STATE_POINT_INPUT_OPTIONS.find((option) => option.key === inputTypeA) ??
+    STATE_POINT_INPUT_OPTIONS[0];
+  const inputOptionB =
+    STATE_POINT_INPUT_OPTIONS.find((option) => option.key === inputTypeB) ??
+    STATE_POINT_INPUT_OPTIONS[1];
 
   useEffect(() => {
     const container = chartContainerRef.current;
@@ -80,15 +105,51 @@ function App() {
 
   // 状態点の追加
   const handleAddPoint = () => {
-    const temp = parseFloat(newPointTemp);
-    const rh = parseFloat(newPointRH);
+    const valueA = parseFloat(inputValueA);
+    const valueB = parseFloat(inputValueB);
 
-    if (isNaN(temp) || isNaN(rh)) {
-      alert('温度と相対湿度を正しく入力してください');
+    if (isNaN(valueA) || isNaN(valueB)) {
+      alert('入力値を正しく入力してください');
       return;
     }
 
-    const stateData = StatePointConverter.fromDryBulbAndRH(temp, rh);
+    if (inputTypeA === inputTypeB) {
+      alert('異なる2つの項目を選択してください');
+      return;
+    }
+
+    const pressure = designConditions.outdoor.pressure ?? STANDARD_PRESSURE;
+
+    if (
+      (inputTypeA === 'dewPoint' && inputTypeB === 'humidity') ||
+      (inputTypeA === 'humidity' && inputTypeB === 'dewPoint')
+    ) {
+      const dewPoint = inputTypeA === 'dewPoint' ? valueA : valueB;
+      const humidity = inputTypeA === 'humidity' ? valueA : valueB;
+      const derivedHumidity = PsychrometricCalculator.absoluteHumidity(
+        dewPoint,
+        100,
+        pressure
+      );
+      if (Math.abs(derivedHumidity - humidity) > 0.0005) {
+        alert('露点温度と絶対湿度の組み合わせが一致しません。');
+        return;
+      }
+    }
+
+    let stateData: ReturnType<typeof StatePointConverter.fromTwoValues>;
+    try {
+      stateData = StatePointConverter.fromTwoValues(
+        inputTypeA,
+        valueA,
+        inputTypeB,
+        valueB,
+        pressure
+      );
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '状態点を計算できません');
+      return;
+    }
 
     const newPoint = {
       id: `point-${Date.now()}`,
@@ -101,6 +162,10 @@ function App() {
     addStatePoint(newPoint);
     setShowAddPoint(false);
     setNewPointName('');
+    setInputTypeA('dryBulbTemp');
+    setInputTypeB('relativeHumidity');
+    setInputValueA('25');
+    setInputValueB('60');
   };
 
   // 状態点の移動（ドラッグ）
@@ -349,21 +414,50 @@ function App() {
                     onChange={(e) => setNewPointName(e.target.value)}
                     className="w-full px-3 py-2 border rounded text-sm"
                   />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <input
-                      type="number"
-                      placeholder="温度 (°C)"
-                      value={newPointTemp}
-                      onChange={(e) => setNewPointTemp(e.target.value)}
-                      className="px-3 py-2 border rounded text-sm"
-                    />
-                    <input
-                      type="number"
-                      placeholder="RH (%)"
-                      value={newPointRH}
-                      onChange={(e) => setNewPointRH(e.target.value)}
-                      className="px-3 py-2 border rounded text-sm"
-                    />
+                  <div className="grid grid-cols-1 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-2 items-center">
+                      <select
+                        value={inputTypeA}
+                        onChange={(e) => setInputTypeA(e.target.value as StatePointValueKey)}
+                        className="px-3 py-2 border rounded text-sm bg-white"
+                      >
+                        {STATE_POINT_INPUT_OPTIONS.map((option) => (
+                          <option key={option.key} value={option.key}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        placeholder={inputOptionA.placeholder}
+                        value={inputValueA}
+                        onChange={(e) => setInputValueA(e.target.value)}
+                        className="px-3 py-2 border rounded text-sm"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-2 items-center">
+                      <select
+                        value={inputTypeB}
+                        onChange={(e) => setInputTypeB(e.target.value as StatePointValueKey)}
+                        className="px-3 py-2 border rounded text-sm bg-white"
+                      >
+                        {STATE_POINT_INPUT_OPTIONS.map((option) => (
+                          <option key={option.key} value={option.key}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        placeholder={inputOptionB.placeholder}
+                        value={inputValueB}
+                        onChange={(e) => setInputValueB(e.target.value)}
+                        className="px-3 py-2 border rounded text-sm"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      選択した2項目の入力値から他の物性値を計算します。
+                    </p>
                   </div>
                   <div className="flex flex-wrap gap-1">
                     <button
@@ -451,12 +545,28 @@ function App() {
                                   : '通年'}
                               </span>
                             </div>
-                            <div className="text-xs text-gray-600 mt-1">
-                              {point.dryBulbTemp?.toFixed(1)}°C, RH{' '}
-                              {point.relativeHumidity?.toFixed(0)}%
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              x={point.humidity?.toFixed(4)} kg/kg'
+                            <div className="text-xs text-gray-600 mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+                              <div>
+                                乾球温度: {point.dryBulbTemp?.toFixed(1) ?? '-'}°C
+                              </div>
+                              <div>
+                                湿球温度: {point.wetBulbTemp?.toFixed(1) ?? '-'}°C
+                              </div>
+                              <div>
+                                相対湿度: {point.relativeHumidity?.toFixed(0) ?? '-'}%
+                              </div>
+                              <div>
+                                絶対湿度: {point.humidity?.toFixed(4) ?? '-'} kg/kg'
+                              </div>
+                              <div>
+                                エンタルピー: {point.enthalpy?.toFixed(1) ?? '-'} kJ/kg'
+                              </div>
+                              <div>
+                                露点温度: {point.dewPoint?.toFixed(1) ?? '-'}°C
+                              </div>
+                              <div>
+                                比体積: {point.specificVolume?.toFixed(3) ?? '-'} m³/kg'
+                              </div>
                             </div>
                           </div>
                           <button
