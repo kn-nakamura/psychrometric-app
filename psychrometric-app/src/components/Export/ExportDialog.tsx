@@ -25,327 +25,453 @@ export const ExportDialog = ({
   const [isExporting, setIsExporting] = useState(false);
   const [exportType, setExportType] = useState<'pdf' | 'png' | null>(null);
 
-  // A4縦向き
-  const A4_SIZE_MM = { width: 210, height: 297 };
-  const A4_DPI = 600; // Increased DPI for better quality
+  // A4縦向き (mm)
+  const A4_WIDTH_MM = 210;
+  const A4_HEIGHT_MM = 297;
+  const A4_DPI = 300; // 印刷品質
 
   const mmToPx = (mm: number) => Math.round((mm / 25.4) * A4_DPI);
 
   const formatNumber = (value?: number, digits = 1) =>
     value === undefined || Number.isNaN(value) ? '-' : value.toFixed(digits);
 
-  const buildA4Canvas = (chartCanvas: HTMLCanvasElement) => {
-    const a4Canvas = document.createElement('canvas');
-    a4Canvas.width = mmToPx(A4_SIZE_MM.width);
-    a4Canvas.height = mmToPx(A4_SIZE_MM.height);
+  // Filter state points by active season
+  const filteredStatePoints = statePoints
+    .filter((point) => {
+      if (activeSeason === 'both') return true;
+      return point.season === activeSeason || point.season === 'both';
+    })
+    .sort((a, b) => a.order - b.order);
 
-    const ctx = a4Canvas.getContext('2d');
-    if (!ctx) {
-      throw new Error('キャンバスの生成に失敗しました');
+  // Filter processes by active season
+  const filteredProcesses = processes.filter((process) => {
+    if (activeSeason === 'both') return true;
+    return process.season === activeSeason || process.season === 'both';
+  });
+
+  // Generate labels for state points (C1, C2 for summer, H1, H2 for winter)
+  const getPointLabel = (point: StatePoint, index: number): string => {
+    let summerCount = 0;
+    let winterCount = 0;
+    for (let i = 0; i <= index; i++) {
+      const p = filteredStatePoints[i];
+      if (p.season === 'summer') summerCount++;
+      else if (p.season === 'winter') winterCount++;
     }
 
-    const marginMm = 10;
-    const headerHeightMm = 18;
-    const sectionGapMm = 5;
-    const cardPaddingMm = 4;
-    const cardGapMm = 3;
+    if (point.season === 'summer') {
+      return `C${summerCount}`;
+    } else if (point.season === 'winter') {
+      return `H${winterCount}`;
+    } else {
+      let bothSummerCount = 0;
+      let bothWinterCount = 0;
+      for (let i = 0; i <= index; i++) {
+        const p = filteredStatePoints[i];
+        if (p.season === 'summer' || p.season === 'both') bothSummerCount++;
+        if (p.season === 'winter' || p.season === 'both') bothWinterCount++;
+      }
+      if (activeSeason === 'summer') {
+        return `C${bothSummerCount}`;
+      } else if (activeSeason === 'winter') {
+        return `H${bothWinterCount}`;
+      }
+      return `C${bothSummerCount}/H${bothWinterCount}`;
+    }
+  };
+
+  // Helper function to get label for a state point by ID
+  const getPointLabelById = (pointId: string): string => {
+    const pointIndex = filteredStatePoints.findIndex((p) => p.id === pointId);
+    if (pointIndex === -1) return '?';
+    const point = filteredStatePoints[pointIndex];
+    return getPointLabel(point, pointIndex);
+  };
+
+  const buildA4Pages = (chartCanvas: HTMLCanvasElement): HTMLCanvasElement[] => {
+    const pages: HTMLCanvasElement[] = [];
+
+    // 設定値 (mm)
+    const marginMm = 8;
+    const headerHeightMm = 12;
+    const chartTopMm = marginMm + headerHeightMm + 2;
+    const chartHeightMm = 110; // グラフ領域の高さ（A4の約1/2より少し上）
+    const bottomSectionStartMm = chartTopMm + chartHeightMm + 5;
 
     const marginPx = mmToPx(marginMm);
-    const headerHeightPx = mmToPx(headerHeightMm);
-    const sectionGapPx = mmToPx(sectionGapMm);
-    const cardPaddingPx = mmToPx(cardPaddingMm);
-    const cardGapPx = mmToPx(cardGapMm);
+    const pageWidthPx = mmToPx(A4_WIDTH_MM);
+    const pageHeightPx = mmToPx(A4_HEIGHT_MM);
+    const contentWidthPx = pageWidthPx - marginPx * 2;
 
-    const contentWidthPx = a4Canvas.width - marginPx * 2;
+    // ========================================
+    // 1ページ目作成
+    // ========================================
+    const page1 = document.createElement('canvas');
+    page1.width = pageWidthPx;
+    page1.height = pageHeightPx;
+    const ctx1 = page1.getContext('2d');
+    if (!ctx1) throw new Error('キャンバスの生成に失敗しました');
 
-    // 背景（薄いグレー）
-    ctx.fillStyle = '#f3f4f6';
-    ctx.fillRect(0, 0, a4Canvas.width, a4Canvas.height);
+    // 背景（白）
+    ctx1.fillStyle = '#ffffff';
+    ctx1.fillRect(0, 0, pageWidthPx, pageHeightPx);
 
-    // ヘッダー背景（白）
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, a4Canvas.width, mmToPx(headerHeightMm + marginMm));
+    // ヘッダー: プロジェクト名（左）と設計条件（右）
+    const headerY = mmToPx(marginMm);
 
     // プロジェクト名
-    ctx.fillStyle = '#111827';
-    ctx.font = `bold ${mmToPx(5)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
-    ctx.fillText(designConditions.project.name || '空気線図', marginPx, marginPx + mmToPx(5));
+    ctx1.fillStyle = '#111827';
+    ctx1.font = `bold ${mmToPx(4)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
+    ctx1.textAlign = 'left';
+    ctx1.fillText(designConditions.project.name || '空気線図', marginPx, headerY + mmToPx(4));
 
-    // プロジェクト情報
-    ctx.font = `${mmToPx(2.8)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
-    ctx.fillStyle = '#6b7280';
+    // プロジェクト情報（サブタイトル）
+    ctx1.font = `${mmToPx(2)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
+    ctx1.fillStyle = '#6b7280';
     const projectInfo = [
       designConditions.project.location,
       designConditions.project.date,
       designConditions.project.designer,
     ].filter(Boolean).join(' | ');
-    ctx.fillText(projectInfo || '-', marginPx, marginPx + mmToPx(10));
+    ctx1.fillText(projectInfo || '-', marginPx, headerY + mmToPx(7.5));
 
-    // チャート領域（カード風）
-    const chartCardY = marginPx + headerHeightPx;
-    const chartAspectRatio = chartCanvas.width / chartCanvas.height;
-    const chartWidthPx = contentWidthPx;
-    const chartHeightPx = chartWidthPx / chartAspectRatio;
-    const chartCardHeightPx = chartHeightPx + cardPaddingPx * 2;
+    // 設計条件（右側）
+    const conditionsX = marginPx + contentWidthPx * 0.45;
+    const conditionsWidth = contentWidthPx * 0.55;
+    ctx1.font = `bold ${mmToPx(2)}px "Noto Sans JP", sans-serif`;
+    ctx1.fillStyle = '#374151';
+    ctx1.textAlign = 'left';
+    ctx1.fillText('設計条件', conditionsX, headerY + mmToPx(2));
 
-    // チャートカード背景
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.roundRect(marginPx, chartCardY, contentWidthPx, chartCardHeightPx, mmToPx(2));
-    ctx.fill();
+    ctx1.font = `${mmToPx(1.6)}px sans-serif`;
+    ctx1.fillStyle = '#4b5563';
 
-    // チャート描画
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(
-      chartCanvas,
-      marginPx + cardPaddingPx,
-      chartCardY + cardPaddingPx,
-      chartWidthPx - cardPaddingPx * 2,
-      chartHeightPx
+    const col1X = conditionsX;
+    const col2X = conditionsX + conditionsWidth / 3;
+    const col3X = conditionsX + (conditionsWidth / 3) * 2;
+    const condRowHeight = mmToPx(2.2);
+
+    // 外気条件
+    ctx1.font = `bold ${mmToPx(1.5)}px sans-serif`;
+    ctx1.fillText('外気条件', col1X, headerY + mmToPx(4.5));
+    ctx1.font = `${mmToPx(1.4)}px sans-serif`;
+    ctx1.fillText(
+      `夏: ${formatNumber(designConditions.outdoor.summer.dryBulbTemp)}°C / ${formatNumber(designConditions.outdoor.summer.relativeHumidity, 0)}%`,
+      col1X,
+      headerY + mmToPx(4.5) + condRowHeight
+    );
+    ctx1.fillText(
+      `冬: ${formatNumber(designConditions.outdoor.winter.dryBulbTemp)}°C / ${formatNumber(designConditions.outdoor.winter.relativeHumidity, 0)}%`,
+      col1X,
+      headerY + mmToPx(4.5) + condRowHeight * 2
     );
 
-    // Filter state points by active season
-    const filteredStatePoints = statePoints
-      .filter((point) => {
-        if (activeSeason === 'both') return true;
-        return point.season === activeSeason || point.season === 'both';
-      })
-      .sort((a, b) => a.order - b.order);
+    // 室内条件
+    ctx1.font = `bold ${mmToPx(1.5)}px sans-serif`;
+    ctx1.fillText('室内条件', col2X, headerY + mmToPx(4.5));
+    ctx1.font = `${mmToPx(1.4)}px sans-serif`;
+    ctx1.fillText(
+      `夏: ${formatNumber(designConditions.indoor.summer.dryBulbTemp)}°C / ${formatNumber(designConditions.indoor.summer.relativeHumidity, 0)}%`,
+      col2X,
+      headerY + mmToPx(4.5) + condRowHeight
+    );
+    ctx1.fillText(
+      `冬: ${formatNumber(designConditions.indoor.winter.dryBulbTemp)}°C / ${formatNumber(designConditions.indoor.winter.relativeHumidity, 0)}%`,
+      col2X,
+      headerY + mmToPx(4.5) + condRowHeight * 2
+    );
 
-    // Generate labels for state points (C1, C2 for summer, H1, H2 for winter)
-    const getPointLabel = (point: StatePoint, index: number): string => {
-      let summerCount = 0;
-      let winterCount = 0;
-      for (let i = 0; i <= index; i++) {
-        const p = filteredStatePoints[i];
-        if (p.season === 'summer') summerCount++;
-        else if (p.season === 'winter') winterCount++;
-      }
+    // 風量
+    ctx1.font = `bold ${mmToPx(1.5)}px sans-serif`;
+    ctx1.fillText('風量', col3X, headerY + mmToPx(4.5));
+    ctx1.font = `${mmToPx(1.4)}px sans-serif`;
+    ctx1.fillText(
+      `供給: ${formatNumber(designConditions.airflow.supplyAir, 0)} m³/h`,
+      col3X,
+      headerY + mmToPx(4.5) + condRowHeight
+    );
+    ctx1.fillText(
+      `外気: ${formatNumber(designConditions.airflow.outdoorAir, 0)} m³/h`,
+      col3X,
+      headerY + mmToPx(4.5) + condRowHeight * 2
+    );
 
-      if (point.season === 'summer') {
-        return `C${summerCount}`;
-      } else if (point.season === 'winter') {
-        return `H${winterCount}`;
-      } else {
-        let bothSummerCount = 0;
-        let bothWinterCount = 0;
-        for (let i = 0; i <= index; i++) {
-          const p = filteredStatePoints[i];
-          if (p.season === 'summer' || p.season === 'both') bothSummerCount++;
-          if (p.season === 'winter' || p.season === 'both') bothWinterCount++;
-        }
-        if (activeSeason === 'summer') {
-          return `C${bothSummerCount}`;
-        } else if (activeSeason === 'winter') {
-          return `H${bothWinterCount}`;
-        }
-        return `C${bothSummerCount}/H${bothWinterCount}`;
-      }
-    };
+    // チャート描画（上半分）
+    const chartY = mmToPx(chartTopMm);
+    const chartWidthPx = contentWidthPx;
+    const chartHeightPx = mmToPx(chartHeightMm);
+    const chartAspectRatio = chartCanvas.width / chartCanvas.height;
+    let drawChartWidth = chartWidthPx;
+    let drawChartHeight = chartWidthPx / chartAspectRatio;
 
-    // 状態点セクション
-    let currentY = chartCardY + chartCardHeightPx + sectionGapPx;
+    if (drawChartHeight > chartHeightPx) {
+      drawChartHeight = chartHeightPx;
+      drawChartWidth = chartHeightPx * chartAspectRatio;
+    }
 
-    // 状態点タイトル
-    ctx.fillStyle = '#111827';
-    ctx.font = `bold ${mmToPx(3.5)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
-    ctx.fillText('状態点', marginPx, currentY + mmToPx(3));
-    currentY += mmToPx(6);
+    const chartXOffset = marginPx + (chartWidthPx - drawChartWidth) / 2;
 
-    // 状態点カード
-    const statePointCardHeight = mmToPx(14);
+    // チャート枠
+    ctx1.strokeStyle = '#e5e7eb';
+    ctx1.lineWidth = 1;
+    ctx1.strokeRect(marginPx, chartY, chartWidthPx, chartHeightPx);
+
+    // チャート描画
+    ctx1.imageSmoothingEnabled = true;
+    ctx1.imageSmoothingQuality = 'high';
+    ctx1.drawImage(
+      chartCanvas,
+      chartXOffset,
+      chartY + (chartHeightPx - drawChartHeight) / 2,
+      drawChartWidth,
+      drawChartHeight
+    );
+
+    // 下半分のレイアウト
+    const bottomY = mmToPx(bottomSectionStartMm);
+    const halfWidth = contentWidthPx / 2 - mmToPx(2);
+
+    // ========================================
+    // 状態点セクション（左半分）
+    // ========================================
+    let statePointY = bottomY;
+    ctx1.fillStyle = '#111827';
+    ctx1.font = `bold ${mmToPx(2.5)}px "Noto Sans JP", sans-serif`;
+    ctx1.textAlign = 'left';
+    ctx1.fillText('状態点', marginPx, statePointY + mmToPx(2.5));
+    statePointY += mmToPx(5);
+
+    // 状態点テーブルヘッダー
+    const statePointCardHeight = mmToPx(6);
+    const statePointMaxY = pageHeightPx - marginPx;
+    let statePointPage1Count = 0;
+    const statePointOverflow: StatePoint[] = [];
+
     filteredStatePoints.forEach((point, index) => {
-      if (currentY + statePointCardHeight > a4Canvas.height - marginPx) return;
+      if (statePointY + statePointCardHeight > statePointMaxY) {
+        statePointOverflow.push(point);
+        return;
+      }
 
       const label = getPointLabel(point, index);
       const seasonColor =
         point.season === 'summer' ? '#3b82f6' :
         point.season === 'winter' ? '#ef4444' : '#8b5cf6';
 
-      // カード背景
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.roundRect(marginPx, currentY, contentWidthPx, statePointCardHeight, mmToPx(1.5));
-      ctx.fill();
+      // バッジ
+      ctx1.fillStyle = seasonColor;
+      ctx1.beginPath();
+      ctx1.roundRect(marginPx, statePointY, mmToPx(6), mmToPx(3.5), mmToPx(0.5));
+      ctx1.fill();
 
-      // ラベルバッジ
-      ctx.fillStyle = seasonColor;
-      ctx.beginPath();
-      ctx.roundRect(marginPx + cardPaddingPx, currentY + mmToPx(3), mmToPx(10), mmToPx(5), mmToPx(1));
-      ctx.fill();
+      ctx1.fillStyle = '#ffffff';
+      ctx1.font = `bold ${mmToPx(1.6)}px sans-serif`;
+      ctx1.textAlign = 'center';
+      ctx1.fillText(label, marginPx + mmToPx(3), statePointY + mmToPx(2.3));
+      ctx1.textAlign = 'left';
 
-      ctx.fillStyle = '#ffffff';
-      ctx.font = `bold ${mmToPx(2.8)}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText(label, marginPx + cardPaddingPx + mmToPx(5), currentY + mmToPx(6.2));
-      ctx.textAlign = 'left';
+      // 名前と物性値
+      ctx1.fillStyle = '#111827';
+      ctx1.font = `bold ${mmToPx(1.8)}px "Noto Sans JP", sans-serif`;
+      ctx1.fillText(point.name, marginPx + mmToPx(7), statePointY + mmToPx(2.2));
 
-      // 名前
-      ctx.fillStyle = '#111827';
-      ctx.font = `bold ${mmToPx(3)}px "Noto Sans JP", sans-serif`;
-      ctx.fillText(point.name, marginPx + cardPaddingPx + mmToPx(13), currentY + mmToPx(6));
+      ctx1.fillStyle = '#6b7280';
+      ctx1.font = `${mmToPx(1.4)}px sans-serif`;
+      const propText = `${formatNumber(point.dryBulbTemp)}°C | ${formatNumber(point.relativeHumidity, 0)}%RH | ${formatNumber(point.humidity, 4)}kg/kg' | ${formatNumber(point.enthalpy)}kJ/kg'`;
+      ctx1.fillText(propText, marginPx + mmToPx(7), statePointY + mmToPx(4.8));
 
-      // 物性値
-      ctx.fillStyle = '#6b7280';
-      ctx.font = `${mmToPx(2.5)}px sans-serif`;
-      const propText = `${formatNumber(point.dryBulbTemp)}°C | ${formatNumber(point.relativeHumidity, 0)}%RH | ${formatNumber(point.humidity, 4)} kg/kg' | ${formatNumber(point.enthalpy)} kJ/kg'`;
-      ctx.fillText(propText, marginPx + cardPaddingPx + mmToPx(13), currentY + mmToPx(10.5));
-
-      currentY += statePointCardHeight + cardGapPx;
+      statePointY += statePointCardHeight;
+      statePointPage1Count++;
     });
 
-    // プロセスセクション
-    currentY += sectionGapPx;
+    // ========================================
+    // プロセスセクション（右半分）
+    // ========================================
+    const processX = marginPx + halfWidth + mmToPx(4);
+    let processY = bottomY;
+    ctx1.fillStyle = '#111827';
+    ctx1.font = `bold ${mmToPx(2.5)}px "Noto Sans JP", sans-serif`;
+    ctx1.textAlign = 'left';
+    ctx1.fillText('プロセス', processX, processY + mmToPx(2.5));
+    processY += mmToPx(5);
 
-    // Filter processes by active season
-    const filteredProcesses = processes.filter((process) => {
-      if (activeSeason === 'both') return true;
-      return process.season === activeSeason || process.season === 'both';
-    });
+    const processCardHeight = mmToPx(9);
+    const processMaxY = pageHeightPx - marginPx;
+    const processOverflow: Process[] = [];
 
-    if (filteredProcesses.length > 0 && currentY + mmToPx(10) < a4Canvas.height - marginPx) {
-      // プロセスタイトル
-      ctx.fillStyle = '#111827';
-      ctx.font = `bold ${mmToPx(3.5)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
-      ctx.fillText('プロセス', marginPx, currentY + mmToPx(3));
-      currentY += mmToPx(6);
+    filteredProcesses.forEach((process) => {
+      if (processY + processCardHeight > processMaxY) {
+        processOverflow.push(process);
+        return;
+      }
 
-      // Helper function to get label for a state point by ID
-      const getPointLabelById = (pointId: string): string => {
-        const pointIndex = filteredStatePoints.findIndex((p) => p.id === pointId);
-        if (pointIndex === -1) return '?';
-        const point = filteredStatePoints[pointIndex];
-        return `${getPointLabel(point, pointIndex)}`;
-      };
+      const fromPoint = filteredStatePoints.find((p) => p.id === process.fromPointId);
+      const toPoint = filteredStatePoints.find((p) => p.id === process.toPointId);
+      const fromLabel = getPointLabelById(process.fromPointId);
+      const toLabel = getPointLabelById(process.toPointId);
 
-      const processCardHeight = mmToPx(18);
-      filteredProcesses.forEach((process) => {
-        if (currentY + processCardHeight > a4Canvas.height - marginPx) return;
+      const seasonColor =
+        process.season === 'summer' ? '#3b82f6' :
+        process.season === 'winter' ? '#ef4444' : '#8b5cf6';
 
-        const fromPoint = filteredStatePoints.find((p) => p.id === process.fromPointId);
-        const toPoint = filteredStatePoints.find((p) => p.id === process.toPointId);
-        const fromLabel = getPointLabelById(process.fromPointId);
-        const toLabel = getPointLabelById(process.toPointId);
+      // カラーバー
+      ctx1.fillStyle = seasonColor;
+      ctx1.fillRect(processX, processY, mmToPx(1), processCardHeight - mmToPx(1));
 
-        const seasonColor =
-          process.season === 'summer' ? '#3b82f6' :
-          process.season === 'winter' ? '#ef4444' : '#8b5cf6';
+      // プロセス名
+      ctx1.fillStyle = '#111827';
+      ctx1.font = `bold ${mmToPx(1.8)}px "Noto Sans JP", sans-serif`;
+      ctx1.fillText(process.name, processX + mmToPx(2.5), processY + mmToPx(2.2));
 
-        // カード背景
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.roundRect(marginPx, currentY, contentWidthPx, processCardHeight, mmToPx(1.5));
-        ctx.fill();
+      // 遷移
+      ctx1.fillStyle = '#6b7280';
+      ctx1.font = `${mmToPx(1.5)}px sans-serif`;
+      ctx1.fillText(`${fromLabel} → ${toLabel}`, processX + mmToPx(2.5), processY + mmToPx(4.5));
 
-        // 左側のカラーバー
-        ctx.fillStyle = seasonColor;
-        ctx.beginPath();
-        ctx.roundRect(marginPx, currentY, mmToPx(1.5), processCardHeight, mmToPx(1.5));
-        ctx.fill();
+      // 詳細情報
+      if (fromPoint && toPoint && fromPoint.enthalpy && toPoint.enthalpy) {
+        const enthalpyDiff = toPoint.enthalpy - fromPoint.enthalpy;
+        const humidityDiff = (toPoint.humidity || 0) - (fromPoint.humidity || 0);
 
-        // プロセス名と矢印
-        ctx.fillStyle = '#111827';
-        ctx.font = `bold ${mmToPx(3)}px "Noto Sans JP", sans-serif`;
-        ctx.fillText(`${process.name}`, marginPx + cardPaddingPx + mmToPx(3), currentY + mmToPx(5.5));
-
-        ctx.fillStyle = '#6b7280';
-        ctx.font = `${mmToPx(2.8)}px sans-serif`;
-        ctx.fillText(`${fromLabel} → ${toLabel}`, marginPx + cardPaddingPx + mmToPx(3), currentY + mmToPx(10));
-
-        // 詳細情報
-        if (fromPoint && toPoint && fromPoint.enthalpy && toPoint.enthalpy) {
-          const enthalpyDiff = toPoint.enthalpy - fromPoint.enthalpy;
-          const humidityDiff = (toPoint.humidity || 0) - (fromPoint.humidity || 0);
-
-          let detailText = '';
-          if (process.parameters.airflow) {
-            const totalCapacity = (enthalpyDiff * process.parameters.airflow * 1.2) / 3600;
-            detailText = `全熱: ${Math.abs(totalCapacity).toFixed(2)} kW`;
-            if (humidityDiff !== 0) {
-              const moistureAmount = Math.abs(humidityDiff) * process.parameters.airflow * 1.2;
-              detailText += ` | ${humidityDiff < 0 ? '除湿' : '加湿'}: ${moistureAmount.toFixed(2)} L/h`;
-            }
+        let detailText = '';
+        if (process.parameters.airflow) {
+          const totalCapacity = (enthalpyDiff * process.parameters.airflow * 1.2) / 3600;
+          detailText = `全熱: ${Math.abs(totalCapacity).toFixed(2)} kW`;
+          if (humidityDiff !== 0) {
+            const moistureAmount = Math.abs(humidityDiff) * process.parameters.airflow * 1.2;
+            detailText += ` | ${humidityDiff < 0 ? '除湿' : '加湿'}: ${moistureAmount.toFixed(1)} g/h`;
           }
-          if (process.parameters.heatExchangeEfficiency) {
-            detailText += (detailText ? ' | ' : '') + `効率: ${process.parameters.heatExchangeEfficiency.toFixed(0)}%`;
-          }
-          ctx.fillText(detailText, marginPx + cardPaddingPx + mmToPx(3), currentY + mmToPx(14.5));
         }
+        if (process.parameters.heatExchangeEfficiency) {
+          detailText += (detailText ? ' | ' : '') + `効率: ${process.parameters.heatExchangeEfficiency.toFixed(0)}%`;
+        }
+        ctx1.font = `${mmToPx(1.3)}px sans-serif`;
+        ctx1.fillText(detailText, processX + mmToPx(2.5), processY + mmToPx(6.8));
+      }
 
-        currentY += processCardHeight + cardGapPx;
-      });
+      processY += processCardHeight;
+    });
+
+    pages.push(page1);
+
+    // ========================================
+    // 2ページ目以降（オーバーフロー分）
+    // ========================================
+    if (statePointOverflow.length > 0 || processOverflow.length > 0) {
+      const page2 = document.createElement('canvas');
+      page2.width = pageWidthPx;
+      page2.height = pageHeightPx;
+      const ctx2 = page2.getContext('2d');
+      if (!ctx2) throw new Error('キャンバスの生成に失敗しました');
+
+      // 背景
+      ctx2.fillStyle = '#ffffff';
+      ctx2.fillRect(0, 0, pageWidthPx, pageHeightPx);
+
+      // ヘッダー
+      ctx2.fillStyle = '#111827';
+      ctx2.font = `bold ${mmToPx(3)}px "Noto Sans JP", sans-serif`;
+      ctx2.textAlign = 'left';
+      ctx2.fillText(`${designConditions.project.name || '空気線図'} - 続き`, marginPx, marginPx + mmToPx(3));
+
+      let currentY = marginPx + mmToPx(8);
+
+      // 残りの状態点
+      if (statePointOverflow.length > 0) {
+        ctx2.fillStyle = '#111827';
+        ctx2.font = `bold ${mmToPx(2.5)}px "Noto Sans JP", sans-serif`;
+        ctx2.fillText('状態点 (続き)', marginPx, currentY + mmToPx(2.5));
+        currentY += mmToPx(5);
+
+        statePointOverflow.forEach((point) => {
+          const origIndex = filteredStatePoints.findIndex((p) => p.id === point.id);
+          const label = getPointLabel(point, origIndex);
+          const seasonColor =
+            point.season === 'summer' ? '#3b82f6' :
+            point.season === 'winter' ? '#ef4444' : '#8b5cf6';
+
+          ctx2.fillStyle = seasonColor;
+          ctx2.beginPath();
+          ctx2.roundRect(marginPx, currentY, mmToPx(6), mmToPx(3.5), mmToPx(0.5));
+          ctx2.fill();
+
+          ctx2.fillStyle = '#ffffff';
+          ctx2.font = `bold ${mmToPx(1.6)}px sans-serif`;
+          ctx2.textAlign = 'center';
+          ctx2.fillText(label, marginPx + mmToPx(3), currentY + mmToPx(2.3));
+          ctx2.textAlign = 'left';
+
+          ctx2.fillStyle = '#111827';
+          ctx2.font = `bold ${mmToPx(1.8)}px "Noto Sans JP", sans-serif`;
+          ctx2.fillText(point.name, marginPx + mmToPx(7), currentY + mmToPx(2.2));
+
+          ctx2.fillStyle = '#6b7280';
+          ctx2.font = `${mmToPx(1.4)}px sans-serif`;
+          const propText = `${formatNumber(point.dryBulbTemp)}°C | ${formatNumber(point.relativeHumidity, 0)}%RH | ${formatNumber(point.humidity, 4)}kg/kg' | ${formatNumber(point.enthalpy)}kJ/kg'`;
+          ctx2.fillText(propText, marginPx + mmToPx(7), currentY + mmToPx(4.8));
+
+          currentY += statePointCardHeight;
+        });
+
+        currentY += mmToPx(5);
+      }
+
+      // 残りのプロセス
+      if (processOverflow.length > 0) {
+        ctx2.fillStyle = '#111827';
+        ctx2.font = `bold ${mmToPx(2.5)}px "Noto Sans JP", sans-serif`;
+        ctx2.fillText('プロセス (続き)', marginPx, currentY + mmToPx(2.5));
+        currentY += mmToPx(5);
+
+        processOverflow.forEach((process) => {
+          const fromPoint = filteredStatePoints.find((p) => p.id === process.fromPointId);
+          const toPoint = filteredStatePoints.find((p) => p.id === process.toPointId);
+          const fromLabel = getPointLabelById(process.fromPointId);
+          const toLabel = getPointLabelById(process.toPointId);
+
+          const seasonColor =
+            process.season === 'summer' ? '#3b82f6' :
+            process.season === 'winter' ? '#ef4444' : '#8b5cf6';
+
+          ctx2.fillStyle = seasonColor;
+          ctx2.fillRect(marginPx, currentY, mmToPx(1), processCardHeight - mmToPx(1));
+
+          ctx2.fillStyle = '#111827';
+          ctx2.font = `bold ${mmToPx(1.8)}px "Noto Sans JP", sans-serif`;
+          ctx2.fillText(process.name, marginPx + mmToPx(2.5), currentY + mmToPx(2.2));
+
+          ctx2.fillStyle = '#6b7280';
+          ctx2.font = `${mmToPx(1.5)}px sans-serif`;
+          ctx2.fillText(`${fromLabel} → ${toLabel}`, marginPx + mmToPx(2.5), currentY + mmToPx(4.5));
+
+          if (fromPoint && toPoint && fromPoint.enthalpy && toPoint.enthalpy) {
+            const enthalpyDiff = toPoint.enthalpy - fromPoint.enthalpy;
+            const humidityDiff = (toPoint.humidity || 0) - (fromPoint.humidity || 0);
+
+            let detailText = '';
+            if (process.parameters.airflow) {
+              const totalCapacity = (enthalpyDiff * process.parameters.airflow * 1.2) / 3600;
+              detailText = `全熱: ${Math.abs(totalCapacity).toFixed(2)} kW`;
+              if (humidityDiff !== 0) {
+                const moistureAmount = Math.abs(humidityDiff) * process.parameters.airflow * 1.2;
+                detailText += ` | ${humidityDiff < 0 ? '除湿' : '加湿'}: ${moistureAmount.toFixed(1)} g/h`;
+              }
+            }
+            if (process.parameters.heatExchangeEfficiency) {
+              detailText += (detailText ? ' | ' : '') + `効率: ${process.parameters.heatExchangeEfficiency.toFixed(0)}%`;
+            }
+            ctx2.font = `${mmToPx(1.3)}px sans-serif`;
+            ctx2.fillText(detailText, marginPx + mmToPx(2.5), currentY + mmToPx(6.8));
+          }
+
+          currentY += processCardHeight;
+        });
+      }
+
+      pages.push(page2);
     }
 
-    // 設計条件セクション（下部に配置）
-    currentY += sectionGapPx;
-
-    if (currentY + mmToPx(25) < a4Canvas.height - marginPx) {
-      ctx.fillStyle = '#111827';
-      ctx.font = `bold ${mmToPx(3.5)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
-      ctx.fillText('設計条件', marginPx, currentY + mmToPx(3));
-      currentY += mmToPx(6);
-
-      // 設計条件カード
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.roundRect(marginPx, currentY, contentWidthPx, mmToPx(20), mmToPx(1.5));
-      ctx.fill();
-
-      ctx.fillStyle = '#374151';
-      ctx.font = `${mmToPx(2.5)}px "Noto Sans JP", sans-serif`;
-
-      const col1X = marginPx + cardPaddingPx;
-      const col2X = marginPx + contentWidthPx / 3;
-      const col3X = marginPx + (contentWidthPx / 3) * 2;
-      const rowHeight = mmToPx(4);
-
-      // 外気条件
-      ctx.font = `bold ${mmToPx(2.5)}px "Noto Sans JP", sans-serif`;
-      ctx.fillText('外気条件', col1X, currentY + mmToPx(4));
-      ctx.font = `${mmToPx(2.3)}px sans-serif`;
-      ctx.fillText(
-        `夏: ${formatNumber(designConditions.outdoor.summer.dryBulbTemp)}°C / ${formatNumber(designConditions.outdoor.summer.relativeHumidity, 0)}%`,
-        col1X,
-        currentY + mmToPx(4) + rowHeight
-      );
-      ctx.fillText(
-        `冬: ${formatNumber(designConditions.outdoor.winter.dryBulbTemp)}°C / ${formatNumber(designConditions.outdoor.winter.relativeHumidity, 0)}%`,
-        col1X,
-        currentY + mmToPx(4) + rowHeight * 2
-      );
-
-      // 室内条件
-      ctx.font = `bold ${mmToPx(2.5)}px "Noto Sans JP", sans-serif`;
-      ctx.fillText('室内条件', col2X, currentY + mmToPx(4));
-      ctx.font = `${mmToPx(2.3)}px sans-serif`;
-      ctx.fillText(
-        `夏: ${formatNumber(designConditions.indoor.summer.dryBulbTemp)}°C / ${formatNumber(designConditions.indoor.summer.relativeHumidity, 0)}%`,
-        col2X,
-        currentY + mmToPx(4) + rowHeight
-      );
-      ctx.fillText(
-        `冬: ${formatNumber(designConditions.indoor.winter.dryBulbTemp)}°C / ${formatNumber(designConditions.indoor.winter.relativeHumidity, 0)}%`,
-        col2X,
-        currentY + mmToPx(4) + rowHeight * 2
-      );
-
-      // 風量
-      ctx.font = `bold ${mmToPx(2.5)}px "Noto Sans JP", sans-serif`;
-      ctx.fillText('風量', col3X, currentY + mmToPx(4));
-      ctx.font = `${mmToPx(2.3)}px sans-serif`;
-      ctx.fillText(
-        `供給: ${formatNumber(designConditions.airflow.supplyAir, 0)} m³/h`,
-        col3X,
-        currentY + mmToPx(4) + rowHeight
-      );
-      ctx.fillText(
-        `外気: ${formatNumber(designConditions.airflow.outdoorAir, 0)} m³/h`,
-        col3X,
-        currentY + mmToPx(4) + rowHeight * 2
-      );
-    }
-
-    return a4Canvas;
+    return pages;
   };
 
   const handleExportPNG = async () => {
@@ -359,8 +485,8 @@ export const ExportDialog = ({
 
     try {
       const canvas = canvasRef.current;
-      const exportCanvas = buildA4Canvas(canvas);
-      const dataUrl = exportCanvas.toDataURL('image/png');
+      const pages = buildA4Pages(canvas);
+      const dataUrl = pages[0].toDataURL('image/png');
 
       // ダウンロードリンクを作成
       const link = document.createElement('a');
@@ -389,41 +515,23 @@ export const ExportDialog = ({
 
     try {
       const canvas = canvasRef.current;
-      const exportCanvas = buildA4Canvas(canvas);
-      const chartImage = exportCanvas.toDataURL('image/png');
+      const pages = buildA4Pages(canvas);
 
       const pdf = new jsPDF('portrait', 'mm', 'a4');
 
-      // Calculate proper aspect ratio to avoid stretching
-      const canvasAspectRatio = exportCanvas.width / exportCanvas.height;
-      const pdfAspectRatio = A4_SIZE_MM.width / A4_SIZE_MM.height;
+      pages.forEach((pageCanvas, index) => {
+        if (index > 0) {
+          pdf.addPage();
+        }
 
-      let imgWidth = A4_SIZE_MM.width;
-      let imgHeight = A4_SIZE_MM.height;
+        const pageImage = pageCanvas.toDataURL('image/png');
+        pdf.addImage(pageImage, 'PNG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
+      });
 
-      if (canvasAspectRatio > pdfAspectRatio) {
-        // Canvas is wider than PDF page
-        imgHeight = A4_SIZE_MM.width / canvasAspectRatio;
-      } else {
-        // Canvas is taller than PDF page
-        imgWidth = A4_SIZE_MM.height * canvasAspectRatio;
-      }
-
-      // Center the image on the page
-      const xOffset = (A4_SIZE_MM.width - imgWidth) / 2;
-      const yOffset = (A4_SIZE_MM.height - imgHeight) / 2;
-
-      pdf.addImage(
-        chartImage,
-        'PNG',
-        xOffset,
-        yOffset,
-        imgWidth,
-        imgHeight
-      );
-
-      // PDFを保存
-      pdf.save(`psychrometric-chart-${designConditions.project.name}.pdf`);
+      // PDFをBlobとして生成し、新しいウィンドウで開く
+      const pdfBlob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      window.open(blobUrl, '_blank');
 
       onClose();
     } catch (error) {
@@ -466,7 +574,7 @@ export const ExportDialog = ({
                 <FileText className="w-5 h-5" />
               )}
               <div>
-                <div className="font-semibold">PDFファイル</div>
+                <div className="font-semibold">PDFファイル（新しいウィンドウで開く）</div>
                 <div className="text-sm text-blue-100">
                   空気線図と設計条件・状態点・プロセスを含む
                 </div>

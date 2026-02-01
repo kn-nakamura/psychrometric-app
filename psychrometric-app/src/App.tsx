@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, Settings, Download, FolderOpen, Edit2, Trash2, Copy, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, Settings, Download, FolderOpen, Edit2, Trash2, Copy, ChevronUp, ChevronDown, FilePlus } from 'lucide-react';
 import { useProjectStore } from './store/projectStore';
 import { PsychrometricChart, PsychrometricChartRef } from './components/Chart/PsychrometricChart';
 import { ProcessDialog } from './components/Process/ProcessDialog';
@@ -101,6 +101,7 @@ function App() {
     setActiveSeason,
     setDesignConditions,
     loadProject,
+    resetProject,
   } = useProjectStore();
 
   // Chart ref for export
@@ -689,6 +690,16 @@ function App() {
     return { current: chartRef.current?.getCanvas() || null };
   };
 
+  // 新規プロジェクトの開始
+  const handleNewProject = () => {
+    if (statePoints.length > 0 || processes.length > 0) {
+      if (!confirm('現在のプロジェクトをクリアして新規プロジェクトを開始しますか？')) {
+        return;
+      }
+    }
+    resetProject();
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ヘッダー */}
@@ -703,6 +714,13 @@ function App() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <button
+              onClick={handleNewProject}
+              className="flex items-center gap-2 px-2.5 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <FilePlus className="w-4 h-4" />
+              <span className="hidden sm:inline">新規プロジェクト</span>
+            </button>
             <button
               onClick={() => setShowDesignEditor(true)}
               className="flex items-center gap-2 px-2.5 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"

@@ -173,7 +173,7 @@ export function createDefaultChartConfig(
   width: number,
   height: number
 ): { dimensions: ChartDimensions; range: ChartRange } {
-  
+
   return {
     dimensions: {
       width,
@@ -185,9 +185,61 @@ export function createDefaultChartConfig(
     },
     range: {
       tempMin: -5,
-      tempMax: 40,
+      tempMax: 45,
       humidityMin: 0,
-      humidityMax: 0.030,
+      humidityMax: 0.035,
+    },
+  };
+}
+
+/**
+ * 状態点を含む動的なチャート設定を生成
+ *
+ * @param width Canvas幅
+ * @param height Canvas高さ
+ * @param points 状態点の配列（温度と湿度を含む）
+ * @returns チャート設定
+ */
+export function createDynamicChartConfig(
+  width: number,
+  height: number,
+  points: Array<{ dryBulbTemp?: number; humidity?: number }>
+): { dimensions: ChartDimensions; range: ChartRange } {
+  const defaultConfig = createDefaultChartConfig(width, height);
+
+  // デフォルト範囲
+  let tempMin = defaultConfig.range.tempMin;
+  let tempMax = defaultConfig.range.tempMax;
+  let humidityMin = defaultConfig.range.humidityMin;
+  let humidityMax = defaultConfig.range.humidityMax;
+
+  // 状態点を確認して範囲を拡張
+  for (const point of points) {
+    if (typeof point.dryBulbTemp === 'number') {
+      if (point.dryBulbTemp < tempMin) {
+        tempMin = Math.floor(point.dryBulbTemp / 5) * 5 - 5;
+      }
+      if (point.dryBulbTemp > tempMax) {
+        tempMax = Math.ceil(point.dryBulbTemp / 5) * 5 + 5;
+      }
+    }
+    if (typeof point.humidity === 'number') {
+      if (point.humidity < humidityMin) {
+        humidityMin = Math.floor(point.humidity / 0.005) * 0.005;
+      }
+      if (point.humidity > humidityMax) {
+        humidityMax = Math.ceil(point.humidity / 0.005) * 0.005 + 0.005;
+      }
+    }
+  }
+
+  return {
+    dimensions: defaultConfig.dimensions,
+    range: {
+      tempMin,
+      tempMax,
+      humidityMin,
+      humidityMax,
     },
   };
 }
