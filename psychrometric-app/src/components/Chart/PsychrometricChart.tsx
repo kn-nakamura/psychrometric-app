@@ -1,7 +1,7 @@
-import { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
+import { useRef, useEffect, useState, useImperativeHandle, forwardRef, useMemo } from 'react';
 import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
-import { ChartCoordinates, createDefaultChartConfig } from '@/lib/chart/coordinates';
+import { ChartCoordinates, ChartRange, createDynamicChartConfig } from '@/lib/chart/coordinates';
 import { RHCurveGenerator } from '@/lib/chart/rhCurves';
 import { WetBulbCurveGenerator, EnthalpyCurveGenerator } from '@/lib/chart/curves';
 
@@ -38,45 +38,49 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   }));
   const [isDragging, setIsDragging] = useState(false);
   const [draggedPointId, setDraggedPointId] = useState<string | null>(null);
-  
-  // 座標変換の設定
-  const chartConfig = createDefaultChartConfig(width, height);
-  const coordinates = new ChartCoordinates(chartConfig.dimensions, chartConfig.range);
+
+  // 座標変換の設定 - 状態点に基づいて動的に範囲を調整
+  const chartConfig = useMemo(() => {
+    return createDynamicChartConfig(width, height, statePoints);
+  }, [width, height, statePoints]);
+  const coordinates = useMemo(() => {
+    return new ChartCoordinates(chartConfig.dimensions, chartConfig.range);
+  }, [chartConfig]);
   
   // チャートの描画
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    
+
     // クリア
     ctx.clearRect(0, 0, width, height);
-    
+
     // 背景
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, width, height);
-    
+
     // グリッド線を描画
     drawGrid(ctx, coordinates, chartConfig.range);
-    
+
     // 相対湿度曲線を描画
-    drawRHCurves(ctx, coordinates);
-    
+    drawRHCurves(ctx, coordinates, chartConfig.range);
+
     // 湿球温度線を描画（薄く）
-    drawWetBulbCurves(ctx, coordinates);
-    
+    drawWetBulbCurves(ctx, coordinates, chartConfig.range);
+
     // エンタルピー線を描画（薄く）
-    drawEnthalpyCurves(ctx, coordinates);
-    
+    drawEnthalpyCurves(ctx, coordinates, chartConfig.range);
+
     // プロセス線を描画
     drawProcesses(ctx, coordinates, processes, statePoints, activeSeason);
-    
+
     // 状態点を描画
     drawStatePoints(ctx, coordinates, statePoints, activeSeason, selectedPointId);
-    
-  }, [statePoints, processes, activeSeason, selectedPointId, width, height]);
+
+  }, [statePoints, processes, activeSeason, selectedPointId, width, height, coordinates, chartConfig.range]);
   
   const getCanvasPoint = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
@@ -169,60 +173,77 @@ PsychrometricChart.displayName = 'PsychrometricChart';
 function drawGrid(
   ctx: CanvasRenderingContext2D,
   coordinates: ChartCoordinates,
-  range: any
+  range: ChartRange
 ) {
   ctx.strokeStyle = '#e0e0e0';
   ctx.lineWidth = 1;
-  
+
   // 縦線（温度）
   for (let temp = Math.ceil(range.tempMin / 5) * 5; temp <= range.tempMax; temp += 5) {
     const x = coordinates.tempToX(temp);
     const y1 = coordinates.humidityToY(range.humidityMin);
     const y2 = coordinates.humidityToY(range.humidityMax);
-    
+
     ctx.beginPath();
     ctx.moveTo(x, y1);
     ctx.lineTo(x, y2);
     ctx.stroke();
-    
+
     // ラベル
     ctx.fillStyle = '#666';
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(`${temp}°C`, x, y1 + 20);
   }
-  
-  // 横線（絶対湿度）
+
+  // 横線（絶対湿度）- g/kg' 形式で表示
   for (let h = 0; h <= range.humidityMax; h += 0.005) {
     const y = coordinates.humidityToY(h);
     const x1 = coordinates.tempToX(range.tempMin);
     const x2 = coordinates.tempToX(range.tempMax);
-    
+
     ctx.beginPath();
     ctx.moveTo(x1, y);
     ctx.lineTo(x2, y);
     ctx.stroke();
-    
-    // ラベル
+
+    // ラベル - g/kg' 形式 (kg/kg' × 1000 = g/kg')
     ctx.fillStyle = '#666';
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText(h.toFixed(3), x1 - 10, y + 4);
+    const gPerKg = h * 1000;
+    ctx.fillText(`${gPerKg.toFixed(0)} g/kg'`, x1 - 10, y + 4);
   }
 }
 
 function drawRHCurves(
   ctx: CanvasRenderingContext2D,
-  coordinates: ChartCoordinates
+  coordinates: ChartCoordinates,
+  range: ChartRange
 ) {
-  const rhCurves = RHCurveGenerator.generateStandardSet();
-  
+  const rhCurves = RHCurveGenerator.generateStandardSet(range.tempMin, range.tempMax);
+
+  // オレンジがかった茶色系の色
+  const curveColor = '#b87333'; // コッパーブラウン
+  const saturationColor = '#8B4513'; // サドルブラウン
+
   rhCurves.forEach((points, rh) => {
-    ctx.strokeStyle = rh === 100 ? '#0066cc' : '#99ccff';
+    ctx.strokeStyle = rh === 100 ? saturationColor : curveColor;
     ctx.lineWidth = rh === 100 ? 2 : 1;
-    
+
+    // 範囲内のポイントのみをフィルタリング
+    const clippedPoints = points.filter(
+      (point) =>
+        point.x >= range.tempMin &&
+        point.x <= range.tempMax &&
+        point.y >= range.humidityMin &&
+        point.y <= range.humidityMax
+    );
+
+    if (clippedPoints.length === 0) return;
+
     ctx.beginPath();
-    points.forEach((point, index) => {
+    clippedPoints.forEach((point, index) => {
       const { x, y } = coordinates.toCanvas(point.x, point.y);
       if (index === 0) {
         ctx.moveTo(x, y);
@@ -231,12 +252,12 @@ function drawRHCurves(
       }
     });
     ctx.stroke();
-    
+
     // ラベル
-    if (points.length > 0 && rh % 20 === 0) {
-      const lastPoint = points[points.length - 1];
+    if (clippedPoints.length > 0 && rh % 20 === 0) {
+      const lastPoint = clippedPoints[clippedPoints.length - 1];
       const { x, y } = coordinates.toCanvas(lastPoint.x, lastPoint.y);
-      ctx.fillStyle = '#0066cc';
+      ctx.fillStyle = saturationColor;
       ctx.font = '11px sans-serif';
       ctx.fillText(`${rh}%`, x + 5, y);
     }
@@ -245,16 +266,28 @@ function drawRHCurves(
 
 function drawWetBulbCurves(
   ctx: CanvasRenderingContext2D,
-  coordinates: ChartCoordinates
+  coordinates: ChartCoordinates,
+  range: ChartRange
 ) {
-  const wbCurves = WetBulbCurveGenerator.generateStandardSet();
-  
+  const wbCurves = WetBulbCurveGenerator.generateStandardSet(range.tempMin, range.tempMax);
+
   ctx.strokeStyle = '#dddddd';
   ctx.lineWidth = 0.5;
-  
+
   wbCurves.forEach((points) => {
+    // 範囲内のポイントのみをフィルタリング
+    const clippedPoints = points.filter(
+      (point) =>
+        point.x >= range.tempMin &&
+        point.x <= range.tempMax &&
+        point.y >= range.humidityMin &&
+        point.y <= range.humidityMax
+    );
+
+    if (clippedPoints.length === 0) return;
+
     ctx.beginPath();
-    points.forEach((point, index) => {
+    clippedPoints.forEach((point, index) => {
       const { x, y } = coordinates.toCanvas(point.x, point.y);
       if (index === 0) {
         ctx.moveTo(x, y);
@@ -268,16 +301,28 @@ function drawWetBulbCurves(
 
 function drawEnthalpyCurves(
   ctx: CanvasRenderingContext2D,
-  coordinates: ChartCoordinates
+  coordinates: ChartCoordinates,
+  range: ChartRange
 ) {
-  const hCurves = EnthalpyCurveGenerator.generateStandardSet();
-  
+  const hCurves = EnthalpyCurveGenerator.generateStandardSet(range.tempMin, range.tempMax);
+
   ctx.strokeStyle = '#eeeeee';
   ctx.lineWidth = 0.5;
-  
+
   hCurves.forEach((points) => {
+    // 範囲内のポイントのみをフィルタリング
+    const clippedPoints = points.filter(
+      (point) =>
+        point.x >= range.tempMin &&
+        point.x <= range.tempMax &&
+        point.y >= range.humidityMin &&
+        point.y <= range.humidityMax
+    );
+
+    if (clippedPoints.length === 0) return;
+
     ctx.beginPath();
-    points.forEach((point, index) => {
+    clippedPoints.forEach((point, index) => {
       const { x, y } = coordinates.toCanvas(point.x, point.y);
       if (index === 0) {
         ctx.moveTo(x, y);
