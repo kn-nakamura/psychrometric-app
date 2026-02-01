@@ -24,7 +24,7 @@ export const ExportDialog = ({
   const [exportType, setExportType] = useState<'pdf' | 'png' | null>(null);
 
   const A4_SIZE_MM = { width: 297, height: 210 };
-  const A4_DPI = 300;
+  const A4_DPI = 600; // Increased DPI for better quality
 
   const mmToPx = (mm: number) => Math.round((mm / 25.4) * A4_DPI);
 
@@ -249,13 +249,33 @@ export const ExportDialog = ({
       const chartImage = exportCanvas.toDataURL('image/png');
 
       const pdf = new jsPDF('landscape', 'mm', 'a4');
+
+      // Calculate proper aspect ratio to avoid stretching
+      const canvasAspectRatio = exportCanvas.width / exportCanvas.height;
+      const pdfAspectRatio = A4_SIZE_MM.width / A4_SIZE_MM.height;
+
+      let imgWidth = A4_SIZE_MM.width;
+      let imgHeight = A4_SIZE_MM.height;
+
+      if (canvasAspectRatio > pdfAspectRatio) {
+        // Canvas is wider than PDF page
+        imgHeight = A4_SIZE_MM.width / canvasAspectRatio;
+      } else {
+        // Canvas is taller than PDF page
+        imgWidth = A4_SIZE_MM.height * canvasAspectRatio;
+      }
+
+      // Center the image on the page
+      const xOffset = (A4_SIZE_MM.width - imgWidth) / 2;
+      const yOffset = (A4_SIZE_MM.height - imgHeight) / 2;
+
       pdf.addImage(
         chartImage,
         'PNG',
-        0,
-        0,
-        A4_SIZE_MM.width,
-        A4_SIZE_MM.height
+        xOffset,
+        yOffset,
+        imgWidth,
+        imgHeight
       );
 
       // PDFを保存

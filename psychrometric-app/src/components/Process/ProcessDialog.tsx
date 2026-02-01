@@ -25,6 +25,18 @@ const processTypeLabels: Record<ProcessType, string> = {
   airSupply: '空調吹き出し',
 };
 
+// Define the order of process types
+const processTypeOrder: ProcessType[] = [
+  'cooling',
+  'heating',
+  'dehumidifying',
+  'humidifying',
+  'mixing',
+  'heatExchange',
+  'fanHeating',
+  'airSupply',
+];
+
 export const ProcessDialog = ({
   isOpen,
   onClose,
@@ -35,7 +47,7 @@ export const ProcessDialog = ({
   editingProcess,
 }: ProcessDialogProps) => {
   const [name, setName] = useState('');
-  const [type, setType] = useState<ProcessType>('heating');
+  const [type, setType] = useState<ProcessType>('cooling');
   const [fromPointId, setFromPointId] = useState('');
   const [toPointId, setToPointId] = useState('');
   const [season, setSeason] = useState<'summer' | 'winter' | 'both'>(activeSeason);
@@ -54,7 +66,7 @@ export const ProcessDialog = ({
       setParameters(editingProcess.parameters);
     } else {
       setName('');
-      setType('heating');
+      setType('cooling');
       setFromPointId(statePoints.length > 0 ? statePoints[0].id : '');
       setToPointId(statePoints.length > 1 ? statePoints[1].id : '');
       setSeason(activeSeason);
@@ -355,9 +367,9 @@ export const ProcessDialog = ({
               onChange={(e) => setType(e.target.value as ProcessType)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              {Object.entries(processTypeLabels).map(([value, label]) => (
+              {processTypeOrder.map((value) => (
                 <option key={value} value={value}>
-                  {label}
+                  {processTypeLabels[value]}
                 </option>
               ))}
             </select>
@@ -405,7 +417,7 @@ export const ProcessDialog = ({
           {/* 始点 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              始点（入口）
+              {type === 'mixing' ? '混合流1' : type === 'heatExchange' ? '外気' : '始点（入口）'}
             </label>
             <select
               value={fromPointId}
@@ -567,7 +579,7 @@ export const ProcessDialog = ({
                   </div>
                 <div className="mb-3">
                   <label className="block text-sm text-gray-600 mb-1">
-                    排気側の状態点（室内側）
+                    室内空気
                   </label>
                   <select
                     value={parameters.exhaustPointId || ''}

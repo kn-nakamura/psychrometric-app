@@ -709,7 +709,7 @@ function App() {
                     : 'bg-gray-100 hover:bg-gray-200'
                 }`}
               >
-                夏季
+                冷却サイクル
               </button>
               <button
                 onClick={() => setActiveSeason('winter')}
@@ -719,7 +719,7 @@ function App() {
                     : 'bg-gray-100 hover:bg-gray-200'
                 }`}
               >
-                冬季
+                加熱サイクル
               </button>
               <button
                 onClick={() => setActiveSeason('both')}
