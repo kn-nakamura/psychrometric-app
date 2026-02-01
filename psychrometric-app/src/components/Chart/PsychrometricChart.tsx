@@ -38,6 +38,12 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   }));
   const [isDragging, setIsDragging] = useState(false);
   const [draggedPointId, setDraggedPointId] = useState<string | null>(null);
+  const resolutionScale = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return 1.25;
+    }
+    return 1.25 * (window.devicePixelRatio || 1);
+  }, []);
 
   // 座標変換の設定 - 状態点に基づいて動的に範囲を調整
   const chartConfig = useMemo(() => {
@@ -54,6 +60,16 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    const scaledWidth = Math.max(1, Math.round(width * resolutionScale));
+    const scaledHeight = Math.max(1, Math.round(height * resolutionScale));
+    if (canvas.width !== scaledWidth) {
+      canvas.width = scaledWidth;
+    }
+    if (canvas.height !== scaledHeight) {
+      canvas.height = scaledHeight;
+    }
+    ctx.setTransform(resolutionScale, 0, 0, resolutionScale, 0, 0);
 
     // クリア
     ctx.clearRect(0, 0, width, height);
@@ -80,7 +96,17 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     // 状態点を描画
     drawStatePoints(ctx, coordinates, statePoints, activeSeason, selectedPointId);
 
-  }, [statePoints, processes, activeSeason, selectedPointId, width, height, coordinates, chartConfig.range]);
+  }, [
+    statePoints,
+    processes,
+    activeSeason,
+    selectedPointId,
+    width,
+    height,
+    coordinates,
+    chartConfig.range,
+    resolutionScale,
+  ]);
   
   const getCanvasPoint = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
@@ -191,7 +217,7 @@ function drawGrid(
 
     // ラベル
     ctx.fillStyle = '#666';
-    ctx.font = '12px sans-serif';
+    ctx.font = '10px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(`${temp}°C`, x, y1 + 20);
   }
@@ -209,7 +235,7 @@ function drawGrid(
 
     // ラベル - g/kg' 形式 (kg/kg' × 1000 = g/kg')
     ctx.fillStyle = '#666';
-    ctx.font = '12px sans-serif';
+    ctx.font = '10px sans-serif';
     ctx.textAlign = 'right';
     const gPerKg = h * 1000;
     ctx.fillText(`${gPerKg.toFixed(0)} g/kg'`, x1 - 10, y + 4);
@@ -224,8 +250,8 @@ function drawRHCurves(
   const rhCurves = RHCurveGenerator.generateStandardSet(range.tempMin, range.tempMax);
 
   // オレンジがかった茶色系の色
-  const curveColor = '#b87333'; // コッパーブラウン
-  const saturationColor = '#8B4513'; // サドルブラウン
+  const curveColor = '#f28c28'; // オレンジ系
+  const saturationColor = '#d96b1a'; // 濃いオレンジ
 
   rhCurves.forEach((points, rh) => {
     ctx.strokeStyle = rh === 100 ? saturationColor : curveColor;
@@ -258,7 +284,7 @@ function drawRHCurves(
       const lastPoint = clippedPoints[clippedPoints.length - 1];
       const { x, y } = coordinates.toCanvas(lastPoint.x, lastPoint.y);
       ctx.fillStyle = saturationColor;
-      ctx.font = '11px sans-serif';
+      ctx.font = '9px sans-serif';
       ctx.fillText(`${rh}%`, x + 5, y);
     }
   });
@@ -402,7 +428,7 @@ function drawStatePoints(
 
     // ラベルを右横に表示
     ctx.fillStyle = pointColor;
-    ctx.font = 'bold 12px sans-serif';
+    ctx.font = 'bold 10px sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, x + 8, y);
@@ -469,7 +495,7 @@ function drawProcesses(
       if (typeof stream1Point.airflow === 'number' && typeof stream2Point.airflow === 'number') {
         const totalAirflow = stream1Point.airflow + stream2Point.airflow;
         ctx.fillStyle = '#333';
-        ctx.font = '11px sans-serif';
+        ctx.font = '9px sans-serif';
         ctx.textAlign = 'left';
         ctx.fillText(`${totalAirflow.toFixed(0)} m³/h`, to.x + 10, to.y + 12);
       }
