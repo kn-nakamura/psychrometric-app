@@ -78,38 +78,37 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     
   }, [statePoints, processes, activeSeason, selectedPointId, width, height]);
   
-  // マウスイベントハンドラ
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const getCanvasPoint = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    
+    if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top,
+    };
+  };
+
+  const handlePointerDown = (clientX: number, clientY: number) => {
+    const point = getCanvasPoint(clientX, clientY);
+    if (!point) return;
+
     // クリックされた状態点を探す
-    const clickedPoint = findPointAt(x, y, statePoints, activeSeason, coordinates);
-    
+    const clickedPoint = findPointAt(point.x, point.y, statePoints, activeSeason, coordinates);
     if (clickedPoint) {
       setIsDragging(true);
       setDraggedPointId(clickedPoint.id);
       onPointClick?.(clickedPoint.id);
     }
   };
-  
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+
+  const handlePointerMove = (clientX: number, clientY: number) => {
     if (!isDragging || !draggedPointId) return;
-    
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
+    const point = getCanvasPoint(clientX, clientY);
+    if (!point) return;
+
     // 座標変換
-    const { temp, humidity } = coordinates.fromCanvas(x, y);
-    
+    const { temp, humidity } = coordinates.fromCanvas(point.x, point.y);
+
     // 範囲チェック
     if (
       temp >= chartConfig.range.tempMin &&
@@ -120,8 +119,8 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       onPointMove?.(draggedPointId, temp, humidity);
     }
   };
-  
-  const handleMouseUp = () => {
+
+  const handlePointerUp = () => {
     setIsDragging(false);
     setDraggedPointId(null);
   };
@@ -131,11 +130,32 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       ref={canvasRef}
       width={width}
       height={height}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-      style={{ cursor: isDragging ? 'grabbing' : 'default', border: '1px solid #ddd' }}
+      onMouseDown={(e) => handlePointerDown(e.clientX, e.clientY)}
+      onMouseMove={(e) => handlePointerMove(e.clientX, e.clientY)}
+      onMouseUp={handlePointerUp}
+      onMouseLeave={handlePointerUp}
+      onTouchStart={(e) => {
+        if (e.touches.length === 0) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        handlePointerDown(touch.clientX, touch.clientY);
+      }}
+      onTouchMove={(e) => {
+        if (e.touches.length === 0) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        handlePointerMove(touch.clientX, touch.clientY);
+      }}
+      onTouchEnd={handlePointerUp}
+      onTouchCancel={handlePointerUp}
+      style={{
+        cursor: isDragging ? 'grabbing' : 'default',
+        border: '1px solid #ddd',
+        width: '100%',
+        height: 'auto',
+        touchAction: 'none',
+        display: 'block',
+      }}
     />
   );
 });
