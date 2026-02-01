@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Plus, Settings, Download, FolderOpen, Edit2, Trash2 } from 'lucide-react';
 import { useProjectStore } from './store/projectStore';
 import { PsychrometricChart, PsychrometricChartRef } from './components/Chart/PsychrometricChart';
@@ -34,6 +34,7 @@ function App() {
 
   // Chart ref for export
   const chartRef = useRef<PsychrometricChartRef>(null);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
 
   // Dialog states
   const [showAddPoint, setShowAddPoint] = useState(false);
@@ -53,6 +54,29 @@ function App() {
 
   // Active tab for sidebar
   const [activeTab, setActiveTab] = useState<'points' | 'processes'>('points');
+  const [chartSize, setChartSize] = useState({ width: 900, height: 600 });
+
+  useEffect(() => {
+    const container = chartContainerRef.current;
+    if (!container) return;
+
+    const updateSize = () => {
+      const width = Math.max(320, Math.floor(container.clientWidth));
+      const height = Math.max(320, Math.floor(width * 0.65));
+      setChartSize({ width, height });
+    };
+
+    updateSize();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateSize);
+      return () => window.removeEventListener('resize', updateSize);
+    }
+
+    const observer = new ResizeObserver(() => updateSize());
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
 
   // 状態点の追加
   const handleAddPoint = () => {
@@ -145,33 +169,33 @@ function App() {
     <div className="min-h-screen bg-gray-50">
       {/* ヘッダー */}
       <header className="bg-white border-b border-gray-200 px-4 py-3">
-        <div className="max-w-full mx-auto flex items-center justify-between">
+        <div className="max-w-full mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900">
               空気線図アプリケーション
             </h1>
-            <p className="text-sm text-gray-600">
+            <p className="text-xs sm:text-sm text-gray-600">
               {designConditions.project.name} - {designConditions.project.location}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             <button
               onClick={() => setShowDesignEditor(true)}
-              className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-2.5 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <Settings className="w-4 h-4" />
               <span className="hidden sm:inline">設計条件</span>
             </button>
             <button
               onClick={() => setShowProjectManager(true)}
-              className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-2.5 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <FolderOpen className="w-4 h-4" />
               <span className="hidden sm:inline">プロジェクト</span>
             </button>
             <button
               onClick={() => setShowExportDialog(true)}
-              className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="flex items-center gap-2 px-2.5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">エクスポート</span>
@@ -180,9 +204,9 @@ function App() {
         </div>
       </header>
 
-      <div className="flex">
+      <div className="flex flex-col lg:flex-row">
         {/* 左サイドバー */}
-        <aside className="w-80 bg-white border-r border-gray-200 h-[calc(100vh-60px)] overflow-y-auto">
+        <aside className="w-full lg:w-80 bg-white border-r border-gray-200 lg:h-[calc(100vh-60px)] overflow-y-auto">
           {/* 季節切替 */}
           <div className="p-4 border-b border-gray-200">
             <h2 className="font-semibold text-sm text-gray-700 mb-2">表示モード</h2>
@@ -250,7 +274,7 @@ function App() {
               {/* プリセットボタン */}
               <div className="space-y-2 mb-4">
                 <h3 className="text-sm font-medium text-gray-700">プリセット追加</h3>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
                     onClick={() =>
                       addPresetPoint(
@@ -325,7 +349,7 @@ function App() {
                     onChange={(e) => setNewPointName(e.target.value)}
                     className="w-full px-3 py-2 border rounded text-sm"
                   />
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input
                       type="number"
                       placeholder="温度 (°C)"
@@ -341,7 +365,7 @@ function App() {
                       className="px-3 py-2 border rounded text-sm"
                     />
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex flex-wrap gap-1">
                     <button
                       onClick={() => setNewPointSeason('summer')}
                       className={`flex-1 py-1.5 text-xs rounded ${
@@ -492,11 +516,14 @@ function App() {
 
         {/* メインコンテンツ */}
         <main className="flex-1 p-4 overflow-auto">
-          <div className="bg-white rounded-lg shadow p-4">
+          <div
+            className="bg-white rounded-lg shadow p-4 overflow-x-auto"
+            ref={chartContainerRef}
+          >
             <PsychrometricChart
               ref={chartRef}
-              width={900}
-              height={600}
+              width={chartSize.width}
+              height={chartSize.height}
               statePoints={statePoints}
               processes={processes}
               activeSeason={activeSeason}
@@ -518,7 +545,7 @@ function App() {
                 編集
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-4 text-sm">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
               <div>
                 <h3 className="font-medium text-gray-700 mb-2">外気条件</h3>
                 <div className="text-gray-600 space-y-1">
