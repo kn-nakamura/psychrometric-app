@@ -8,7 +8,6 @@ import { DesignConditionsEditor } from './components/DesignConditions/DesignCond
 import { ExportDialog } from './components/Export/ExportDialog';
 import { ProjectManager } from './components/Project/ProjectManager';
 import { StatePointConverter } from './lib/psychrometric/conversions';
-import { PsychrometricCalculator } from './lib/psychrometric/properties';
 import { STANDARD_PRESSURE } from './lib/psychrometric/constants';
 import { MixingProcess } from './lib/processes/mixing';
 import { Process } from './types/process';
