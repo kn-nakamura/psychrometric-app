@@ -1,5 +1,5 @@
 import { useAppStore } from '@/store/appStore';
-import { Trash2, GripVertical } from 'lucide-react';
+import { Trash2, GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
 
 export const StatePointList = () => {
   const {
@@ -8,6 +8,7 @@ export const StatePointList = () => {
     selectedPointId,
     setSelectedPoint,
     deleteStatePoint,
+    reorderStatePoints,
   } = useAppStore();
   
   // 現在の季節に応じてフィルター
@@ -18,7 +19,23 @@ export const StatePointList = () => {
   
   // 順番にソート
   const sortedPoints = [...filteredPoints].sort((a, b) => a.order - b.order);
-  
+
+  const handleMoveUp = (e: React.MouseEvent, pointId: string) => {
+    e.stopPropagation();
+    const index = statePoints.findIndex((p) => p.id === pointId);
+    if (index > 0) {
+      reorderStatePoints(index, index - 1);
+    }
+  };
+
+  const handleMoveDown = (e: React.MouseEvent, pointId: string) => {
+    e.stopPropagation();
+    const index = statePoints.findIndex((p) => p.id === pointId);
+    if (index < statePoints.length - 1) {
+      reorderStatePoints(index, index + 1);
+    }
+  };
+
   if (sortedPoints.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
@@ -26,10 +43,10 @@ export const StatePointList = () => {
       </div>
     );
   }
-  
+
   return (
     <div className="space-y-2">
-      {sortedPoints.map((point) => (
+      {sortedPoints.map((point, index) => (
         <div
           key={point.id}
           onClick={() => setSelectedPoint(point.id)}
@@ -40,8 +57,26 @@ export const StatePointList = () => {
           }`}
         >
           <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-1">
+              <button
+                onClick={(e) => handleMoveUp(e, point.id)}
+                disabled={index === 0}
+                className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                title="上に移動"
+              >
+                <ChevronUp className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => handleMoveDown(e, point.id)}
+                disabled={index === sortedPoints.length - 1}
+                className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                title="下に移動"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </div>
             <GripVertical className="w-4 h-4 text-gray-400" />
-            
+
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-gray-900">{point.order}.</span>
@@ -58,7 +93,7 @@ export const StatePointList = () => {
                   {point.season === 'summer' ? '夏' : point.season === 'winter' ? '冬' : '通年'}
                 </span>
               </div>
-              
+
               <div className="mt-1 text-sm text-gray-600 grid grid-cols-2 gap-x-4">
                 <div>温度: {point.dryBulbTemp?.toFixed(1)}°C</div>
                 <div>RH: {point.relativeHumidity?.toFixed(0)}%</div>
@@ -72,7 +107,7 @@ export const StatePointList = () => {
                 </div>
               </div>
             </div>
-            
+
             <button
               onClick={(e) => {
                 e.stopPropagation();
