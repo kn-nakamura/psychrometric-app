@@ -22,6 +22,7 @@ const processTypeLabels: Record<ProcessType, string> = {
   mixing: '混合',
   heatExchange: '全熱交換',
   fanHeating: 'ファン発熱',
+  airSupply: '空調吹き出し',
 };
 
 const processTypeColors: Record<ProcessType, string> = {
@@ -32,6 +33,7 @@ const processTypeColors: Record<ProcessType, string> = {
   mixing: 'bg-purple-100 text-purple-700',
   heatExchange: 'bg-green-100 text-green-700',
   fanHeating: 'bg-orange-100 text-orange-700',
+  airSupply: 'bg-emerald-100 text-emerald-700',
 };
 
 export const ProcessList = ({

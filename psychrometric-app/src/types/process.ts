@@ -8,7 +8,8 @@ export type ProcessType =
   | 'dehumidifying'  // 除湿
   | 'mixing'         // 混合
   | 'heatExchange'   // 全熱交換
-  | 'fanHeating';    // ファン発熱
+  | 'fanHeating'     // ファン発熱
+  | 'airSupply';     // 空調吹き出し
 
 /**
  * プロセス
