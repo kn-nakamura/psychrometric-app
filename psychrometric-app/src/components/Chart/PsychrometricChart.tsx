@@ -296,16 +296,25 @@ function drawStatePoints(
   activeSeason: string,
   selectedId?: string | null
 ) {
-  points.forEach((point) => {
-    // 季節フィルター
-    if (activeSeason !== 'both' && point.season !== 'both' && point.season !== activeSeason) {
-      return;
-    }
-    
+  // Filter and sort points by order for proper numbering
+  const filteredPoints = points
+    .filter(point => {
+      if (activeSeason !== 'both' && point.season !== 'both' && point.season !== activeSeason) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => a.order - b.order);
+
+  // Create index mapping for each season
+  let summerIndex = 1;
+  let winterIndex = 1;
+
+  filteredPoints.forEach((point) => {
     if (!point.dryBulbTemp || !point.humidity) return;
-    
+
     const { x, y } = coordinates.toCanvas(point.dryBulbTemp, point.humidity);
-    
+
     // 点を描画
     const defaultPointColor =
       point.season === 'summer' ? '#4dabf7' : point.season === 'winter' ? '#ff6b6b' : '#6b7280';
@@ -313,19 +322,49 @@ function drawStatePoints(
     ctx.beginPath();
     ctx.arc(x, y, selectedId === point.id ? 8 : 6, 0, Math.PI * 2);
     ctx.fill();
-    
+
     // 選択された点は外枠を描画
     if (selectedId === point.id) {
       ctx.strokeStyle = '#000';
       ctx.lineWidth = 2;
       ctx.stroke();
     }
-    
-    // ラベル
+
+    // Generate label based on season and index
+    let label = '';
+    if (point.season === 'summer') {
+      label = `C${summerIndex}`;
+      summerIndex++;
+    } else if (point.season === 'winter') {
+      label = `H${winterIndex}`;
+      winterIndex++;
+    } else {
+      // For 'both' season, use the original name or a neutral label
+      label = point.name;
+    }
+
+    // Draw point number/label in a circle
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(x, y, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = point.color || defaultPointColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = point.color || defaultPointColor;
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, x, y);
+
+    // Display values to the right of the point
     ctx.fillStyle = '#000';
-    ctx.font = 'bold 12px sans-serif';
+    ctx.font = '11px sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(point.name, x + 10, y - 10);
+    ctx.textBaseline = 'top';
+    const valueText = `${point.dryBulbTemp.toFixed(1)}°C, ${point.relativeHumidity?.toFixed(0)}%`;
+    ctx.fillText(valueText, x + 15, y - 5);
   });
 }
 
@@ -396,9 +435,42 @@ function drawProcesses(
       return;
     }
 
+    if (process.type === 'heatExchange') {
+      const exhaustPointId = process.parameters.exhaustPointId;
+      const exhaustPoint = points.find((p) => p.id === exhaustPointId);
+      if (exhaustPoint && exhaustPoint.dryBulbTemp && exhaustPoint.humidity) {
+        const exhaustCanvas = coordinates.toCanvas(exhaustPoint.dryBulbTemp, exhaustPoint.humidity);
+
+        // Draw connection line from exhaust point to heat exchanger output (no arrow)
+        ctx.strokeStyle =
+          process.season === 'summer'
+            ? '#4dabf7'
+            : process.season === 'winter'
+            ? '#ff6b6b'
+            : '#6b7280';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([2, 4]); // Dotted line to distinguish from main process flow
+
+        ctx.beginPath();
+        ctx.moveTo(exhaustCanvas.x, exhaustCanvas.y);
+        ctx.lineTo(to.x, to.y);
+        ctx.stroke();
+
+        ctx.setLineDash([5, 5]); // Return to dashed line for main flow
+      }
+    }
+
+    // Offset the line from the points
+    const angle = Math.atan2(to.y - from.y, to.x - from.x);
+    const offsetDistance = 12; // Distance to offset from point centers
+    const fromOffsetX = from.x + offsetDistance * Math.cos(angle);
+    const fromOffsetY = from.y + offsetDistance * Math.sin(angle);
+    const toOffsetX = to.x - offsetDistance * Math.cos(angle);
+    const toOffsetY = to.y - offsetDistance * Math.sin(angle);
+
     ctx.beginPath();
-    ctx.moveTo(from.x, from.y);
-    ctx.lineTo(to.x, to.y);
+    ctx.moveTo(fromOffsetX, fromOffsetY);
+    ctx.lineTo(toOffsetX, toOffsetY);
     ctx.stroke();
 
     ctx.setLineDash([]);
@@ -413,21 +485,26 @@ function drawArrow(
   x1: number,
   y1: number,
   x2: number,
-  y2: number
+  y2: number,
+  offsetFromEnd: number = 12 // Offset from the end point to avoid overlapping with point marker
 ) {
   const headLength = 10;
   const angle = Math.atan2(y2 - y1, x2 - x1);
-  
+
+  // Calculate the offset end point
+  const endX = x2 - offsetFromEnd * Math.cos(angle);
+  const endY = y2 - offsetFromEnd * Math.sin(angle);
+
   ctx.beginPath();
-  ctx.moveTo(x2, y2);
+  ctx.moveTo(endX, endY);
   ctx.lineTo(
-    x2 - headLength * Math.cos(angle - Math.PI / 6),
-    y2 - headLength * Math.sin(angle - Math.PI / 6)
+    endX - headLength * Math.cos(angle - Math.PI / 6),
+    endY - headLength * Math.sin(angle - Math.PI / 6)
   );
-  ctx.moveTo(x2, y2);
+  ctx.moveTo(endX, endY);
   ctx.lineTo(
-    x2 - headLength * Math.cos(angle + Math.PI / 6),
-    y2 - headLength * Math.sin(angle + Math.PI / 6)
+    endX - headLength * Math.cos(angle + Math.PI / 6),
+    endY - headLength * Math.sin(angle + Math.PI / 6)
   );
   ctx.stroke();
 }

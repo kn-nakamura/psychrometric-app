@@ -24,7 +24,7 @@ export const ExportDialog = ({
   const [exportType, setExportType] = useState<'pdf' | 'png' | null>(null);
 
   const A4_SIZE_MM = { width: 297, height: 210 };
-  const A4_DPI = 300;
+  const A4_DPI = 600; // Increased DPI for better quality
 
   const mmToPx = (mm: number) => Math.round((mm / 25.4) * A4_DPI);
 
@@ -178,14 +178,48 @@ export const ExportDialog = ({
 
     const processLines =
       processes.length > 0
-        ? processes.map((process) => {
+        ? processes.flatMap((process) => {
             const fromPoint = statePoints.find(
               (p) => p.id === process.fromPointId
             );
             const toPoint = statePoints.find((p) => p.id === process.toPointId);
-            return `${process.name}: ${fromPoint?.name || '?'} → ${
-              toPoint?.name || '?'
-            }`;
+            const lines = [`${process.name}: ${fromPoint?.name || '?'} → ${toPoint?.name || '?'}`];
+
+            // Add detailed parameters
+            if (fromPoint && toPoint && fromPoint.enthalpy && toPoint.enthalpy) {
+              const enthalpyDiff = toPoint.enthalpy - fromPoint.enthalpy;
+              const humidityDiff = (toPoint.humidity || 0) - (fromPoint.humidity || 0);
+              const tempDiff = (toPoint.dryBulbTemp || 0) - (fromPoint.dryBulbTemp || 0);
+
+              if (process.parameters.airflow) {
+                const totalCapacity = (enthalpyDiff * process.parameters.airflow * 1.2) / 3600;
+                lines.push(`  全熱: ${Math.abs(totalCapacity).toFixed(2)} kW`);
+                lines.push(`  比エンタルピー差: ${enthalpyDiff.toFixed(2)} kJ/kg'`);
+
+                if (humidityDiff !== 0) {
+                  const moistureAmount = Math.abs(humidityDiff) * process.parameters.airflow * 1.2;
+                  lines.push(`  ${humidityDiff < 0 ? '除湿量' : '加湿量'}: ${moistureAmount.toFixed(2)} L/h`);
+                }
+              }
+
+              if (tempDiff !== 0) {
+                lines.push(`  温度差: ${tempDiff.toFixed(1)}°C`);
+              }
+            }
+
+            if (process.parameters.airflow) {
+              lines.push(`  風量: ${process.parameters.airflow.toFixed(0)} m³/h`);
+            }
+
+            if (process.parameters.capacity) {
+              lines.push(`  能力: ${process.parameters.capacity.toFixed(1)} kW`);
+            }
+
+            if (process.parameters.heatExchangeEfficiency) {
+              lines.push(`  全熱交換効率: ${process.parameters.heatExchangeEfficiency.toFixed(0)}%`);
+            }
+
+            return lines;
           })
         : ['プロセスは登録されていません'];
 
@@ -249,13 +283,33 @@ export const ExportDialog = ({
       const chartImage = exportCanvas.toDataURL('image/png');
 
       const pdf = new jsPDF('landscape', 'mm', 'a4');
+
+      // Calculate proper aspect ratio to avoid stretching
+      const canvasAspectRatio = exportCanvas.width / exportCanvas.height;
+      const pdfAspectRatio = A4_SIZE_MM.width / A4_SIZE_MM.height;
+
+      let imgWidth = A4_SIZE_MM.width;
+      let imgHeight = A4_SIZE_MM.height;
+
+      if (canvasAspectRatio > pdfAspectRatio) {
+        // Canvas is wider than PDF page
+        imgHeight = A4_SIZE_MM.width / canvasAspectRatio;
+      } else {
+        // Canvas is taller than PDF page
+        imgWidth = A4_SIZE_MM.height * canvasAspectRatio;
+      }
+
+      // Center the image on the page
+      const xOffset = (A4_SIZE_MM.width - imgWidth) / 2;
+      const yOffset = (A4_SIZE_MM.height - imgHeight) / 2;
+
       pdf.addImage(
         chartImage,
         'PNG',
-        0,
-        0,
-        A4_SIZE_MM.width,
-        A4_SIZE_MM.height
+        xOffset,
+        yOffset,
+        imgWidth,
+        imgHeight
       );
 
       // PDFを保存

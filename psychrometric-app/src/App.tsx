@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, Settings, Download, FolderOpen, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Settings, Download, FolderOpen, Edit2, Trash2, Copy } from 'lucide-react';
 import { useProjectStore } from './store/projectStore';
 import { PsychrometricChart, PsychrometricChartRef } from './components/Chart/PsychrometricChart';
 import { ProcessDialog } from './components/Process/ProcessDialog';
@@ -356,6 +356,39 @@ function App() {
     resetPointForm();
   };
 
+  // Copy state points to clipboard in Excel format
+  const copyStatePointsToClipboard = () => {
+    const headers = ['名称', '乾球温度[℃]', '湿球温度[℃]', '相対湿度[%]', '絶対湿度[kg/kg\']', 'エンタルピー[kJ/kg\']', '露点温度[℃]', '比体積[m³/kg\']', '風量[m³/h]'];
+    const rows = statePoints
+      .filter((point) => {
+        if (activeSeason === 'both') return true;
+        return point.season === activeSeason || point.season === 'both';
+      })
+      .map((point) => [
+        point.name,
+        point.dryBulbTemp?.toFixed(1) || '-',
+        point.wetBulbTemp?.toFixed(1) || '-',
+        point.relativeHumidity?.toFixed(0) || '-',
+        point.humidity?.toFixed(4) || '-',
+        point.enthalpy?.toFixed(1) || '-',
+        point.dewPoint?.toFixed(1) || '-',
+        point.specificVolume?.toFixed(3) || '-',
+        typeof point.airflow === 'number' ? point.airflow.toFixed(0) : '-',
+      ]);
+
+    const tsv = [headers.join('\t'), ...rows.map((row) => row.join('\t'))].join('\n');
+
+    navigator.clipboard.writeText(tsv).then(
+      () => {
+        alert('状態点をクリップボードにコピーしました。Excelに貼り付けできます。');
+      },
+      (err) => {
+        console.error('Failed to copy:', err);
+        alert('コピーに失敗しました');
+      }
+    );
+  };
+
   // 状態点の移動（ドラッグ）
   const handlePointMove = (pointId: string, temp: number, humidity: number) => {
     const stateData = StatePointConverter.fromDryBulbAndHumidity(
@@ -709,7 +742,7 @@ function App() {
                     : 'bg-gray-100 hover:bg-gray-200'
                 }`}
               >
-                夏季
+                冷却サイクル
               </button>
               <button
                 onClick={() => setActiveSeason('winter')}
@@ -719,7 +752,7 @@ function App() {
                     : 'bg-gray-100 hover:bg-gray-200'
                 }`}
               >
-                冬季
+                加熱サイクル
               </button>
               <button
                 onClick={() => setActiveSeason('both')}
@@ -1039,9 +1072,21 @@ function App() {
 
               {/* 状態点リスト */}
               <div className="mt-4 space-y-2">
-                <h3 className="text-sm font-medium text-gray-700">
-                  状態点一覧 ({statePoints.length}個)
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-gray-700">
+                    状態点一覧 ({statePoints.length}個)
+                  </h3>
+                  {statePoints.length > 0 && (
+                    <button
+                      onClick={copyStatePointsToClipboard}
+                      className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                      title="Excelにコピー"
+                    >
+                      <Copy className="w-3 h-3" />
+                      コピー
+                    </button>
+                  )}
+                </div>
                 {statePoints.length === 0 ? (
                   <p className="text-sm text-gray-500 text-center py-4">
                     状態点がありません
