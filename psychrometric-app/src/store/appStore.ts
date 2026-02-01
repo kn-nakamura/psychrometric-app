@@ -3,6 +3,10 @@ import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
 import { DesignConditions } from '@/types/designConditions';
 import { StatePointConverter } from '@/lib/psychrometric/conversions';
+import {
+  DEFAULT_PSYCHROMETRIC_CONSTANTS,
+  resolvePsychrometricConstants,
+} from '@/lib/psychrometric/constants';
 
 /**
  * アプリケーションの状態
@@ -100,6 +104,9 @@ const initialDesignConditions: DesignConditions = {
     exhaustAirName: '排気量',
   },
   equipment: {},
+  calculation: {
+    constants: { ...DEFAULT_PSYCHROMETRIC_CONSTANTS },
+  },
 };
 
 /**
@@ -125,6 +132,22 @@ export const useAppStore = create<AppStore>((set, get) => ({
         indoor: { ...state.designConditions.indoor, ...conditions.indoor },
         airflow: { ...state.designConditions.airflow, ...conditions.airflow },
         equipment: { ...state.designConditions.equipment, ...conditions.equipment },
+        calculation: {
+          ...state.designConditions.calculation,
+          ...conditions.calculation,
+          constants: resolvePsychrometricConstants({
+            ...state.designConditions.calculation.constants,
+            ...conditions.calculation?.constants,
+            tetensWater: {
+              ...state.designConditions.calculation.constants.tetensWater,
+              ...conditions.calculation?.constants?.tetensWater,
+            },
+            tetensIce: {
+              ...state.designConditions.calculation.constants.tetensIce,
+              ...conditions.calculation?.constants?.tetensIce,
+            },
+          }),
+        },
       },
     }));
   },

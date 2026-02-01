@@ -1,3 +1,5 @@
+import type { PsychrometricConstants } from '@/types/calculationSettings';
+
 /**
  * 空気調和計算で使用する物性値定数
  */
@@ -118,3 +120,32 @@ export const CHART_CONSTANTS = {
   // グリッド線の湿度間隔 [kg/kg']
   HUMIDITY_GRID_INTERVAL: 0.002,
 } as const;
+
+export const DEFAULT_PSYCHROMETRIC_CONSTANTS: PsychrometricConstants = {
+  standardPressure: STANDARD_PRESSURE,
+  cpAir: CP_AIR,
+  cpVapor: CP_VAPOR,
+  latentHeat0c: LATENT_HEAT_0C,
+  molecularWeightRatio: MOLECULAR_WEIGHT_RATIO,
+  rAir: R_AIR,
+  wetBulbCoefficient: WET_BULB_COEFFICIENT,
+  convergenceTolerance: CONVERGENCE_TOLERANCE,
+  maxIterations: MAX_ITERATIONS,
+  tetensWater: { ...TETENS_WATER },
+  tetensIce: { ...TETENS_ICE },
+};
+
+export const resolvePsychrometricConstants = (
+  constants?: Partial<PsychrometricConstants>
+): PsychrometricConstants => ({
+  ...DEFAULT_PSYCHROMETRIC_CONSTANTS,
+  ...constants,
+  tetensWater: {
+    ...DEFAULT_PSYCHROMETRIC_CONSTANTS.tetensWater,
+    ...constants?.tetensWater,
+  },
+  tetensIce: {
+    ...DEFAULT_PSYCHROMETRIC_CONSTANTS.tetensIce,
+    ...constants?.tetensIce,
+  },
+});

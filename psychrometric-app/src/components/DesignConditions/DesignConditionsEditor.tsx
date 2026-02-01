@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Building2, Thermometer, Wind, Settings } from 'lucide-react';
+import { X, Building2, Thermometer, Wind, Settings, Calculator } from 'lucide-react';
 import { DesignConditions } from '@/types/designConditions';
 
 interface DesignConditionsEditorProps {
@@ -9,7 +9,7 @@ interface DesignConditionsEditorProps {
   onSave: (conditions: DesignConditions) => void;
 }
 
-type TabType = 'project' | 'outdoor' | 'indoor' | 'airflow' | 'equipment';
+type TabType = 'project' | 'outdoor' | 'indoor' | 'airflow' | 'equipment' | 'calculation';
 
 export const DesignConditionsEditor = ({
   isOpen,
@@ -69,12 +69,49 @@ export const DesignConditionsEditor = ({
     }));
   };
 
+  const updateCalculationConstant = (
+    field: keyof DesignConditions['calculation']['constants'],
+    value: number
+  ) => {
+    setConditions((prev) => ({
+      ...prev,
+      calculation: {
+        ...prev.calculation,
+        constants: {
+          ...prev.calculation.constants,
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  const updateTetensConstant = (
+    target: 'tetensWater' | 'tetensIce',
+    field: 'A' | 'B' | 'C',
+    value: number
+  ) => {
+    setConditions((prev) => ({
+      ...prev,
+      calculation: {
+        ...prev.calculation,
+        constants: {
+          ...prev.calculation.constants,
+          [target]: {
+            ...prev.calculation.constants[target],
+            [field]: value,
+          },
+        },
+      },
+    }));
+  };
+
   const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
     { id: 'project', label: 'プロジェクト', icon: <Building2 className="w-4 h-4" /> },
     { id: 'outdoor', label: '外気条件', icon: <Thermometer className="w-4 h-4" /> },
     { id: 'indoor', label: '室内条件', icon: <Thermometer className="w-4 h-4" /> },
     { id: 'airflow', label: '風量', icon: <Wind className="w-4 h-4" /> },
     { id: 'equipment', label: '機器', icon: <Settings className="w-4 h-4" /> },
+    { id: 'calculation', label: '計算設定', icon: <Calculator className="w-4 h-4" /> },
   ];
 
   return (
@@ -669,6 +706,256 @@ export const DesignConditionsEditor = ({
                       }
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 計算設定 */}
+          {activeTab === 'calculation' && (
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-gray-900">計算ロジック</h4>
+                <ul className="list-disc pl-5 text-sm text-gray-600 space-y-1">
+                  <li>
+                    飽和水蒸気圧はTetensの式（Ps = A × exp(B × t / (C + t))）で算出。
+                  </li>
+                  <li>
+                    絶対湿度は x = ε × Pv / (P - Pv) を用い、相対湿度から部分水蒸気圧を算出。
+                  </li>
+                  <li>
+                    エンタルピーは h = cp,a × t + x × (L0 + cp,v × t) を使用。
+                  </li>
+                  <li>
+                    湿球温度は熱収支式をNewton-Raphson法で反復計算。
+                  </li>
+                </ul>
+                <p className="text-xs text-gray-500">
+                  下記の定数を変更すると、状態点計算やプロセス計算の結果に反映されます。
+                </p>
+              </div>
+
+              <div className="border rounded-lg p-4 space-y-4">
+                <h4 className="text-sm font-semibold text-gray-900">基本定数</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">標準大気圧 [kPa]</label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      value={conditions.calculation.constants.standardPressure}
+                      onChange={(e) =>
+                        updateCalculationConstant('standardPressure', parseFloat(e.target.value))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">
+                      乾き空気の定圧比熱 [kJ/(kg·K)]
+                    </label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      value={conditions.calculation.constants.cpAir}
+                      onChange={(e) =>
+                        updateCalculationConstant('cpAir', parseFloat(e.target.value))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">
+                      水蒸気の定圧比熱 [kJ/(kg·K)]
+                    </label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      value={conditions.calculation.constants.cpVapor}
+                      onChange={(e) =>
+                        updateCalculationConstant('cpVapor', parseFloat(e.target.value))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">
+                      0°C蒸発潜熱 [kJ/kg]
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={conditions.calculation.constants.latentHeat0c}
+                      onChange={(e) =>
+                        updateCalculationConstant('latentHeat0c', parseFloat(e.target.value))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">分子量比 [-]</label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      value={conditions.calculation.constants.molecularWeightRatio}
+                      onChange={(e) =>
+                        updateCalculationConstant(
+                          'molecularWeightRatio',
+                          parseFloat(e.target.value)
+                        )
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">
+                      乾き空気の気体定数 [kJ/(kg·K)]
+                    </label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      value={conditions.calculation.constants.rAir}
+                      onChange={(e) =>
+                        updateCalculationConstant('rAir', parseFloat(e.target.value))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">
+                      湿球温度計定数
+                    </label>
+                    <input
+                      type="number"
+                      step="0.000001"
+                      value={conditions.calculation.constants.wetBulbCoefficient}
+                      onChange={(e) =>
+                        updateCalculationConstant(
+                          'wetBulbCoefficient',
+                          parseFloat(e.target.value)
+                        )
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">収束判定値</label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={conditions.calculation.constants.convergenceTolerance}
+                      onChange={(e) =>
+                        updateCalculationConstant(
+                          'convergenceTolerance',
+                          parseFloat(e.target.value)
+                        )
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">最大反復回数</label>
+                    <input
+                      type="number"
+                      step="1"
+                      value={conditions.calculation.constants.maxIterations}
+                      onChange={(e) =>
+                        updateCalculationConstant(
+                          'maxIterations',
+                          parseInt(e.target.value, 10)
+                        )
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border rounded-lg p-4 space-y-4">
+                <h4 className="text-sm font-semibold text-gray-900">Tetens係数</h4>
+                <div className="space-y-3">
+                  <div>
+                    <h5 className="text-sm font-medium text-gray-700 mb-2">水面上 (0°C以上)</h5>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm text-gray-600 mb-1">A [kPa]</label>
+                        <input
+                          type="number"
+                          step="0.00001"
+                          value={conditions.calculation.constants.tetensWater.A}
+                          onChange={(e) =>
+                            updateTetensConstant('tetensWater', 'A', parseFloat(e.target.value))
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-600 mb-1">B</label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          value={conditions.calculation.constants.tetensWater.B}
+                          onChange={(e) =>
+                            updateTetensConstant('tetensWater', 'B', parseFloat(e.target.value))
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-600 mb-1">C [°C]</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={conditions.calculation.constants.tetensWater.C}
+                          onChange={(e) =>
+                            updateTetensConstant('tetensWater', 'C', parseFloat(e.target.value))
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <h5 className="text-sm font-medium text-gray-700 mb-2">氷面上 (0°C未満)</h5>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm text-gray-600 mb-1">A [kPa]</label>
+                        <input
+                          type="number"
+                          step="0.00001"
+                          value={conditions.calculation.constants.tetensIce.A}
+                          onChange={(e) =>
+                            updateTetensConstant('tetensIce', 'A', parseFloat(e.target.value))
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-600 mb-1">B</label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          value={conditions.calculation.constants.tetensIce.B}
+                          onChange={(e) =>
+                            updateTetensConstant('tetensIce', 'B', parseFloat(e.target.value))
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-600 mb-1">C [°C]</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={conditions.calculation.constants.tetensIce.C}
+                          onChange={(e) =>
+                            updateTetensConstant('tetensIce', 'C', parseFloat(e.target.value))
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

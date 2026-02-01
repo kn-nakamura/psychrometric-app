@@ -8,7 +8,7 @@ import { DesignConditionsEditor } from './components/DesignConditions/DesignCond
 import { ExportDialog } from './components/Export/ExportDialog';
 import { ProjectManager } from './components/Project/ProjectManager';
 import { StatePointConverter } from './lib/psychrometric/conversions';
-import { STANDARD_PRESSURE } from './lib/psychrometric/constants';
+import { resolvePsychrometricConstants } from './lib/psychrometric/constants';
 import { MixingProcess } from './lib/processes/mixing';
 import { HeatExchangeProcess } from './lib/processes/heatExchange';
 import { Process } from './types/process';
@@ -143,6 +143,9 @@ function App() {
   const inputOptionB =
     STATE_POINT_INPUT_OPTIONS.find((option) => option.key === inputTypeB) ??
     STATE_POINT_INPUT_OPTIONS[1];
+  const calculationConstants = designConditions.calculation.constants;
+  const defaultPressure =
+    designConditions.outdoor.pressure ?? calculationConstants.standardPressure;
 
   useEffect(() => {
     const container = chartContainerRef.current;
@@ -243,7 +246,7 @@ function App() {
       return;
     }
 
-    const pressure = designConditions.outdoor.pressure ?? STANDARD_PRESSURE;
+    const pressure = defaultPressure;
 
     if (
       (inputTypeA === 'dewPoint' && inputTypeB === 'humidity') ||
@@ -260,7 +263,8 @@ function App() {
         valueA,
         inputTypeB,
         valueB,
-        pressure
+        pressure,
+        calculationConstants
       );
     } catch (error) {
       alert(error instanceof Error ? error.message : '状態点を計算できません');
@@ -354,7 +358,12 @@ function App() {
 
   // 状態点の移動（ドラッグ）
   const handlePointMove = (pointId: string, temp: number, humidity: number) => {
-    const stateData = StatePointConverter.fromDryBulbAndHumidity(temp, humidity);
+    const stateData = StatePointConverter.fromDryBulbAndHumidity(
+      temp,
+      humidity,
+      defaultPressure,
+      calculationConstants
+    );
     updateStatePoint(pointId, stateData);
   };
 
@@ -366,7 +375,12 @@ function App() {
     rh: number,
     airflowSource?: StatePoint['airflowSource']
   ) => {
-    const stateData = StatePointConverter.fromDryBulbAndRH(temp, rh);
+    const stateData = StatePointConverter.fromDryBulbAndRH(
+      temp,
+      rh,
+      defaultPressure,
+      calculationConstants
+    );
     const airflow = airflowSource ? designConditions.airflow[airflowSource] : undefined;
     addStatePoint({
       id: `point-${Date.now()}`,
@@ -404,13 +418,14 @@ function App() {
         resolvePointAirflow(stream2) ??
         fallbackAirflow2;
       if (stream1 && stream2) {
-        const pressure = designConditions.outdoor.pressure ?? STANDARD_PRESSURE;
+        const pressure = defaultPressure;
         const mixedPoint = MixingProcess.mixTwoStreams(
           stream1,
           resolvedAirflow1,
           stream2,
           resolvedAirflow2,
-          pressure
+          pressure,
+          calculationConstants
         ).mixedPoint;
         const newPointId = `point-${Date.now()}`;
         addStatePoint({
@@ -450,7 +465,7 @@ function App() {
       const exhaustPoint = processData.parameters.exhaustPointId
         ? statePoints.find((point) => point.id === processData.parameters.exhaustPointId)
         : undefined;
-      const pressure = designConditions.outdoor.pressure ?? STANDARD_PRESSURE;
+      const pressure = defaultPressure;
       const efficiency = processData.parameters.heatExchangeEfficiency ?? 0;
       const resolvedSupplyAirflow = resolvePointAirflow(outdoorPoint);
       const resolvedExhaustAirflow =
@@ -491,7 +506,8 @@ function App() {
           exhaustAirflowIn,
           exhaustAirflowOut,
           efficiency,
-          pressure
+          pressure,
+          calculationConstants
         );
         const newPointId = `point-${Date.now()}`;
         addStatePoint({
@@ -564,30 +580,48 @@ function App() {
   };
 
   // 設計条件の保存
-  const normalizeDesignConditions = (conditions: DesignConditions): DesignConditions => ({
-    ...conditions,
-    airflow: {
-      ...conditions.airflow,
-      supplyAirName: conditions.airflow.supplyAirName ?? '給気量',
-      outdoorAirName: conditions.airflow.outdoorAirName ?? '外気量',
-      returnAirName: conditions.airflow.returnAirName ?? '還気量',
-      exhaustAirName: conditions.airflow.exhaustAirName ?? '排気量',
-    },
-    equipment: {
-      ...conditions.equipment,
-      heatExchanger: conditions.equipment.heatExchanger
-        ? {
-            ...conditions.equipment.heatExchanger,
-            efficiencySummer:
-              conditions.equipment.heatExchanger.efficiencySummer ??
-              conditions.equipment.heatExchanger.efficiency,
-            efficiencyWinter:
-              conditions.equipment.heatExchanger.efficiencyWinter ??
-              conditions.equipment.heatExchanger.efficiency,
-          }
-        : undefined,
-    },
-  });
+  const normalizeDesignConditions = (conditions: DesignConditions): DesignConditions => {
+    const resolvedCalculation = conditions.calculation ?? {
+      constants: resolvePsychrometricConstants(),
+    };
+
+    return {
+      ...conditions,
+      airflow: {
+        ...conditions.airflow,
+        supplyAirName: conditions.airflow.supplyAirName ?? '給気量',
+        outdoorAirName: conditions.airflow.outdoorAirName ?? '外気量',
+        returnAirName: conditions.airflow.returnAirName ?? '還気量',
+        exhaustAirName: conditions.airflow.exhaustAirName ?? '排気量',
+      },
+      equipment: {
+        ...conditions.equipment,
+        heatExchanger: conditions.equipment.heatExchanger
+          ? {
+              ...conditions.equipment.heatExchanger,
+              efficiencySummer:
+                conditions.equipment.heatExchanger.efficiencySummer ??
+                conditions.equipment.heatExchanger.efficiency,
+              efficiencyWinter:
+                conditions.equipment.heatExchanger.efficiencyWinter ??
+                conditions.equipment.heatExchanger.efficiency,
+            }
+          : undefined,
+      },
+      calculation: {
+        ...resolvedCalculation,
+        constants: resolvePsychrometricConstants({
+          ...resolvedCalculation.constants,
+          tetensWater: {
+            ...resolvedCalculation.constants.tetensWater,
+          },
+          tetensIce: {
+            ...resolvedCalculation.constants.tetensIce,
+          },
+        }),
+      },
+    };
+  };
 
   const handleSaveDesignConditions = (conditions: DesignConditions) => {
     setDesignConditions(normalizeDesignConditions(conditions));

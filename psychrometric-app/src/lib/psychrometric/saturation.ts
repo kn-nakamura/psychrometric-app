@@ -1,4 +1,5 @@
-import { TETENS_WATER, TETENS_ICE } from './constants';
+import type { PsychrometricConstants } from '@/types/calculationSettings';
+import { resolvePsychrometricConstants } from './constants';
 
 /**
  * 飽和水蒸気圧を計算（Tetensの式）
@@ -12,9 +13,13 @@ import { TETENS_WATER, TETENS_ICE } from './constants';
  * 
  * 式: Ps = A × exp(B × t / (C + t))
  */
-export function saturationPressure(temp: number): number {
+export function saturationPressure(
+  temp: number,
+  constants?: Partial<PsychrometricConstants>
+): number {
   // 温度によって係数を切り替え
-  const coeffs = temp >= 0 ? TETENS_WATER : TETENS_ICE;
+  const resolved = resolvePsychrometricConstants(constants);
+  const coeffs = temp >= 0 ? resolved.tetensWater : resolved.tetensIce;
   
   const { A, B, C } = coeffs;
   
@@ -31,11 +36,15 @@ export function saturationPressure(temp: number): number {
  * @param temp 温度 [°C]
  * @returns dPs/dt [kPa/°C]
  */
-export function saturationPressureDerivative(temp: number): number {
-  const coeffs = temp >= 0 ? TETENS_WATER : TETENS_ICE;
+export function saturationPressureDerivative(
+  temp: number,
+  constants?: Partial<PsychrometricConstants>
+): number {
+  const resolved = resolvePsychrometricConstants(constants);
+  const coeffs = temp >= 0 ? resolved.tetensWater : resolved.tetensIce;
   const { B, C } = coeffs;
   
-  const ps = saturationPressure(temp);
+  const ps = saturationPressure(temp, constants);
   
   // d(Ps)/dt = Ps × B × C / (C + t)²
   const derivative = ps * B * C / Math.pow(C + temp, 2);
@@ -50,8 +59,12 @@ export function saturationPressureDerivative(temp: number): number {
  * @param rh 相対湿度 [%]
  * @returns 部分水蒸気圧 [kPa]
  */
-export function vaporPressure(temp: number, rh: number): number {
-  const ps = saturationPressure(temp);
+export function vaporPressure(
+  temp: number,
+  rh: number,
+  constants?: Partial<PsychrometricConstants>
+): number {
+  const ps = saturationPressure(temp, constants);
   
   // Pv = φ × Ps
   // φ: 相対湿度 (0-1)
@@ -67,8 +80,12 @@ export function vaporPressure(temp: number, rh: number): number {
  * @param pv 部分水蒸気圧 [kPa]
  * @returns 相対湿度 [%]
  */
-export function relativeHumidity(temp: number, pv: number): number {
-  const ps = saturationPressure(temp);
+export function relativeHumidity(
+  temp: number,
+  pv: number,
+  constants?: Partial<PsychrometricConstants>
+): number {
+  const ps = saturationPressure(temp, constants);
   
   // φ = Pv / Ps
   const rh = (pv / ps) * 100;
@@ -84,9 +101,13 @@ export function relativeHumidity(temp: number, pv: number): number {
  * @param pv 部分水蒸気圧 [kPa]
  * @returns 露点温度 [°C]
  */
-export function dewPointTemperature(pv: number): number {
+export function dewPointTemperature(
+  pv: number,
+  constants?: Partial<PsychrometricConstants>
+): number {
   // 簡易的な逆計算（水面上の式を使用）
-  const { A, B, C } = TETENS_WATER;
+  const resolved = resolvePsychrometricConstants(constants);
+  const { A, B, C } = resolved.tetensWater;
   
   // Tetensの式の逆関数
   // t = C × ln(Pv/A) / (B - ln(Pv/A))
