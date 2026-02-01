@@ -13,6 +13,17 @@ import { STANDARD_PRESSURE } from '../psychrometric/constants';
  * - 風量が異なる場合は効率補正が必要
  */
 export class HeatExchangeProcess {
+  private static getEffectiveAirflow(inlet: number, outlet?: number): number {
+    if (!Number.isFinite(inlet) || inlet <= 0) return 0;
+    if (!Number.isFinite(outlet) || outlet <= 0) return inlet;
+    return Math.min(inlet, outlet);
+  }
+
+  private static getAirflowRatio(airflow1: number, airflow2: number): number {
+    const maxFlow = Math.max(airflow1, airflow2);
+    if (maxFlow <= 0) return 0;
+    return Math.min(airflow1, airflow2) / maxFlow;
+  }
   
   /**
    * 全熱交換器の計算（全熱交換効率のみ指定）
@@ -28,14 +39,18 @@ export class HeatExchangeProcess {
   static calculateTotalHeat(
     outdoorAir: StatePoint,
     exhaustAir: StatePoint,
-    oaAirflow: number,
-    eaAirflow: number,
+    oaAirflowIn: number,
+    oaAirflowOut: number,
+    eaAirflowIn: number,
+    eaAirflowOut: number,
     efficiency: number,
     pressure: number = STANDARD_PRESSURE
   ): { supplyAir: Partial<StatePoint>; results: ProcessResults } {
     
     // 風量比による効率補正
-    const airflowRatio = Math.min(oaAirflow, eaAirflow) / Math.max(oaAirflow, eaAirflow);
+    const effectiveSupplyAirflow = this.getEffectiveAirflow(oaAirflowIn, oaAirflowOut);
+    const effectiveExhaustAirflow = this.getEffectiveAirflow(eaAirflowIn, eaAirflowOut);
+    const airflowRatio = this.getAirflowRatio(effectiveSupplyAirflow, effectiveExhaustAirflow);
     const effectiveEfficiency = (efficiency / 100) * airflowRatio;
     
     // エンタルピー交換
@@ -65,7 +80,7 @@ export class HeatExchangeProcess {
       outdoorAir.humidity!,
       pressure
     );
-    const massFlow = oaAirflow * density;
+    const massFlow = effectiveSupplyAirflow * density;
     
     const enthalpyDiff = saEnthalpy - oaEnthalpy;
     const exchangedHeat = (massFlow * enthalpyDiff) / 3600; // [kW]
@@ -100,15 +115,19 @@ export class HeatExchangeProcess {
   static calculateSeparateEfficiency(
     outdoorAir: StatePoint,
     exhaustAir: StatePoint,
-    oaAirflow: number,
-    eaAirflow: number,
+    oaAirflowIn: number,
+    oaAirflowOut: number,
+    eaAirflowIn: number,
+    eaAirflowOut: number,
     sensibleEfficiency: number,
     latentEfficiency: number,
     pressure: number = STANDARD_PRESSURE
   ): { supplyAir: Partial<StatePoint>; results: ProcessResults } {
     
     // 風量比による効率補正
-    const airflowRatio = Math.min(oaAirflow, eaAirflow) / Math.max(oaAirflow, eaAirflow);
+    const effectiveSupplyAirflow = this.getEffectiveAirflow(oaAirflowIn, oaAirflowOut);
+    const effectiveExhaustAirflow = this.getEffectiveAirflow(eaAirflowIn, eaAirflowOut);
+    const airflowRatio = this.getAirflowRatio(effectiveSupplyAirflow, effectiveExhaustAirflow);
     const effectiveSensible = (sensibleEfficiency / 100) * airflowRatio;
     const effectiveLatent = (latentEfficiency / 100) * airflowRatio;
     
@@ -137,7 +156,7 @@ export class HeatExchangeProcess {
       outdoorAir.humidity!,
       pressure
     );
-    const massFlow = oaAirflow * density;
+    const massFlow = effectiveSupplyAirflow * density;
     
     const temperatureDiff = saTemp - oaTemp;
     const humidityDiff = saHumidity - oaHumidity;
@@ -173,8 +192,10 @@ export class HeatExchangeProcess {
   static calculateBothSides(
     outdoorAir: StatePoint,
     exhaustAir: StatePoint,
-    oaAirflow: number,
-    eaAirflow: number,
+    oaAirflowIn: number,
+    oaAirflowOut: number,
+    eaAirflowIn: number,
+    eaAirflowOut: number,
     efficiency: number,
     pressure: number = STANDARD_PRESSURE
   ): {
@@ -187,15 +208,19 @@ export class HeatExchangeProcess {
     const { supplyAir, results } = this.calculateTotalHeat(
       outdoorAir,
       exhaustAir,
-      oaAirflow,
-      eaAirflow,
+      oaAirflowIn,
+      oaAirflowOut,
+      eaAirflowIn,
+      eaAirflowOut,
       efficiency,
       pressure
     );
     
     // 排気側（室内空気→処理後排気）
     // 熱の移動は逆向き
-    const airflowRatio = Math.min(oaAirflow, eaAirflow) / Math.max(oaAirflow, eaAirflow);
+    const effectiveSupplyAirflow = this.getEffectiveAirflow(oaAirflowIn, oaAirflowOut);
+    const effectiveExhaustAirflow = this.getEffectiveAirflow(eaAirflowIn, eaAirflowOut);
+    const airflowRatio = this.getAirflowRatio(effectiveSupplyAirflow, effectiveExhaustAirflow);
     const effectiveEfficiency = (efficiency / 100) * airflowRatio;
     
     const eaEnthalpy = exhaustAir.enthalpy!;

@@ -58,6 +58,10 @@ export interface ProcessParameters {
   sensibleEfficiency?: number;        // 顕熱交換効率 [%]
   latentEfficiency?: number;          // 潜熱交換効率 [%]
   exhaustPointId?: string;            // 排気側の状態点
+  supplyAirflowIn?: number;           // 供給側（外気）入口風量 [m³/h]
+  supplyAirflowOut?: number;          // 供給側（外気）出口風量 [m³/h]
+  exhaustAirflowIn?: number;          // 排気側入口風量 [m³/h]
+  exhaustAirflowOut?: number;         // 排気側出口風量 [m³/h]
   
   // ファン
   fanPower?: number;          // ファン動力 [kW]

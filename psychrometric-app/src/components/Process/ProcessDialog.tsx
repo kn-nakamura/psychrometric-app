@@ -85,6 +85,29 @@ export const ProcessDialog = ({
     });
   }, [type, fromPointId, statePoints]);
 
+  useEffect(() => {
+    if (type !== 'heatExchange') return;
+    setParameters((prev) => {
+      const baseAirflow = prev.airflow ?? 1000;
+      const supplyAirflowIn = prev.supplyAirflowIn ?? baseAirflow;
+      const supplyAirflowOut = prev.supplyAirflowOut ?? supplyAirflowIn;
+      const exhaustAirflowIn = prev.exhaustAirflowIn ?? baseAirflow;
+      const exhaustAirflowOut = prev.exhaustAirflowOut ?? exhaustAirflowIn;
+      const exhaustPointId =
+        prev.exhaustPointId ??
+        statePoints.find((point) => point.id !== fromPointId)?.id ??
+        '';
+      return {
+        ...prev,
+        supplyAirflowIn,
+        supplyAirflowOut,
+        exhaustAirflowIn,
+        exhaustAirflowOut,
+        exhaustPointId,
+      };
+    });
+  }, [type, fromPointId, statePoints]);
+
   if (!isOpen) return null;
 
   const handleSave = () => {
@@ -92,11 +115,11 @@ export const ProcessDialog = ({
       alert('名前を入力してください');
       return;
     }
-    if (!fromPointId || (!toPointId && type !== 'mixing')) {
+    if (!fromPointId || (!toPointId && type !== 'mixing' && type !== 'heatExchange')) {
       alert('始点と終点を選択してください');
       return;
     }
-    if (type !== 'mixing' && fromPointId === toPointId) {
+    if (type !== 'mixing' && type !== 'heatExchange' && fromPointId === toPointId) {
       alert('始点と終点は異なる状態点を選択してください');
       return;
     }
@@ -114,6 +137,27 @@ export const ProcessDialog = ({
       }
       if (!stream1Airflow || stream1Airflow <= 0 || !stream2Airflow || stream2Airflow <= 0) {
         alert('混合流1・混合流2の風量を正しく入力してください');
+        return;
+      }
+    }
+    if (type === 'heatExchange') {
+      const exhaustPointId = parameters.exhaustPointId;
+      if (!exhaustPointId) {
+        alert('排気側の状態点を選択してください');
+        return;
+      }
+      if (exhaustPointId === fromPointId) {
+        alert('排気側は外気側と異なる状態点を選択してください');
+        return;
+      }
+      const airflowValues = [
+        parameters.supplyAirflowIn,
+        parameters.supplyAirflowOut,
+        parameters.exhaustAirflowIn,
+        parameters.exhaustAirflowOut,
+      ];
+      if (airflowValues.some((value) => !value || value <= 0)) {
+        alert('全熱交換器の風量を正しく入力してください');
         return;
       }
     }
@@ -296,9 +340,11 @@ export const ProcessDialog = ({
           </div>
 
           {/* 終点 */}
-          {type === 'mixing' ? (
+          {type === 'mixing' || type === 'heatExchange' ? (
             <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-              混合点は保存時に自動で追加されます。
+              {type === 'mixing'
+                ? '混合点は保存時に自動で追加されます。'
+                : '全熱交換器出口は保存時に自動で追加されます。'}
             </div>
           ) : (
             <div>
@@ -325,7 +371,7 @@ export const ProcessDialog = ({
             <h4 className="text-sm font-medium text-gray-700 mb-3">パラメータ</h4>
 
             {/* 風量（共通） */}
-            {type !== 'mixing' && (
+            {type !== 'mixing' && type !== 'heatExchange' && (
               <div className="mb-3">
                 <label className="block text-sm text-gray-600 mb-1">
                   風量 [m³/h]
@@ -402,18 +448,81 @@ export const ProcessDialog = ({
             )}
 
             {type === 'heatExchange' && (
-              <div className="mb-3">
-                <label className="block text-sm text-gray-600 mb-1">
-                  全熱交換効率 [%]
-                </label>
-                <input
-                  type="number"
-                  value={parameters.heatExchangeEfficiency || ''}
-                  onChange={(e) => handleParameterChange('heatExchangeEfficiency', parseFloat(e.target.value))}
-                  placeholder="例: 65"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
+              <>
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-600 mb-1">
+                    全熱交換効率 [%]（終点側基準）
+                  </label>
+                  <input
+                    type="number"
+                    value={parameters.heatExchangeEfficiency || ''}
+                    onChange={(e) => handleParameterChange('heatExchangeEfficiency', parseFloat(e.target.value))}
+                    placeholder="例: 65"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-600 mb-1">
+                    排気側の状態点（室内側）
+                  </label>
+                  <select
+                    value={parameters.exhaustPointId || ''}
+                    onChange={(e) => handleParameterChange('exhaustPointId', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">選択してください</option>
+                    {filteredPoints.map((point) => (
+                      <option key={point.id} value={point.id}>
+                        {point.name} ({point.dryBulbTemp?.toFixed(1)}°C, RH{point.relativeHumidity?.toFixed(0)}%)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-600 mb-1">
+                    外気側入口風量 [m³/h]
+                  </label>
+                  <input
+                    type="number"
+                    value={parameters.supplyAirflowIn ?? ''}
+                    onChange={(e) => handleParameterChange('supplyAirflowIn', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-600 mb-1">
+                    外気側出口風量 [m³/h]
+                  </label>
+                  <input
+                    type="number"
+                    value={parameters.supplyAirflowOut ?? ''}
+                    onChange={(e) => handleParameterChange('supplyAirflowOut', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-600 mb-1">
+                    排気側入口風量 [m³/h]
+                  </label>
+                  <input
+                    type="number"
+                    value={parameters.exhaustAirflowIn ?? ''}
+                    onChange={(e) => handleParameterChange('exhaustAirflowIn', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-600 mb-1">
+                    排気側出口風量 [m³/h]
+                  </label>
+                  <input
+                    type="number"
+                    value={parameters.exhaustAirflowOut ?? ''}
+                    onChange={(e) => handleParameterChange('exhaustAirflowOut', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </>
             )}
 
             {type === 'mixing' && (
@@ -456,38 +565,6 @@ export const ProcessDialog = ({
                     onChange={(e) => handleMixingAirflowChange('stream2', Number(e.target.value))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
-                </div>
-                <div className="mb-3">
-                  <label className="block text-sm text-gray-600 mb-1">
-                    全熱交換効率 [%]（外気側の前処理）
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={parameters.heatExchangeEfficiency || ''}
-                    onChange={(e) => handleParameterChange('heatExchangeEfficiency', parseFloat(e.target.value))}
-                    placeholder="例: 65"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div className="mb-3">
-                  <label className="block text-sm text-gray-600 mb-1">
-                    排気側の状態点（全熱交換器）
-                  </label>
-                  <select
-                    value={parameters.exhaustPointId || ''}
-                    onChange={(e) => handleParameterChange('exhaustPointId', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">選択してください</option>
-                    {filteredPoints.map((point) => (
-                      <option key={point.id} value={point.id}>
-                        {point.name} ({point.dryBulbTemp?.toFixed(1)}°C, RH{point.relativeHumidity?.toFixed(0)}%)
-                      </option>
-                    ))}
-                  </select>
                 </div>
               </>
             )}

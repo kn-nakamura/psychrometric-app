@@ -10,6 +10,7 @@ import { ProjectManager } from './components/Project/ProjectManager';
 import { StatePointConverter } from './lib/psychrometric/conversions';
 import { STANDARD_PRESSURE } from './lib/psychrometric/constants';
 import { MixingProcess } from './lib/processes/mixing';
+import { HeatExchangeProcess } from './lib/processes/heatExchange';
 import { Process } from './types/process';
 import { DesignConditions } from './types/designConditions';
 import { StatePoint, StatePointValueKey } from './types/psychrometric';
@@ -364,26 +365,15 @@ function App() {
       const fallbackAirflow2 = Math.max(0, defaultTotalAirflow - fallbackAirflow1);
       const airflow1 = processData.parameters.mixingRatios?.stream1.airflow ?? fallbackAirflow1;
       const airflow2 = processData.parameters.mixingRatios?.stream2.airflow ?? fallbackAirflow2;
-      const exhaustPoint = processData.parameters.exhaustPointId
-        ? statePoints.find((point) => point.id === processData.parameters.exhaustPointId)
-        : undefined;
-
       if (stream1 && stream2) {
         const pressure = designConditions.outdoor.pressure ?? STANDARD_PRESSURE;
-        const efficiency = processData.parameters.heatExchangeEfficiency ?? 0;
-        const mixedPoint =
-          efficiency > 0 && exhaustPoint
-            ? MixingProcess.mixWithHeatExchange(
-                stream1,
-                stream2,
-                airflow1,
-                airflow2,
-                efficiency,
-                exhaustPoint,
-                pressure
-              ).mixedPoint
-            : MixingProcess.mixTwoStreams(stream1, airflow1, stream2, airflow2, pressure)
-                .mixedPoint;
+        const mixedPoint = MixingProcess.mixTwoStreams(
+          stream1,
+          airflow1,
+          stream2,
+          airflow2,
+          pressure
+        ).mixedPoint;
         const newPointId = `point-${Date.now()}`;
         addStatePoint({
           id: newPointId,
@@ -398,6 +388,47 @@ function App() {
         };
       }
     }
+    if (processData.type === 'heatExchange') {
+      const outdoorPoint = statePoints.find((point) => point.id === processData.fromPointId);
+      const exhaustPoint = processData.parameters.exhaustPointId
+        ? statePoints.find((point) => point.id === processData.parameters.exhaustPointId)
+        : undefined;
+      const pressure = designConditions.outdoor.pressure ?? STANDARD_PRESSURE;
+      const efficiency = processData.parameters.heatExchangeEfficiency ?? 0;
+      const supplyAirflowIn = processData.parameters.supplyAirflowIn ?? processData.parameters.airflow ?? 1000;
+      const supplyAirflowOut = processData.parameters.supplyAirflowOut ?? supplyAirflowIn;
+      const exhaustAirflowIn = processData.parameters.exhaustAirflowIn ?? processData.parameters.airflow ?? 1000;
+      const exhaustAirflowOut = processData.parameters.exhaustAirflowOut ?? exhaustAirflowIn;
+
+      if (outdoorPoint && exhaustPoint) {
+        const { supplyAir } = HeatExchangeProcess.calculateTotalHeat(
+          outdoorPoint,
+          exhaustPoint,
+          supplyAirflowIn,
+          supplyAirflowOut,
+          exhaustAirflowIn,
+          exhaustAirflowOut,
+          efficiency,
+          pressure
+        );
+        const newPointId = `point-${Date.now()}`;
+        addStatePoint({
+          id: newPointId,
+          name: `${processData.name} 全熱交換器出口`,
+          season: processData.season,
+          order: statePoints.length,
+          ...supplyAir,
+        });
+        resolvedProcessData = {
+          ...processData,
+          toPointId: newPointId,
+          parameters: {
+            ...processData.parameters,
+            airflow: supplyAirflowOut,
+          },
+        };
+      }
+    }
 
     if (editingProcess) {
       updateProcess(editingProcess.id, resolvedProcessData);
@@ -408,7 +439,7 @@ function App() {
         ...resolvedProcessData,
       } as Process);
     }
-    if (processData.type === 'mixing') {
+    if (processData.type === 'mixing' || processData.type === 'heatExchange') {
       setSelectedPoint(resolvedProcessData.toPointId);
     }
 
