@@ -76,9 +76,13 @@ const initialDesignConditions: DesignConditions = {
   },
   airflow: {
     supplyAir: 1000,
+    supplyAirName: '給気量',
     outdoorAir: 300,
+    outdoorAirName: '外気量',
     returnAir: 700,
+    returnAirName: '還気量',
     exhaustAir: 300,
+    exhaustAirName: '排気量',
   },
   equipment: {},
 };

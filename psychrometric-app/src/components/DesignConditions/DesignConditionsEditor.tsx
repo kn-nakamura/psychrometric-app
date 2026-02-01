@@ -62,7 +62,7 @@ export const DesignConditionsEditor = ({
     }));
   };
 
-  const updateAirflow = (field: string, value: number) => {
+  const updateAirflow = (field: string, value: number | string) => {
     setConditions((prev) => ({
       ...prev,
       airflow: { ...prev.airflow, [field]: value },
@@ -350,49 +350,101 @@ export const DesignConditionsEditor = ({
           {activeTab === 'airflow' && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    給気量 [m³/h]
-                  </label>
-                  <input
-                    type="number"
-                    value={conditions.airflow.supplyAir}
-                    onChange={(e) => updateAirflow('supplyAir', parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      給気量パラメーター名
+                    </label>
+                    <input
+                      type="text"
+                      value={conditions.airflow.supplyAirName}
+                      onChange={(e) => updateAirflow('supplyAirName', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      給気量 [m³/h]
+                    </label>
+                    <input
+                      type="number"
+                      value={conditions.airflow.supplyAir}
+                      onChange={(e) => updateAirflow('supplyAir', parseFloat(e.target.value))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    外気量 [m³/h]
-                  </label>
-                  <input
-                    type="number"
-                    value={conditions.airflow.outdoorAir}
-                    onChange={(e) => updateAirflow('outdoorAir', parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      外気量パラメーター名
+                    </label>
+                    <input
+                      type="text"
+                      value={conditions.airflow.outdoorAirName}
+                      onChange={(e) => updateAirflow('outdoorAirName', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      外気量 [m³/h]
+                    </label>
+                    <input
+                      type="number"
+                      value={conditions.airflow.outdoorAir}
+                      onChange={(e) => updateAirflow('outdoorAir', parseFloat(e.target.value))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    還気量 [m³/h]
-                  </label>
-                  <input
-                    type="number"
-                    value={conditions.airflow.returnAir}
-                    onChange={(e) => updateAirflow('returnAir', parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      還気量パラメーター名
+                    </label>
+                    <input
+                      type="text"
+                      value={conditions.airflow.returnAirName}
+                      onChange={(e) => updateAirflow('returnAirName', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      還気量 [m³/h]
+                    </label>
+                    <input
+                      type="number"
+                      value={conditions.airflow.returnAir}
+                      onChange={(e) => updateAirflow('returnAir', parseFloat(e.target.value))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    排気量 [m³/h]
-                  </label>
-                  <input
-                    type="number"
-                    value={conditions.airflow.exhaustAir}
-                    onChange={(e) => updateAirflow('exhaustAir', parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      排気量パラメーター名
+                    </label>
+                    <input
+                      type="text"
+                      value={conditions.airflow.exhaustAirName}
+                      onChange={(e) => updateAirflow('exhaustAirName', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      排気量 [m³/h]
+                    </label>
+                    <input
+                      type="number"
+                      value={conditions.airflow.exhaustAir}
+                      onChange={(e) => updateAirflow('exhaustAir', parseFloat(e.target.value))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -434,7 +486,8 @@ export const DesignConditionsEditor = ({
                             heatExchanger: {
                               ...prev.equipment.heatExchanger,
                               type: e.target.value,
-                              efficiency: prev.equipment.heatExchanger?.efficiency || 65,
+                              efficiencySummer: prev.equipment.heatExchanger?.efficiencySummer ?? 65,
+                              efficiencyWinter: prev.equipment.heatExchanger?.efficiencyWinter ?? 65,
                             },
                           },
                         }))
@@ -444,10 +497,10 @@ export const DesignConditionsEditor = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-600 mb-1">全熱交換効率 [%]</label>
+                    <label className="block text-sm text-gray-600 mb-1">夏季 全熱交換効率 [%]</label>
                     <input
                       type="number"
-                      value={conditions.equipment.heatExchanger?.efficiency || ''}
+                      value={conditions.equipment.heatExchanger?.efficiencySummer ?? ''}
                       onChange={(e) =>
                         setConditions((prev) => ({
                           ...prev,
@@ -456,7 +509,29 @@ export const DesignConditionsEditor = ({
                             heatExchanger: {
                               ...prev.equipment.heatExchanger,
                               type: prev.equipment.heatExchanger?.type || '',
-                              efficiency: parseFloat(e.target.value),
+                              efficiencySummer: parseFloat(e.target.value),
+                            },
+                          },
+                        }))
+                      }
+                      placeholder="65"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">冬季 全熱交換効率 [%]</label>
+                    <input
+                      type="number"
+                      value={conditions.equipment.heatExchanger?.efficiencyWinter ?? ''}
+                      onChange={(e) =>
+                        setConditions((prev) => ({
+                          ...prev,
+                          equipment: {
+                            ...prev.equipment,
+                            heatExchanger: {
+                              ...prev.equipment.heatExchanger,
+                              type: prev.equipment.heatExchanger?.type || '',
+                              efficiencyWinter: parseFloat(e.target.value),
                             },
                           },
                         }))

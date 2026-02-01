@@ -25,10 +25,26 @@ export const EquipmentSummary = () => {
               <span className="text-gray-600">型式:</span>
               <span className="font-medium">{equipment.heatExchanger.type}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">全熱交換効率:</span>
-              <span className="font-medium">{equipment.heatExchanger.efficiency}%</span>
-            </div>
+            {equipment.heatExchanger.efficiencySummer !== undefined && (
+              <div className="flex justify-between">
+                <span className="text-gray-600">全熱交換効率(夏季):</span>
+                <span className="font-medium">{equipment.heatExchanger.efficiencySummer}%</span>
+              </div>
+            )}
+            {equipment.heatExchanger.efficiencyWinter !== undefined && (
+              <div className="flex justify-between">
+                <span className="text-gray-600">全熱交換効率(冬季):</span>
+                <span className="font-medium">{equipment.heatExchanger.efficiencyWinter}%</span>
+              </div>
+            )}
+            {equipment.heatExchanger.efficiency !== undefined &&
+              equipment.heatExchanger.efficiencySummer === undefined &&
+              equipment.heatExchanger.efficiencyWinter === undefined && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">全熱交換効率:</span>
+                  <span className="font-medium">{equipment.heatExchanger.efficiency}%</span>
+                </div>
+              )}
           </div>
         </div>
       )}
