@@ -1,0 +1,177 @@
+import { Trash2, Edit2, GripVertical, ArrowRight } from 'lucide-react';
+import { Process, ProcessType } from '@/types/process';
+import { StatePoint } from '@/types/psychrometric';
+import { CoilCapacityCalculator } from '@/lib/equipment/coilCapacity';
+
+interface ProcessListProps {
+  processes: Process[];
+  statePoints: StatePoint[];
+  activeSeason: 'summer' | 'winter' | 'both';
+  selectedProcessId: string | null;
+  onSelectProcess: (id: string | null) => void;
+  onEditProcess: (process: Process) => void;
+  onDeleteProcess: (id: string) => void;
+  onReorderProcesses: (startIndex: number, endIndex: number) => void;
+}
+
+const processTypeLabels: Record<ProcessType, string> = {
+  heating: '加熱',
+  cooling: '冷却',
+  humidifying: '加湿',
+  dehumidifying: '除湿',
+  mixing: '混合',
+  heatExchange: '全熱交換',
+  fanHeating: 'ファン発熱',
+};
+
+const processTypeColors: Record<ProcessType, string> = {
+  heating: 'bg-red-100 text-red-700',
+  cooling: 'bg-blue-100 text-blue-700',
+  humidifying: 'bg-cyan-100 text-cyan-700',
+  dehumidifying: 'bg-yellow-100 text-yellow-700',
+  mixing: 'bg-purple-100 text-purple-700',
+  heatExchange: 'bg-green-100 text-green-700',
+  fanHeating: 'bg-orange-100 text-orange-700',
+};
+
+export const ProcessList = ({
+  processes,
+  statePoints,
+  activeSeason,
+  selectedProcessId,
+  onSelectProcess,
+  onEditProcess,
+  onDeleteProcess,
+}: ProcessListProps) => {
+  // 季節フィルター
+  const filteredProcesses = processes.filter((process) => {
+    if (activeSeason === 'both') return true;
+    return process.season === activeSeason || process.season === 'both';
+  });
+
+  // 順番でソート
+  const sortedProcesses = [...filteredProcesses].sort((a, b) => a.order - b.order);
+
+  // 能力を計算
+  const calculateCapacity = (process: Process) => {
+    const fromPoint = statePoints.find((p) => p.id === process.fromPointId);
+    const toPoint = statePoints.find((p) => p.id === process.toPointId);
+
+    if (!fromPoint || !toPoint) return null;
+    if (!fromPoint.enthalpy || !toPoint.enthalpy) return null;
+
+    const airflow = process.parameters.airflow || 1000;
+
+    try {
+      const result = CoilCapacityCalculator.calculate(
+        fromPoint as StatePoint,
+        toPoint as StatePoint,
+        airflow
+      );
+      return result;
+    } catch {
+      return null;
+    }
+  };
+
+  if (sortedProcesses.length === 0) {
+    return (
+      <div className="text-center py-6 text-gray-500 text-sm">
+        プロセスがありません。
+        <br />
+        状態点を2つ以上追加してからプロセスを追加してください。
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {sortedProcesses.map((process) => {
+        const fromPoint = statePoints.find((p) => p.id === process.fromPointId);
+        const toPoint = statePoints.find((p) => p.id === process.toPointId);
+        const capacity = calculateCapacity(process);
+
+        return (
+          <div
+            key={process.id}
+            onClick={() => onSelectProcess(process.id)}
+            className={`p-3 rounded-lg border cursor-pointer transition-all ${
+              selectedProcessId === process.id
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-200 hover:border-gray-300 bg-white'
+            }`}
+          >
+            <div className="flex items-start gap-2">
+              <GripVertical className="w-4 h-4 text-gray-400 mt-1 flex-shrink-0" />
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-gray-900">{process.name}</span>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded ${processTypeColors[process.type]}`}
+                  >
+                    {processTypeLabels[process.type]}
+                  </span>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded ${
+                      process.season === 'summer'
+                        ? 'bg-orange-100 text-orange-700'
+                        : process.season === 'winter'
+                        ? 'bg-indigo-100 text-indigo-700'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}
+                  >
+                    {process.season === 'summer' ? '夏' : process.season === 'winter' ? '冬' : '通年'}
+                  </span>
+                </div>
+
+                {/* 状態点表示 */}
+                <div className="mt-1 flex items-center text-sm text-gray-600">
+                  <span className="truncate">{fromPoint?.name || '不明'}</span>
+                  <ArrowRight className="w-4 h-4 mx-1 flex-shrink-0" />
+                  <span className="truncate">{toPoint?.name || '不明'}</span>
+                </div>
+
+                {/* 能力表示 */}
+                {capacity && (
+                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                    <div>全熱: {Math.abs(capacity.totalCapacity).toFixed(2)} kW</div>
+                    <div>顕熱: {Math.abs(capacity.sensibleCapacity).toFixed(2)} kW</div>
+                    <div>潜熱: {Math.abs(capacity.latentCapacity).toFixed(2)} kW</div>
+                    <div>SHF: {capacity.SHF.toFixed(2)}</div>
+                    <div>温度差: {capacity.temperatureDiff.toFixed(1)}°C</div>
+                    <div>湿度差: {(capacity.humidityDiff * 1000).toFixed(2)} g/kg'</div>
+                  </div>
+                )}
+              </div>
+
+              {/* アクションボタン */}
+              <div className="flex gap-1 flex-shrink-0">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditProcess(process);
+                  }}
+                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm(`プロセス「${process.name}」を削除しますか？`)) {
+                      onDeleteProcess(process.id);
+                    }
+                  }}
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};

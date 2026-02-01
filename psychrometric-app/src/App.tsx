@@ -1,7 +1,15 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { Plus, Settings, Download, FolderOpen, Edit2, Trash2 } from 'lucide-react';
 import { useProjectStore } from './store/projectStore';
-import { PsychrometricChart } from './components/Chart/PsychrometricChart';
+import { PsychrometricChart, PsychrometricChartRef } from './components/Chart/PsychrometricChart';
+import { ProcessDialog } from './components/Process/ProcessDialog';
+import { ProcessList } from './components/Process/ProcessList';
+import { DesignConditionsEditor } from './components/DesignConditions/DesignConditionsEditor';
+import { ExportDialog } from './components/Export/ExportDialog';
+import { ProjectManager } from './components/Project/ProjectManager';
 import { StatePointConverter } from './lib/psychrometric/conversions';
+import { Process } from './types/process';
+import { DesignConditions } from './types/designConditions';
 
 function App() {
   const {
@@ -9,262 +17,584 @@ function App() {
     processes,
     activeSeason,
     selectedPointId,
+    selectedProcessId,
     designConditions,
     addStatePoint,
     updateStatePoint,
+    deleteStatePoint,
+    addProcess,
+    updateProcess,
+    deleteProcess,
     setSelectedPoint,
+    setSelectedProcess,
     setActiveSeason,
+    setDesignConditions,
+    loadProject,
   } = useProjectStore();
-  
+
+  // Chart ref for export
+  const chartRef = useRef<PsychrometricChartRef>(null);
+
+  // Dialog states
   const [showAddPoint, setShowAddPoint] = useState(false);
+  const [showProcessDialog, setShowProcessDialog] = useState(false);
+  const [showDesignEditor, setShowDesignEditor] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showProjectManager, setShowProjectManager] = useState(false);
+
+  // Process editing state
+  const [editingProcess, setEditingProcess] = useState<Process | null>(null);
+
+  // New point form state
   const [newPointTemp, setNewPointTemp] = useState('25');
   const [newPointRH, setNewPointRH] = useState('60');
   const [newPointName, setNewPointName] = useState('');
-  
+  const [newPointSeason, setNewPointSeason] = useState<'summer' | 'winter' | 'both'>(activeSeason);
+
+  // Active tab for sidebar
+  const [activeTab, setActiveTab] = useState<'points' | 'processes'>('points');
+
   // 状態点の追加
   const handleAddPoint = () => {
     const temp = parseFloat(newPointTemp);
     const rh = parseFloat(newPointRH);
-    
+
     if (isNaN(temp) || isNaN(rh)) {
       alert('温度と相対湿度を正しく入力してください');
       return;
     }
-    
+
     const stateData = StatePointConverter.fromDryBulbAndRH(temp, rh);
-    
+
     const newPoint = {
       id: `point-${Date.now()}`,
       name: newPointName || `Point ${statePoints.length + 1}`,
-      season: activeSeason as 'summer' | 'winter' | 'both',
+      season: newPointSeason,
       order: statePoints.length,
       ...stateData,
     };
-    
+
     addStatePoint(newPoint);
     setShowAddPoint(false);
     setNewPointName('');
   };
-  
+
   // 状態点の移動（ドラッグ）
   const handlePointMove = (pointId: string, temp: number, humidity: number) => {
     const stateData = StatePointConverter.fromDryBulbAndHumidity(temp, humidity);
     updateStatePoint(pointId, stateData);
   };
-  
-  // プリセット：夏季外気条件を追加
-  const addSummerOutdoor = () => {
-    const { outdoor } = designConditions;
-    const stateData = StatePointConverter.fromDryBulbAndRH(
-      outdoor.summer.dryBulbTemp,
-      outdoor.summer.relativeHumidity
-    );
-    
+
+  // プリセット条件の追加
+  const addPresetPoint = (
+    name: string,
+    season: 'summer' | 'winter',
+    temp: number,
+    rh: number
+  ) => {
+    const stateData = StatePointConverter.fromDryBulbAndRH(temp, rh);
     addStatePoint({
       id: `point-${Date.now()}`,
-      name: '外気(夏)',
-      season: 'summer',
+      name,
+      season,
       order: statePoints.length,
       ...stateData,
     });
   };
-  
-  // プリセット：夏季室内条件を追加
-  const addSummerIndoor = () => {
-    const { indoor } = designConditions;
-    const stateData = StatePointConverter.fromDryBulbAndRH(
-      indoor.summer.dryBulbTemp,
-      indoor.summer.relativeHumidity
-    );
-    
-    addStatePoint({
-      id: `point-${Date.now()}`,
-      name: '室内(夏)',
-      season: 'summer',
-      order: statePoints.length,
-      ...stateData,
-    });
+
+  // プロセスの保存
+  const handleSaveProcess = (processData: Omit<Process, 'id' | 'order'>) => {
+    if (editingProcess) {
+      updateProcess(editingProcess.id, processData);
+    } else {
+      addProcess({
+        id: `process-${Date.now()}`,
+        order: processes.length,
+        ...processData,
+      } as Process);
+    }
+    setEditingProcess(null);
   };
-  
+
+  // プロセスの編集開始
+  const handleEditProcess = (process: Process) => {
+    setEditingProcess(process);
+    setShowProcessDialog(true);
+  };
+
+  // 設計条件の保存
+  const handleSaveDesignConditions = (conditions: DesignConditions) => {
+    setDesignConditions(conditions);
+  };
+
+  // プロジェクトの読み込み
+  const handleLoadProject = (data: {
+    designConditions: DesignConditions;
+    statePoints: typeof statePoints;
+    processes: typeof processes;
+  }) => {
+    loadProject(data);
+  };
+
+  // Canvas refを取得
+  const getCanvasRef = () => {
+    return { current: chartRef.current?.getCanvas() || null };
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-7xl mx-auto">
-        {/* ヘッダー */}
-        <div className="bg-white rounded-lg shadow p-6 mb-4">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            空気線図アプリケーション
-          </h1>
-          <p className="text-gray-600">
-            {designConditions.project.name} - {designConditions.project.location}
-          </p>
+    <div className="min-h-screen bg-gray-50">
+      {/* ヘッダー */}
+      <header className="bg-white border-b border-gray-200 px-4 py-3">
+        <div className="max-w-full mx-auto flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">
+              空気線図アプリケーション
+            </h1>
+            <p className="text-sm text-gray-600">
+              {designConditions.project.name} - {designConditions.project.location}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowDesignEditor(true)}
+              className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">設計条件</span>
+            </button>
+            <button
+              onClick={() => setShowProjectManager(true)}
+              className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <FolderOpen className="w-4 h-4" />
+              <span className="hidden sm:inline">プロジェクト</span>
+            </button>
+            <button
+              onClick={() => setShowExportDialog(true)}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">エクスポート</span>
+            </button>
+          </div>
         </div>
-        
-        <div className="grid grid-cols-12 gap-4">
-          {/* 左パネル */}
-          <div className="col-span-3 space-y-4">
-            {/* 季節切替 */}
-            <div className="bg-white rounded-lg shadow p-4">
-              <h2 className="font-bold mb-3">表示モード</h2>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setActiveSeason('summer')}
-                  className={`flex-1 py-2 px-3 rounded ${
-                    activeSeason === 'summer'
-                      ? 'bg-red-500 text-white'
-                      : 'bg-gray-200'
-                  }`}
-                >
-                  夏季
-                </button>
-                <button
-                  onClick={() => setActiveSeason('winter')}
-                  className={`flex-1 py-2 px-3 rounded ${
-                    activeSeason === 'winter'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-200'
-                  }`}
-                >
-                  冬季
-                </button>
-                <button
-                  onClick={() => setActiveSeason('both')}
-                  className={`flex-1 py-2 px-3 rounded ${
-                    activeSeason === 'both'
-                      ? 'bg-purple-500 text-white'
-                      : 'bg-gray-200'
-                  }`}
-                >
-                  両方
-                </button>
-              </div>
+      </header>
+
+      <div className="flex">
+        {/* 左サイドバー */}
+        <aside className="w-80 bg-white border-r border-gray-200 h-[calc(100vh-60px)] overflow-y-auto">
+          {/* 季節切替 */}
+          <div className="p-4 border-b border-gray-200">
+            <h2 className="font-semibold text-sm text-gray-700 mb-2">表示モード</h2>
+            <div className="flex gap-1">
+              <button
+                onClick={() => setActiveSeason('summer')}
+                className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
+                  activeSeason === 'summer'
+                    ? 'bg-red-500 text-white'
+                    : 'bg-gray-100 hover:bg-gray-200'
+                }`}
+              >
+                夏季
+              </button>
+              <button
+                onClick={() => setActiveSeason('winter')}
+                className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
+                  activeSeason === 'winter'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100 hover:bg-gray-200'
+                }`}
+              >
+                冬季
+              </button>
+              <button
+                onClick={() => setActiveSeason('both')}
+                className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
+                  activeSeason === 'both'
+                    ? 'bg-purple-500 text-white'
+                    : 'bg-gray-100 hover:bg-gray-200'
+                }`}
+              >
+                両方
+              </button>
             </div>
-            
-            {/* 状態点追加 */}
-            <div className="bg-white rounded-lg shadow p-4">
-              <h2 className="font-bold mb-3">状態点の追加</h2>
-              
+          </div>
+
+          {/* タブ切替 */}
+          <div className="flex border-b border-gray-200">
+            <button
+              onClick={() => setActiveTab('points')}
+              className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                activeTab === 'points'
+                  ? 'border-b-2 border-blue-500 text-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              状態点
+            </button>
+            <button
+              onClick={() => setActiveTab('processes')}
+              className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                activeTab === 'processes'
+                  ? 'border-b-2 border-blue-500 text-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              プロセス
+            </button>
+          </div>
+
+          {/* 状態点タブ */}
+          {activeTab === 'points' && (
+            <div className="p-4">
               {/* プリセットボタン */}
               <div className="space-y-2 mb-4">
-                <button
-                  onClick={addSummerOutdoor}
-                  className="w-full py-2 px-3 bg-orange-100 hover:bg-orange-200 rounded text-sm"
-                >
-                  夏季外気条件
-                </button>
-                <button
-                  onClick={addSummerIndoor}
-                  className="w-full py-2 px-3 bg-green-100 hover:bg-green-200 rounded text-sm"
-                >
-                  夏季室内条件
-                </button>
+                <h3 className="text-sm font-medium text-gray-700">プリセット追加</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() =>
+                      addPresetPoint(
+                        '外気(夏)',
+                        'summer',
+                        designConditions.outdoor.summer.dryBulbTemp,
+                        designConditions.outdoor.summer.relativeHumidity
+                      )
+                    }
+                    className="py-2 px-3 bg-orange-100 hover:bg-orange-200 rounded text-sm text-orange-800"
+                  >
+                    夏季外気
+                  </button>
+                  <button
+                    onClick={() =>
+                      addPresetPoint(
+                        '室内(夏)',
+                        'summer',
+                        designConditions.indoor.summer.dryBulbTemp,
+                        designConditions.indoor.summer.relativeHumidity
+                      )
+                    }
+                    className="py-2 px-3 bg-green-100 hover:bg-green-200 rounded text-sm text-green-800"
+                  >
+                    夏季室内
+                  </button>
+                  <button
+                    onClick={() =>
+                      addPresetPoint(
+                        '外気(冬)',
+                        'winter',
+                        designConditions.outdoor.winter.dryBulbTemp,
+                        designConditions.outdoor.winter.relativeHumidity
+                      )
+                    }
+                    className="py-2 px-3 bg-indigo-100 hover:bg-indigo-200 rounded text-sm text-indigo-800"
+                  >
+                    冬季外気
+                  </button>
+                  <button
+                    onClick={() =>
+                      addPresetPoint(
+                        '室内(冬)',
+                        'winter',
+                        designConditions.indoor.winter.dryBulbTemp,
+                        designConditions.indoor.winter.relativeHumidity
+                      )
+                    }
+                    className="py-2 px-3 bg-teal-100 hover:bg-teal-200 rounded text-sm text-teal-800"
+                  >
+                    冬季室内
+                  </button>
+                </div>
               </div>
-              
+
+              {/* カスタム追加ボタン */}
               <button
                 onClick={() => setShowAddPoint(!showAddPoint)}
-                className="w-full py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600"
+                className="w-full py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center justify-center gap-2"
               >
+                <Plus className="w-4 h-4" />
                 カスタム追加
               </button>
-              
+
+              {/* カスタム追加フォーム */}
               {showAddPoint && (
-                <div className="mt-3 space-y-2">
+                <div className="mt-3 p-3 bg-gray-50 rounded-lg space-y-3">
                   <input
                     type="text"
                     placeholder="名前"
                     value={newPointName}
                     onChange={(e) => setNewPointName(e.target.value)}
-                    className="w-full px-3 py-2 border rounded"
+                    className="w-full px-3 py-2 border rounded text-sm"
                   />
-                  <input
-                    type="number"
-                    placeholder="温度 (°C)"
-                    value={newPointTemp}
-                    onChange={(e) => setNewPointTemp(e.target.value)}
-                    className="w-full px-3 py-2 border rounded"
-                  />
-                  <input
-                    type="number"
-                    placeholder="相対湿度 (%)"
-                    value={newPointRH}
-                    onChange={(e) => setNewPointRH(e.target.value)}
-                    className="w-full px-3 py-2 border rounded"
-                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      placeholder="温度 (°C)"
+                      value={newPointTemp}
+                      onChange={(e) => setNewPointTemp(e.target.value)}
+                      className="px-3 py-2 border rounded text-sm"
+                    />
+                    <input
+                      type="number"
+                      placeholder="RH (%)"
+                      value={newPointRH}
+                      onChange={(e) => setNewPointRH(e.target.value)}
+                      className="px-3 py-2 border rounded text-sm"
+                    />
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setNewPointSeason('summer')}
+                      className={`flex-1 py-1.5 text-xs rounded ${
+                        newPointSeason === 'summer'
+                          ? 'bg-red-500 text-white'
+                          : 'bg-gray-200'
+                      }`}
+                    >
+                      夏
+                    </button>
+                    <button
+                      onClick={() => setNewPointSeason('winter')}
+                      className={`flex-1 py-1.5 text-xs rounded ${
+                        newPointSeason === 'winter'
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-200'
+                      }`}
+                    >
+                      冬
+                    </button>
+                    <button
+                      onClick={() => setNewPointSeason('both')}
+                      className={`flex-1 py-1.5 text-xs rounded ${
+                        newPointSeason === 'both'
+                          ? 'bg-purple-500 text-white'
+                          : 'bg-gray-200'
+                      }`}
+                    >
+                      通年
+                    </button>
+                  </div>
                   <button
                     onClick={handleAddPoint}
-                    className="w-full py-2 px-4 bg-green-500 text-white rounded hover:bg-green-600"
+                    className="w-full py-2 px-4 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
                   >
                     追加
                   </button>
                 </div>
               )}
-            </div>
-            
-            {/* 状態点リスト */}
-            <div className="bg-white rounded-lg shadow p-4">
-              <h2 className="font-bold mb-3">状態点一覧</h2>
-              <div className="space-y-2">
+
+              {/* 状態点リスト */}
+              <div className="mt-4 space-y-2">
+                <h3 className="text-sm font-medium text-gray-700">
+                  状態点一覧 ({statePoints.length}個)
+                </h3>
                 {statePoints.length === 0 ? (
-                  <p className="text-gray-500 text-sm">状態点がありません</p>
+                  <p className="text-sm text-gray-500 text-center py-4">
+                    状態点がありません
+                  </p>
                 ) : (
-                  statePoints.map((point) => (
-                    <div
-                      key={point.id}
-                      onClick={() => setSelectedPoint(point.id)}
-                      className={`p-2 rounded cursor-pointer ${
-                        selectedPointId === point.id
-                          ? 'bg-blue-100 border-2 border-blue-500'
-                          : 'bg-gray-50 hover:bg-gray-100'
-                      }`}
-                    >
-                      <div className="font-semibold text-sm">{point.name}</div>
-                      <div className="text-xs text-gray-600">
-                        {point.dryBulbTemp?.toFixed(1)}°C, 
-                        RH {point.relativeHumidity?.toFixed(0)}%
+                  statePoints
+                    .filter((point) => {
+                      if (activeSeason === 'both') return true;
+                      return point.season === activeSeason || point.season === 'both';
+                    })
+                    .map((point) => (
+                      <div
+                        key={point.id}
+                        onClick={() => setSelectedPoint(point.id)}
+                        className={`p-3 rounded-lg cursor-pointer transition-all ${
+                          selectedPointId === point.id
+                            ? 'bg-blue-50 border-2 border-blue-500'
+                            : 'bg-gray-50 hover:bg-gray-100 border border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{point.name}</span>
+                              <span
+                                className={`text-xs px-1.5 py-0.5 rounded ${
+                                  point.season === 'summer'
+                                    ? 'bg-orange-100 text-orange-700'
+                                    : point.season === 'winter'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-purple-100 text-purple-700'
+                                }`}
+                              >
+                                {point.season === 'summer'
+                                  ? '夏'
+                                  : point.season === 'winter'
+                                  ? '冬'
+                                  : '通年'}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-600 mt-1">
+                              {point.dryBulbTemp?.toFixed(1)}°C, RH{' '}
+                              {point.relativeHumidity?.toFixed(0)}%
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              x={point.humidity?.toFixed(4)} kg/kg'
+                            </div>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`「${point.name}」を削除しますか？`)) {
+                                deleteStatePoint(point.id);
+                              }
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-500">
-                        x={point.humidity?.toFixed(4)} kg/kg'
-                      </div>
-                    </div>
-                  ))
+                    ))
                 )}
               </div>
             </div>
-          </div>
-          
-          {/* 中央 - チャート */}
-          <div className="col-span-9">
-            <div className="bg-white rounded-lg shadow p-4">
-              <PsychrometricChart
-                width={1000}
-                height={700}
-                statePoints={statePoints}
-                processes={processes}
-                activeSeason={activeSeason}
-                selectedPointId={selectedPointId}
-                onPointClick={setSelectedPoint}
-                onPointMove={handlePointMove}
-              />
+          )}
+
+          {/* プロセスタブ */}
+          {activeTab === 'processes' && (
+            <div className="p-4">
+              <button
+                onClick={() => {
+                  setEditingProcess(null);
+                  setShowProcessDialog(true);
+                }}
+                disabled={statePoints.length < 2}
+                className="w-full py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Plus className="w-4 h-4" />
+                プロセス追加
+              </button>
+              {statePoints.length < 2 && (
+                <p className="text-xs text-gray-500 text-center mt-2">
+                  プロセスを追加するには状態点が2つ以上必要です
+                </p>
+              )}
+
+              <div className="mt-4">
+                <ProcessList
+                  processes={processes}
+                  statePoints={statePoints}
+                  activeSeason={activeSeason}
+                  selectedProcessId={selectedProcessId}
+                  onSelectProcess={setSelectedProcess}
+                  onEditProcess={handleEditProcess}
+                  onDeleteProcess={deleteProcess}
+                  onReorderProcesses={() => {}}
+                />
+              </div>
             </div>
-            
-            {/* 設計条件表示 */}
-            <div className="bg-white rounded-lg shadow p-4 mt-4">
-              <h2 className="font-bold mb-3">設計条件</h2>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <h3 className="font-semibold mb-2">外気条件</h3>
-                  <p>夏季: {designConditions.outdoor.summer.dryBulbTemp}°C, RH{designConditions.outdoor.summer.relativeHumidity}%</p>
-                  <p>冬季: {designConditions.outdoor.winter.dryBulbTemp}°C, RH{designConditions.outdoor.winter.relativeHumidity}%</p>
+          )}
+        </aside>
+
+        {/* メインコンテンツ */}
+        <main className="flex-1 p-4 overflow-auto">
+          <div className="bg-white rounded-lg shadow p-4">
+            <PsychrometricChart
+              ref={chartRef}
+              width={900}
+              height={600}
+              statePoints={statePoints}
+              processes={processes}
+              activeSeason={activeSeason}
+              selectedPointId={selectedPointId}
+              onPointClick={setSelectedPoint}
+              onPointMove={handlePointMove}
+            />
+          </div>
+
+          {/* 設計条件表示 */}
+          <div className="bg-white rounded-lg shadow p-4 mt-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-gray-900">設計条件</h2>
+              <button
+                onClick={() => setShowDesignEditor(true)}
+                className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+              >
+                <Edit2 className="w-3 h-3" />
+                編集
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <h3 className="font-medium text-gray-700 mb-2">外気条件</h3>
+                <div className="text-gray-600 space-y-1">
+                  <p>
+                    夏季: {designConditions.outdoor.summer.dryBulbTemp}°C, RH
+                    {designConditions.outdoor.summer.relativeHumidity}%
+                  </p>
+                  <p>
+                    冬季: {designConditions.outdoor.winter.dryBulbTemp}°C, RH
+                    {designConditions.outdoor.winter.relativeHumidity}%
+                  </p>
                 </div>
-                <div>
-                  <h3 className="font-semibold mb-2">室内条件</h3>
-                  <p>夏季: {designConditions.indoor.summer.dryBulbTemp}°C, RH{designConditions.indoor.summer.relativeHumidity}%</p>
-                  <p>冬季: {designConditions.indoor.winter.dryBulbTemp}°C, RH{designConditions.indoor.winter.relativeHumidity}%</p>
+              </div>
+              <div>
+                <h3 className="font-medium text-gray-700 mb-2">室内条件</h3>
+                <div className="text-gray-600 space-y-1">
+                  <p>
+                    夏季: {designConditions.indoor.summer.dryBulbTemp}°C, RH
+                    {designConditions.indoor.summer.relativeHumidity}%
+                  </p>
+                  <p>
+                    冬季: {designConditions.indoor.winter.dryBulbTemp}°C, RH
+                    {designConditions.indoor.winter.relativeHumidity}%
+                  </p>
+                </div>
+              </div>
+              <div>
+                <h3 className="font-medium text-gray-700 mb-2">風量</h3>
+                <div className="text-gray-600 space-y-1">
+                  <p>給気: {designConditions.airflow.supplyAir} m³/h</p>
+                  <p>外気: {designConditions.airflow.outdoorAir} m³/h</p>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </main>
       </div>
+
+      {/* ダイアログ */}
+      <ProcessDialog
+        isOpen={showProcessDialog}
+        onClose={() => {
+          setShowProcessDialog(false);
+          setEditingProcess(null);
+        }}
+        onSave={handleSaveProcess}
+        statePoints={statePoints}
+        activeSeason={activeSeason}
+        editingProcess={editingProcess}
+      />
+
+      <DesignConditionsEditor
+        isOpen={showDesignEditor}
+        onClose={() => setShowDesignEditor(false)}
+        designConditions={designConditions}
+        onSave={handleSaveDesignConditions}
+      />
+
+      {showExportDialog && (
+        <ExportDialog
+          onClose={() => setShowExportDialog(false)}
+          canvasRef={getCanvasRef()}
+          designConditions={designConditions}
+          statePoints={statePoints}
+          processes={processes}
+        />
+      )}
+
+      <ProjectManager
+        isOpen={showProjectManager}
+        onClose={() => setShowProjectManager(false)}
+        designConditions={designConditions}
+        statePoints={statePoints}
+        processes={processes}
+        onLoadProject={handleLoadProject}
+      />
     </div>
   );
 }
