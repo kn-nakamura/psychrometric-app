@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, Settings, Download, FolderOpen, Edit2, Trash2, Copy } from 'lucide-react';
+import { Plus, Settings, Download, FolderOpen, Edit2, Trash2, Copy, ChevronUp, ChevronDown } from 'lucide-react';
 import { useProjectStore } from './store/projectStore';
 import { PsychrometricChart, PsychrometricChartRef } from './components/Chart/PsychrometricChart';
 import { ProcessDialog } from './components/Process/ProcessDialog';
@@ -92,6 +92,7 @@ function App() {
     addStatePoint,
     updateStatePoint,
     deleteStatePoint,
+    reorderStatePoints,
     addProcess,
     updateProcess,
     deleteProcess,
@@ -1092,12 +1093,46 @@ function App() {
                     状態点がありません
                   </p>
                 ) : (
-                  statePoints
-                    .filter((point) => {
-                      if (activeSeason === 'both') return true;
-                      return point.season === activeSeason || point.season === 'both';
-                    })
-                    .map((point) => (
+                  (() => {
+                    const filteredPoints = statePoints
+                      .filter((point) => {
+                        if (activeSeason === 'both') return true;
+                        return point.season === activeSeason || point.season === 'both';
+                      })
+                      .sort((a, b) => a.order - b.order);
+
+                    // Generate labels for state points
+                    const getPointLabel = (point: StatePoint, index: number): string => {
+                      let summerCount = 0;
+                      let winterCount = 0;
+                      for (let i = 0; i <= index; i++) {
+                        const p = filteredPoints[i];
+                        if (p.season === 'summer') summerCount++;
+                        else if (p.season === 'winter') winterCount++;
+                      }
+
+                      if (point.season === 'summer') {
+                        return `C${summerCount}`;
+                      } else if (point.season === 'winter') {
+                        return `H${winterCount}`;
+                      } else {
+                        let bothSummerCount = 0;
+                        let bothWinterCount = 0;
+                        for (let i = 0; i <= index; i++) {
+                          const p = filteredPoints[i];
+                          if (p.season === 'summer' || p.season === 'both') bothSummerCount++;
+                          if (p.season === 'winter' || p.season === 'both') bothWinterCount++;
+                        }
+                        if (activeSeason === 'summer') {
+                          return `C${bothSummerCount}`;
+                        } else if (activeSeason === 'winter') {
+                          return `H${bothWinterCount}`;
+                        }
+                        return `C${bothSummerCount}/H${bothWinterCount}`;
+                      }
+                    };
+
+                    return filteredPoints.map((point, index) => (
                       <div
                         key={point.id}
                         onClick={() => setSelectedPoint(point.id)}
@@ -1107,9 +1142,48 @@ function App() {
                             : 'bg-gray-50 hover:bg-gray-100 border border-transparent'
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <div>
+                        <div className="flex items-center gap-2">
+                          {/* 並べ替えボタン */}
+                          <div className="flex flex-col gap-0.5">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const originalIndex = statePoints.findIndex((p) => p.id === point.id);
+                                if (originalIndex > 0) {
+                                  reorderStatePoints(originalIndex, originalIndex - 1);
+                                }
+                              }}
+                              disabled={index === 0}
+                              className="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="上に移動"
+                            >
+                              <ChevronUp className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const originalIndex = statePoints.findIndex((p) => p.id === point.id);
+                                if (originalIndex < statePoints.length - 1) {
+                                  reorderStatePoints(originalIndex, originalIndex + 1);
+                                }
+                              }}
+                              disabled={index === filteredPoints.length - 1}
+                              className="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="下に移動"
+                            >
+                              <ChevronDown className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="flex-1">
                             <div className="flex items-center gap-2">
+                              <span className={`font-bold text-xs px-2 py-0.5 rounded ${
+                                point.season === 'summer'
+                                  ? 'bg-blue-600 text-white'
+                                  : point.season === 'winter'
+                                  ? 'bg-red-600 text-white'
+                                  : 'bg-purple-600 text-white'
+                              }`}>{getPointLabel(point, index)}</span>
                               <span className="font-medium text-sm">{point.name}</span>
                               <span
                                 className={`text-xs px-1.5 py-0.5 rounded ${
@@ -1183,7 +1257,8 @@ function App() {
                           </div>
                         </div>
                       </div>
-                    ))
+                    ));
+                  })()
                 )}
               </div>
             </div>
