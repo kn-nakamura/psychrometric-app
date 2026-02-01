@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
+import { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
 import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
 import { ChartCoordinates, createDefaultChartConfig } from '@/lib/chart/coordinates';
