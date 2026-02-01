@@ -486,7 +486,17 @@ export class StatePointConverter {
     }
 
     if (humidity !== undefined && dewPoint !== undefined) {
-      return this.fromDryBulbAndDewPoint(dewPoint, dewPoint, pressure);
+      const derivedHumidity = PsychrometricCalculator.absoluteHumidity(
+        dewPoint,
+        100,
+        pressure
+      );
+      if (Math.abs(derivedHumidity - humidity) > 0.0005) {
+        throw new Error('露点温度と絶対湿度の組み合わせが一致しません。');
+      }
+      throw new Error(
+        '露点温度と絶対湿度だけでは乾球温度を特定できません。別の組み合わせを選択してください。'
+      );
     }
 
     if (enthalpy !== undefined && dewPoint !== undefined) {

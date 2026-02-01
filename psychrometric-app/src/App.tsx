@@ -13,7 +13,7 @@ import { STANDARD_PRESSURE } from './lib/psychrometric/constants';
 import { MixingProcess } from './lib/processes/mixing';
 import { Process } from './types/process';
 import { DesignConditions } from './types/designConditions';
-import { StatePointValueKey } from './types/psychrometric';
+import { StatePoint, StatePointValueKey } from './types/psychrometric';
 
 const STATE_POINT_INPUT_OPTIONS: Array<{
   key: StatePointValueKey;
@@ -73,6 +73,14 @@ const STATE_POINT_INPUT_OPTIONS: Array<{
 
 const isValidNumericInput = (value: string) => /^-?\d*\.?\d*$/.test(value);
 
+const formatPointValue = (point: StatePoint, key: StatePointValueKey) => {
+  const value = point[key as keyof StatePoint];
+  if (typeof value !== 'number') {
+    return '';
+  }
+  return value.toString();
+};
+
 function App() {
   const {
     statePoints,
@@ -118,6 +126,7 @@ function App() {
   const [newPointName, setNewPointName] = useState('');
   const [newPointSeason, setNewPointSeason] = useState<'summer' | 'winter' | 'both'>(activeSeason);
   const [editingPointId, setEditingPointId] = useState<string | null>(null);
+  const [editingPointSnapshot, setEditingPointSnapshot] = useState<StatePoint | null>(null);
 
   // Active tab for sidebar
   const [activeTab, setActiveTab] = useState<'points' | 'processes'>('points');
@@ -156,16 +165,35 @@ function App() {
       inputTypeAInitialized.current = true;
       return;
     }
+    if (editingPointSnapshot) {
+      setInputValueA(formatPointValue(editingPointSnapshot, inputTypeA));
+      return;
+    }
     setInputValueA('');
-  }, [inputTypeA]);
+  }, [inputTypeA, editingPointSnapshot]);
 
   useEffect(() => {
     if (!inputTypeBInitialized.current) {
       inputTypeBInitialized.current = true;
       return;
     }
+    if (editingPointSnapshot) {
+      setInputValueB(formatPointValue(editingPointSnapshot, inputTypeB));
+      return;
+    }
     setInputValueB('');
-  }, [inputTypeB]);
+  }, [inputTypeB, editingPointSnapshot]);
+
+  const resetPointForm = () => {
+    setNewPointName('');
+    setNewPointSeason(activeSeason);
+    setInputTypeA('dryBulbTemp');
+    setInputTypeB('relativeHumidity');
+    setInputValueA('25');
+    setInputValueB('60');
+    setEditingPointId(null);
+    setEditingPointSnapshot(null);
+  };
 
   // 状態点の追加
   const handleAddPoint = () => {
@@ -202,17 +230,8 @@ function App() {
       (inputTypeA === 'dewPoint' && inputTypeB === 'humidity') ||
       (inputTypeA === 'humidity' && inputTypeB === 'dewPoint')
     ) {
-      const dewPoint = inputTypeA === 'dewPoint' ? valueA : valueB;
-      const humidity = inputTypeA === 'humidity' ? valueA : valueB;
-      const derivedHumidity = PsychrometricCalculator.absoluteHumidity(
-        dewPoint,
-        100,
-        pressure
-      );
-      if (Math.abs(derivedHumidity - humidity) > 0.0005) {
-        alert('露点温度と絶対湿度の組み合わせが一致しません。');
-        return;
-      }
+      alert('露点温度と絶対湿度だけでは状態点を特定できません。別の組み合わせを選択してください。');
+      return;
     }
 
     let stateData: ReturnType<typeof StatePointConverter.fromTwoValues>;
@@ -247,12 +266,7 @@ function App() {
       addStatePoint(newPoint);
     }
     setShowAddPoint(false);
-    setNewPointName('');
-    setInputTypeA('dryBulbTemp');
-    setInputTypeB('relativeHumidity');
-    setInputValueA('25');
-    setInputValueB('60');
-    setEditingPointId(null);
+    resetPointForm();
   };
 
   const handleNumericInput = (
@@ -269,6 +283,7 @@ function App() {
     const point = statePoints.find((item) => item.id === pointId);
     if (!point) return;
     setEditingPointId(pointId);
+    setEditingPointSnapshot(point);
     setShowAddPoint(true);
     setNewPointName(point.name);
     setNewPointSeason(point.season);
@@ -276,6 +291,11 @@ function App() {
     setInputTypeB('relativeHumidity');
     setInputValueA(point.dryBulbTemp?.toString() ?? '');
     setInputValueB(point.relativeHumidity?.toString() ?? '');
+  };
+
+  const cancelEditPoint = () => {
+    setShowAddPoint(false);
+    resetPointForm();
   };
 
   // 状態点の移動（ドラッグ）
@@ -303,15 +323,7 @@ function App() {
 
   // プロセスの保存
   const handleSaveProcess = (processData: Omit<Process, 'id' | 'order'>) => {
-    if (editingProcess) {
-      updateProcess(editingProcess.id, processData);
-    } else {
-      addProcess({
-        id: `process-${Date.now()}`,
-        order: processes.length,
-        ...processData,
-      } as Process);
-    }
+    let resolvedProcessData = processData;
     if (processData.type === 'mixing') {
       const ratio1 =
         processData.parameters.mixingRatios?.stream1.ratio ??
@@ -341,9 +353,32 @@ function App() {
                 pressure
               ).mixedPoint
             : MixingProcess.mixByRatio(stream1, stream2, normalizedRatio1, pressure);
-
-        updateStatePoint(processData.toPointId, mixedPoint);
+        const newPointId = `point-${Date.now()}`;
+        addStatePoint({
+          id: newPointId,
+          name: `${processData.name} 混合点`,
+          season: processData.season,
+          order: statePoints.length,
+          ...mixedPoint,
+        });
+        resolvedProcessData = {
+          ...processData,
+          toPointId: newPointId,
+        };
       }
+    }
+
+    if (editingProcess) {
+      updateProcess(editingProcess.id, resolvedProcessData);
+    } else {
+      addProcess({
+        id: `process-${Date.now()}`,
+        order: processes.length,
+        ...resolvedProcessData,
+      } as Process);
+    }
+    if (processData.type === 'mixing') {
+      setSelectedPoint(resolvedProcessData.toPointId);
     }
 
     setEditingProcess(null);
@@ -543,12 +578,7 @@ function App() {
               <button
                 onClick={() => {
                   if (showAddPoint) {
-                    setEditingPointId(null);
-                    setNewPointName('');
-                    setInputTypeA('dryBulbTemp');
-                    setInputTypeB('relativeHumidity');
-                    setInputValueA('25');
-                    setInputValueB('60');
+                    resetPointForm();
                   }
                   setShowAddPoint(!showAddPoint);
                 }}
@@ -663,6 +693,14 @@ function App() {
                   >
                     {editingPointId ? '更新' : '追加'}
                   </button>
+                  {editingPointId && (
+                    <button
+                      onClick={cancelEditPoint}
+                      className="w-full py-2 px-4 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm"
+                    >
+                      キャンセル
+                    </button>
+                  )}
                 </div>
               )}
 
