@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
 import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
 import { ChartCoordinates, createDefaultChartConfig } from '@/lib/chart/coordinates';
@@ -16,7 +16,11 @@ interface PsychrometricChartProps {
   onPointMove?: (pointId: string, temp: number, humidity: number) => void;
 }
 
-export const PsychrometricChart: React.FC<PsychrometricChartProps> = ({
+export interface PsychrometricChartRef {
+  getCanvas: () => HTMLCanvasElement | null;
+}
+
+export const PsychrometricChart = forwardRef<PsychrometricChartRef, PsychrometricChartProps>(({
   width = 1000,
   height = 700,
   statePoints,
@@ -25,8 +29,13 @@ export const PsychrometricChart: React.FC<PsychrometricChartProps> = ({
   selectedPointId,
   onPointClick,
   onPointMove,
-}) => {
+}, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // 親コンポーネントからcanvasにアクセスできるようにする
+  useImperativeHandle(ref, () => ({
+    getCanvas: () => canvasRef.current,
+  }));
   const [isDragging, setIsDragging] = useState(false);
   const [draggedPointId, setDraggedPointId] = useState<string | null>(null);
   
@@ -129,7 +138,9 @@ export const PsychrometricChart: React.FC<PsychrometricChartProps> = ({
       style={{ cursor: isDragging ? 'grabbing' : 'default', border: '1px solid #ddd' }}
     />
   );
-};
+});
+
+PsychrometricChart.displayName = 'PsychrometricChart';
 
 // ========================================
 // 描画ヘルパー関数
