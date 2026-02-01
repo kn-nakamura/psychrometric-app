@@ -20,6 +20,39 @@ export const StatePointList = () => {
   // 順番にソート
   const sortedPoints = [...filteredPoints].sort((a, b) => a.order - b.order);
 
+  // Generate labels for each point (C1, C2 for summer, H1, H2 for winter)
+  const getPointLabel = (point: typeof sortedPoints[0], index: number): string => {
+    // Count how many points of each season appear before this point
+    let summerCount = 0;
+    let winterCount = 0;
+    for (let i = 0; i <= index; i++) {
+      const p = sortedPoints[i];
+      if (p.season === 'summer') summerCount++;
+      else if (p.season === 'winter') winterCount++;
+    }
+
+    if (point.season === 'summer') {
+      return `C${summerCount}`;
+    } else if (point.season === 'winter') {
+      return `H${winterCount}`;
+    } else {
+      // For 'both' season, use both labels based on current position
+      let bothSummerCount = 0;
+      let bothWinterCount = 0;
+      for (let i = 0; i <= index; i++) {
+        const p = sortedPoints[i];
+        if (p.season === 'summer' || p.season === 'both') bothSummerCount++;
+        if (p.season === 'winter' || p.season === 'both') bothWinterCount++;
+      }
+      if (currentSeason === 'summer') {
+        return `C${bothSummerCount}`;
+      } else if (currentSeason === 'winter') {
+        return `H${bothWinterCount}`;
+      }
+      return `C${bothSummerCount}/H${bothWinterCount}`;
+    }
+  };
+
   const handleMoveUp = (e: React.MouseEvent, pointId: string) => {
     e.stopPropagation();
     const index = statePoints.findIndex((p) => p.id === pointId);
@@ -79,7 +112,13 @@ export const StatePointList = () => {
 
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-900">{point.order}.</span>
+                <span className={`font-bold text-sm px-2 py-0.5 rounded ${
+                  point.season === 'summer'
+                    ? 'bg-blue-600 text-white'
+                    : point.season === 'winter'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-purple-600 text-white'
+                }`}>{getPointLabel(point, index)}</span>
                 <span className="font-medium text-gray-900">{point.name}</span>
                 <span
                   className={`text-xs px-2 py-0.5 rounded ${

@@ -1327,6 +1327,7 @@ function App() {
           designConditions={designConditions}
           statePoints={statePoints}
           processes={processes}
+          activeSeason={activeSeason}
         />
       )}
 

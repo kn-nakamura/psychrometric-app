@@ -11,6 +11,7 @@ interface ExportDialogProps {
   designConditions: DesignConditions;
   statePoints: StatePoint[];
   processes: Process[];
+  activeSeason: 'summer' | 'winter' | 'both';
 }
 
 export const ExportDialog = ({
@@ -19,6 +20,7 @@ export const ExportDialog = ({
   designConditions,
   statePoints,
   processes,
+  activeSeason,
 }: ExportDialogProps) => {
   const [isExporting, setIsExporting] = useState(false);
   const [exportType, setExportType] = useState<'pdf' | 'png' | null>(null);
@@ -100,12 +102,27 @@ export const ExportDialog = ({
       ctx.fillText(line, marginPx, marginPx + mmToPx(6) + index * mmToPx(4));
     });
 
-    const chartWidthPx = contentWidthPx;
-    const chartHeightPx = Math.min(
-      (chartCanvas.height / chartCanvas.width) * chartWidthPx,
-      chartAreaHeightPx
-    );
-    const chartX = marginPx;
+    // Maintain the original chart aspect ratio
+    const chartAspectRatio = chartCanvas.width / chartCanvas.height;
+    let chartWidthPx: number;
+    let chartHeightPx: number;
+
+    // Calculate dimensions that fit within available space while maintaining aspect ratio
+    const maxChartWidth = contentWidthPx;
+    const maxChartHeight = chartAreaHeightPx;
+
+    if (maxChartWidth / chartAspectRatio <= maxChartHeight) {
+      // Width is the constraining dimension
+      chartWidthPx = maxChartWidth;
+      chartHeightPx = maxChartWidth / chartAspectRatio;
+    } else {
+      // Height is the constraining dimension
+      chartHeightPx = maxChartHeight;
+      chartWidthPx = maxChartHeight * chartAspectRatio;
+    }
+
+    // Center the chart horizontally if it's narrower than content width
+    const chartX = marginPx + (contentWidthPx - chartWidthPx) / 2;
     const chartY = marginPx + headerHeightPx;
 
     ctx.imageSmoothingEnabled = true;
@@ -169,21 +186,77 @@ export const ExportDialog = ({
       `排気 ${formatNumber(designConditions.airflow.exhaustAir, 0)} m³/h`,
     ];
 
-    const statePointLines = statePoints.map(
+    // Filter state points by active season
+    const filteredStatePoints = statePoints
+      .filter((point) => {
+        if (activeSeason === 'both') return true;
+        return point.season === activeSeason || point.season === 'both';
+      })
+      .sort((a, b) => a.order - b.order);
+
+    // Generate labels for state points (C1, C2 for summer, H1, H2 for winter)
+    const getPointLabel = (point: StatePoint, index: number): string => {
+      let summerCount = 0;
+      let winterCount = 0;
+      for (let i = 0; i <= index; i++) {
+        const p = filteredStatePoints[i];
+        if (p.season === 'summer') summerCount++;
+        else if (p.season === 'winter') winterCount++;
+      }
+
+      if (point.season === 'summer') {
+        return `C${summerCount}`;
+      } else if (point.season === 'winter') {
+        return `H${winterCount}`;
+      } else {
+        // For 'both' season
+        let bothSummerCount = 0;
+        let bothWinterCount = 0;
+        for (let i = 0; i <= index; i++) {
+          const p = filteredStatePoints[i];
+          if (p.season === 'summer' || p.season === 'both') bothSummerCount++;
+          if (p.season === 'winter' || p.season === 'both') bothWinterCount++;
+        }
+        if (activeSeason === 'summer') {
+          return `C${bothSummerCount}`;
+        } else if (activeSeason === 'winter') {
+          return `H${bothWinterCount}`;
+        }
+        return `C${bothSummerCount}/H${bothWinterCount}`;
+      }
+    };
+
+    const statePointLines = filteredStatePoints.map(
       (point, index) =>
-        `${index + 1}. ${point.name}: ${formatNumber(
+        `${getPointLabel(point, index)} ${point.name}: ${formatNumber(
           point.dryBulbTemp
         )}℃, ${formatNumber(point.relativeHumidity, 0)}%RH`
     );
 
+    // Filter processes by active season
+    const filteredProcesses = processes.filter((process) => {
+      if (activeSeason === 'both') return true;
+      return process.season === activeSeason || process.season === 'both';
+    });
+
+    // Helper function to get label for a state point by ID
+    const getPointLabelById = (pointId: string): string => {
+      const pointIndex = filteredStatePoints.findIndex((p) => p.id === pointId);
+      if (pointIndex === -1) return '?';
+      const point = filteredStatePoints[pointIndex];
+      return `${getPointLabel(point, pointIndex)} ${point.name}`;
+    };
+
     const processLines =
-      processes.length > 0
-        ? processes.flatMap((process) => {
-            const fromPoint = statePoints.find(
+      filteredProcesses.length > 0
+        ? filteredProcesses.flatMap((process) => {
+            const fromPoint = filteredStatePoints.find(
               (p) => p.id === process.fromPointId
             );
-            const toPoint = statePoints.find((p) => p.id === process.toPointId);
-            const lines = [`${process.name}: ${fromPoint?.name || '?'} → ${toPoint?.name || '?'}`];
+            const toPoint = filteredStatePoints.find((p) => p.id === process.toPointId);
+            const fromLabel = getPointLabelById(process.fromPointId);
+            const toLabel = getPointLabelById(process.toPointId);
+            const lines = [`${process.name}: ${fromLabel} → ${toLabel}`];
 
             // Add detailed parameters
             if (fromPoint && toPoint && fromPoint.enthalpy && toPoint.enthalpy) {
