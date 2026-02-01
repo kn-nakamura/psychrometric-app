@@ -20,6 +20,7 @@ const processTypeLabels: Record<ProcessType, string> = {
   mixing: '混合',
   heatExchange: '全熱交換',
   fanHeating: 'ファン発熱',
+  airSupply: '空調吹き出し',
 };
 
 export const ProcessDialog = ({
@@ -58,6 +59,25 @@ export const ProcessDialog = ({
     }
   }, [editingProcess, statePoints, activeSeason, isOpen]);
 
+  useEffect(() => {
+    if (type !== 'mixing') return;
+    setParameters((prev) => {
+      const ratio1 = prev.mixingRatios?.stream1.ratio ?? 0.5;
+      const stream1PointId = prev.mixingRatios?.stream1.pointId ?? fromPointId;
+      const stream2PointId =
+        prev.mixingRatios?.stream2.pointId ??
+        statePoints.find((point) => point.id !== stream1PointId)?.id ??
+        '';
+      return {
+        ...prev,
+        mixingRatios: {
+          stream1: { pointId: stream1PointId, ratio: ratio1 },
+          stream2: { pointId: stream2PointId, ratio: 1 - ratio1 },
+        },
+      };
+    });
+  }, [type, fromPointId, statePoints]);
+
   if (!isOpen) return null;
 
   const handleSave = () => {
@@ -72,6 +92,17 @@ export const ProcessDialog = ({
     if (fromPointId === toPointId) {
       alert('始点と終点は異なる状態点を選択してください');
       return;
+    }
+    if (type === 'mixing') {
+      const stream2Id = parameters.mixingRatios?.stream2.pointId;
+      if (!stream2Id) {
+        alert('混合流2の状態点を選択してください');
+        return;
+      }
+      if (stream2Id === fromPointId) {
+        alert('混合流2は混合流1と異なる状態点を選択してください');
+        return;
+      }
     }
 
     onSave({
@@ -91,6 +122,42 @@ export const ProcessDialog = ({
       ...prev,
       [key]: value,
     }));
+  };
+
+  const handleMixingRatioChange = (value: number) => {
+    const ratio1 = Math.max(0, Math.min(1, value / 100));
+    setParameters((prev) => ({
+      ...prev,
+      mixingRatios: {
+        stream1: {
+          pointId: prev.mixingRatios?.stream1.pointId ?? fromPointId,
+          ratio: ratio1,
+        },
+        stream2: {
+          pointId: prev.mixingRatios?.stream2.pointId ?? '',
+          ratio: 1 - ratio1,
+        },
+      },
+    }));
+  };
+
+  const handleMixingStreamChange = (streamKey: 'stream1' | 'stream2', pointId: string) => {
+    setParameters((prev) => {
+      const ratio1 = prev.mixingRatios?.stream1.ratio ?? 0.5;
+      return {
+        ...prev,
+        mixingRatios: {
+          stream1: {
+            pointId: streamKey === 'stream1' ? pointId : prev.mixingRatios?.stream1.pointId ?? fromPointId,
+            ratio: ratio1,
+          },
+          stream2: {
+            pointId: streamKey === 'stream2' ? pointId : prev.mixingRatios?.stream2.pointId ?? '',
+            ratio: 1 - ratio1,
+          },
+        },
+      };
+    });
   };
 
   // 季節に応じてフィルターされた状態点
@@ -193,7 +260,13 @@ export const ProcessDialog = ({
             </label>
             <select
               value={fromPointId}
-              onChange={(e) => setFromPointId(e.target.value)}
+              onChange={(e) => {
+                const nextId = e.target.value;
+                setFromPointId(nextId);
+                if (type === 'mixing') {
+                  handleMixingStreamChange('stream1', nextId);
+                }
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">選択してください</option>
@@ -316,6 +389,81 @@ export const ProcessDialog = ({
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
+            )}
+
+            {type === 'mixing' && (
+              <>
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-600 mb-1">
+                    混合流2（還気など）
+                  </label>
+                  <select
+                    value={parameters.mixingRatios?.stream2.pointId || ''}
+                    onChange={(e) => handleMixingStreamChange('stream2', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">選択してください</option>
+                    {filteredPoints.map((point) => (
+                      <option key={point.id} value={point.id}>
+                        {point.name} ({point.dryBulbTemp?.toFixed(1)}°C, RH{point.relativeHumidity?.toFixed(0)}%)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-600 mb-1">
+                    空気比率（混合流1の割合）[%]
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={
+                      parameters.mixingRatios?.stream1.ratio !== undefined
+                        ? Math.round(parameters.mixingRatios.stream1.ratio * 100)
+                        : 50
+                    }
+                    onChange={(e) => handleMixingRatioChange(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    混合流2の割合: {Math.round((parameters.mixingRatios?.stream2.ratio ?? 0.5) * 100)}%
+                  </p>
+                </div>
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-600 mb-1">
+                    全熱交換効率 [%]（外気側の前処理）
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={parameters.heatExchangeEfficiency || ''}
+                    onChange={(e) => handleParameterChange('heatExchangeEfficiency', parseFloat(e.target.value))}
+                    placeholder="例: 65"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-600 mb-1">
+                    排気側の状態点（全熱交換器）
+                  </label>
+                  <select
+                    value={parameters.exhaustPointId || ''}
+                    onChange={(e) => handleParameterChange('exhaustPointId', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">選択してください</option>
+                    {filteredPoints.map((point) => (
+                      <option key={point.id} value={point.id}>
+                        {point.name} ({point.dryBulbTemp?.toFixed(1)}°C, RH{point.relativeHumidity?.toFixed(0)}%)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
             )}
 
             {type === 'fanHeating' && (

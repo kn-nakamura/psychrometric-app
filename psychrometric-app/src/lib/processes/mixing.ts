@@ -3,6 +3,7 @@ import { ProcessResults } from '@/types/process';
 import { StatePointConverter } from '../psychrometric/conversions';
 import { PsychrometricCalculator } from '../psychrometric/properties';
 import { STANDARD_PRESSURE } from '../psychrometric/constants';
+import { HeatExchangeProcess } from './heatExchange';
 
 /**
  * 混合プロセスの計算
@@ -157,6 +158,45 @@ export class MixingProcess {
     return StatePointConverter.fromEnthalpyAndHumidity(
       mixedEnthalpy,
       mixedHumidity,
+      pressure
+    );
+  }
+
+  /**
+   * 全熱交換器を考慮した混合
+   *
+   * @param stream1 外気などの混合流1
+   * @param stream2 混合流2（還気など）
+   * @param ratio1 stream1の比率 (0-1)
+   * @param heatExchangeEfficiency 全熱交換効率 [%]
+   * @param exhaustPoint 排気側状態点
+   * @param pressure 大気圧 [kPa]
+   * @returns 混合後の状態点と計算結果
+   */
+  static mixWithHeatExchange(
+    stream1: StatePoint,
+    stream2: StatePoint,
+    ratio1: number,
+    heatExchangeEfficiency: number,
+    exhaustPoint: StatePoint,
+    pressure: number = STANDARD_PRESSURE
+  ): { mixedPoint: Partial<StatePoint>; results: ProcessResults } {
+    const normalizedRatio1 = Math.max(0, Math.min(1, ratio1));
+    const ratio2 = Math.max(0, Math.min(1, 1 - normalizedRatio1));
+    const { supplyAir } = HeatExchangeProcess.calculateTotalHeat(
+      stream1,
+      exhaustPoint,
+      normalizedRatio1,
+      ratio2,
+      heatExchangeEfficiency,
+      pressure
+    );
+
+    return this.mixTwoStreams(
+      supplyAir as StatePoint,
+      normalizedRatio1,
+      stream2,
+      ratio2,
       pressure
     );
   }

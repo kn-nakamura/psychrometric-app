@@ -10,6 +10,7 @@ import { ProjectManager } from './components/Project/ProjectManager';
 import { StatePointConverter } from './lib/psychrometric/conversions';
 import { PsychrometricCalculator } from './lib/psychrometric/properties';
 import { STANDARD_PRESSURE } from './lib/psychrometric/constants';
+import { MixingProcess } from './lib/processes/mixing';
 import { Process } from './types/process';
 import { DesignConditions } from './types/designConditions';
 import { StatePointValueKey } from './types/psychrometric';
@@ -19,14 +20,58 @@ const STATE_POINT_INPUT_OPTIONS: Array<{
   label: string;
   unit: string;
   placeholder: string;
+  step: number;
+  min?: number;
+  max?: number;
 }> = [
-  { key: 'dryBulbTemp', label: '乾球温度', unit: '°C', placeholder: '乾球温度 (°C)' },
-  { key: 'wetBulbTemp', label: '湿球温度', unit: '°C', placeholder: '湿球温度 (°C)' },
-  { key: 'relativeHumidity', label: '相対湿度', unit: '%', placeholder: '相対湿度 (%)' },
-  { key: 'humidity', label: '絶対湿度', unit: "kg/kg'", placeholder: "絶対湿度 (kg/kg')" },
-  { key: 'enthalpy', label: 'エンタルピー', unit: "kJ/kg'", placeholder: "エンタルピー (kJ/kg')" },
-  { key: 'dewPoint', label: '露点温度', unit: '°C', placeholder: '露点温度 (°C)' },
+  {
+    key: 'dryBulbTemp',
+    label: '乾球温度',
+    unit: '°C',
+    placeholder: '乾球温度',
+    step: 0.1,
+  },
+  {
+    key: 'wetBulbTemp',
+    label: '湿球温度',
+    unit: '°C',
+    placeholder: '湿球温度',
+    step: 0.1,
+  },
+  {
+    key: 'relativeHumidity',
+    label: '相対湿度',
+    unit: '%',
+    placeholder: '相対湿度',
+    step: 0.1,
+    min: 0,
+    max: 100,
+  },
+  {
+    key: 'humidity',
+    label: '絶対湿度',
+    unit: "kg/kg'",
+    placeholder: '絶対湿度',
+    step: 0.0001,
+    min: 0,
+  },
+  {
+    key: 'enthalpy',
+    label: 'エンタルピー',
+    unit: "kJ/kg'",
+    placeholder: 'エンタルピー',
+    step: 0.1,
+  },
+  {
+    key: 'dewPoint',
+    label: '露点温度',
+    unit: '°C',
+    placeholder: '露点温度',
+    step: 0.1,
+  },
 ];
+
+const isValidNumericInput = (value: string) => /^-?\d*\.?\d*$/.test(value);
 
 function App() {
   const {
@@ -52,6 +97,8 @@ function App() {
   // Chart ref for export
   const chartRef = useRef<PsychrometricChartRef>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const inputTypeAInitialized = useRef(false);
+  const inputTypeBInitialized = useRef(false);
 
   // Dialog states
   const [showAddPoint, setShowAddPoint] = useState(false);
@@ -70,6 +117,7 @@ function App() {
   const [inputValueB, setInputValueB] = useState('60');
   const [newPointName, setNewPointName] = useState('');
   const [newPointSeason, setNewPointSeason] = useState<'summer' | 'winter' | 'both'>(activeSeason);
+  const [editingPointId, setEditingPointId] = useState<string | null>(null);
 
   // Active tab for sidebar
   const [activeTab, setActiveTab] = useState<'points' | 'processes'>('points');
@@ -103,6 +151,22 @@ function App() {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    if (!inputTypeAInitialized.current) {
+      inputTypeAInitialized.current = true;
+      return;
+    }
+    setInputValueA('');
+  }, [inputTypeA]);
+
+  useEffect(() => {
+    if (!inputTypeBInitialized.current) {
+      inputTypeBInitialized.current = true;
+      return;
+    }
+    setInputValueB('');
+  }, [inputTypeB]);
+
   // 状態点の追加
   const handleAddPoint = () => {
     const valueA = parseFloat(inputValueA);
@@ -110,6 +174,20 @@ function App() {
 
     if (isNaN(valueA) || isNaN(valueB)) {
       alert('入力値を正しく入力してください');
+      return;
+    }
+    if (
+      (inputOptionA.min !== undefined && valueA < inputOptionA.min) ||
+      (inputOptionA.max !== undefined && valueA > inputOptionA.max)
+    ) {
+      alert(`${inputOptionA.label}の入力範囲を確認してください`);
+      return;
+    }
+    if (
+      (inputOptionB.min !== undefined && valueB < inputOptionB.min) ||
+      (inputOptionB.max !== undefined && valueB > inputOptionB.max)
+    ) {
+      alert(`${inputOptionB.label}の入力範囲を確認してください`);
       return;
     }
 
@@ -151,21 +229,53 @@ function App() {
       return;
     }
 
-    const newPoint = {
-      id: `point-${Date.now()}`,
-      name: newPointName || `Point ${statePoints.length + 1}`,
-      season: newPointSeason,
-      order: statePoints.length,
-      ...stateData,
-    };
+    if (editingPointId) {
+      updateStatePoint(editingPointId, {
+        name: newPointName || `Point ${statePoints.length}`,
+        season: newPointSeason,
+        ...stateData,
+      });
+    } else {
+      const newPoint = {
+        id: `point-${Date.now()}`,
+        name: newPointName || `Point ${statePoints.length + 1}`,
+        season: newPointSeason,
+        order: statePoints.length,
+        ...stateData,
+      };
 
-    addStatePoint(newPoint);
+      addStatePoint(newPoint);
+    }
     setShowAddPoint(false);
     setNewPointName('');
     setInputTypeA('dryBulbTemp');
     setInputTypeB('relativeHumidity');
     setInputValueA('25');
     setInputValueB('60');
+    setEditingPointId(null);
+  };
+
+  const handleNumericInput = (
+    value: string,
+    setter: (nextValue: string) => void
+  ) => {
+    const normalized = value.replace(/,/g, '');
+    if (normalized === '' || isValidNumericInput(normalized)) {
+      setter(normalized);
+    }
+  };
+
+  const startEditPoint = (pointId: string) => {
+    const point = statePoints.find((item) => item.id === pointId);
+    if (!point) return;
+    setEditingPointId(pointId);
+    setShowAddPoint(true);
+    setNewPointName(point.name);
+    setNewPointSeason(point.season);
+    setInputTypeA('dryBulbTemp');
+    setInputTypeB('relativeHumidity');
+    setInputValueA(point.dryBulbTemp?.toString() ?? '');
+    setInputValueB(point.relativeHumidity?.toString() ?? '');
   };
 
   // 状態点の移動（ドラッグ）
@@ -202,6 +312,40 @@ function App() {
         ...processData,
       } as Process);
     }
+    if (processData.type === 'mixing') {
+      const ratio1 =
+        processData.parameters.mixingRatios?.stream1.ratio ??
+        processData.parameters.mixingRatios?.stream2.ratio ??
+        0.5;
+      const normalizedRatio1 = Math.max(0, Math.min(1, ratio1));
+      const stream1Id =
+        processData.parameters.mixingRatios?.stream1.pointId ?? processData.fromPointId;
+      const stream2Id = processData.parameters.mixingRatios?.stream2.pointId;
+      const stream1 = statePoints.find((point) => point.id === stream1Id);
+      const stream2 = statePoints.find((point) => point.id === stream2Id);
+      const exhaustPoint = processData.parameters.exhaustPointId
+        ? statePoints.find((point) => point.id === processData.parameters.exhaustPointId)
+        : undefined;
+
+      if (stream1 && stream2) {
+        const pressure = designConditions.outdoor.pressure ?? STANDARD_PRESSURE;
+        const efficiency = processData.parameters.heatExchangeEfficiency ?? 0;
+        const mixedPoint =
+          efficiency > 0 && exhaustPoint
+            ? MixingProcess.mixWithHeatExchange(
+                stream1,
+                stream2,
+                normalizedRatio1,
+                efficiency,
+                exhaustPoint,
+                pressure
+              ).mixedPoint
+            : MixingProcess.mixByRatio(stream1, stream2, normalizedRatio1, pressure);
+
+        updateStatePoint(processData.toPointId, mixedPoint);
+      }
+    }
+
     setEditingProcess(null);
   };
 
@@ -397,7 +541,17 @@ function App() {
 
               {/* カスタム追加ボタン */}
               <button
-                onClick={() => setShowAddPoint(!showAddPoint)}
+                onClick={() => {
+                  if (showAddPoint) {
+                    setEditingPointId(null);
+                    setNewPointName('');
+                    setInputTypeA('dryBulbTemp');
+                    setInputTypeB('relativeHumidity');
+                    setInputValueA('25');
+                    setInputValueB('60');
+                  }
+                  setShowAddPoint(!showAddPoint);
+                }}
                 className="w-full py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center justify-center gap-2"
               >
                 <Plus className="w-4 h-4" />
@@ -427,13 +581,19 @@ function App() {
                           </option>
                         ))}
                       </select>
-                      <input
-                        type="number"
-                        placeholder={inputOptionA.placeholder}
-                        value={inputValueA}
-                        onChange={(e) => setInputValueA(e.target.value)}
-                        className="px-3 py-2 border rounded text-sm"
-                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder={inputOptionA.placeholder}
+                          value={inputValueA}
+                          onChange={(e) => handleNumericInput(e.target.value, setInputValueA)}
+                          className="flex-1 px-3 py-2 border rounded text-sm"
+                        />
+                        <span className="text-xs text-gray-500 min-w-[56px] text-right">
+                          {inputOptionA.unit}
+                        </span>
+                      </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-2 items-center">
                       <select
@@ -447,13 +607,19 @@ function App() {
                           </option>
                         ))}
                       </select>
-                      <input
-                        type="number"
-                        placeholder={inputOptionB.placeholder}
-                        value={inputValueB}
-                        onChange={(e) => setInputValueB(e.target.value)}
-                        className="px-3 py-2 border rounded text-sm"
-                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder={inputOptionB.placeholder}
+                          value={inputValueB}
+                          onChange={(e) => handleNumericInput(e.target.value, setInputValueB)}
+                          className="flex-1 px-3 py-2 border rounded text-sm"
+                        />
+                        <span className="text-xs text-gray-500 min-w-[56px] text-right">
+                          {inputOptionB.unit}
+                        </span>
+                      </div>
                     </div>
                     <p className="text-xs text-gray-500">
                       選択した2項目の入力値から他の物性値を計算します。
@@ -495,7 +661,7 @@ function App() {
                     onClick={handleAddPoint}
                     className="w-full py-2 px-4 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
                   >
-                    追加
+                    {editingPointId ? '更新' : '追加'}
                   </button>
                 </div>
               )}
@@ -569,17 +735,28 @@ function App() {
                               </div>
                             </div>
                           </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (confirm(`「${point.name}」を削除しますか？`)) {
-                                deleteStatePoint(point.id);
-                              }
-                            }}
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startEditPoint(point.id);
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm(`「${point.name}」を削除しますか？`)) {
+                                  deleteStatePoint(point.id);
+                                }
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))
