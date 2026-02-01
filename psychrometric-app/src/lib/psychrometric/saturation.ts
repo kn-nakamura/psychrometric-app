@@ -33,7 +33,7 @@ export function saturationPressure(temp: number): number {
  */
 export function saturationPressureDerivative(temp: number): number {
   const coeffs = temp >= 0 ? TETENS_WATER : TETENS_ICE;
-  const { A, B, C } = coeffs;
+  const { B, C } = coeffs;
   
   const ps = saturationPressure(temp);
   

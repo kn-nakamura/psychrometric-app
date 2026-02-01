@@ -190,7 +190,7 @@ export class PsychrometricCalculator {
    * @returns 露点温度 [°C]
    */
   static dewPoint(
-    temp: number,
+    _temp: number,
     humidity: number,
     pressure: number = STANDARD_PRESSURE
   ): number {

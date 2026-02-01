@@ -1,7 +1,7 @@
 import { useAppStore } from '@/store/appStore';
 
 export const DesignConditionsPanel = () => {
-  const { designConditions, updateDesignConditions } = useAppStore();
+  const { designConditions } = useAppStore();
   
   return (
     <div className="space-y-4">

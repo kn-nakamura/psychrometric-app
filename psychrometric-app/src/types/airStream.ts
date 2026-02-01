@@ -1,5 +1,3 @@
-import { StatePoint } from './psychrometric';
-
 /**
  * 空気の流れの種類
  */

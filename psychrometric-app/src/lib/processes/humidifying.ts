@@ -216,7 +216,7 @@ export class HumidifyingProcess {
    */
   static calculateEvaporative(
     fromPoint: StatePoint,
-    targetRH: number,
+    _targetRH: number,
     efficiency: number = 80,
     pressure: number = STANDARD_PRESSURE
   ): Partial<StatePoint> {
