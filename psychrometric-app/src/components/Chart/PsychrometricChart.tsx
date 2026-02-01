@@ -307,7 +307,9 @@ function drawStatePoints(
     const { x, y } = coordinates.toCanvas(point.dryBulbTemp, point.humidity);
     
     // 点を描画
-    ctx.fillStyle = point.color || (point.season === 'summer' ? '#ff6b6b' : '#4dabf7');
+    const defaultPointColor =
+      point.season === 'summer' ? '#4dabf7' : point.season === 'winter' ? '#ff6b6b' : '#6b7280';
+    ctx.fillStyle = point.color || defaultPointColor;
     ctx.beginPath();
     ctx.arc(x, y, selectedId === point.id ? 8 : 6, 0, Math.PI * 2);
     ctx.fill();
@@ -351,7 +353,12 @@ function drawProcesses(
     const to = coordinates.toCanvas(toPoint.dryBulbTemp, toPoint.humidity);
     
     // プロセス線を描画
-    ctx.strokeStyle = process.season === 'summer' ? '#ff6b6b' : '#4dabf7';
+    ctx.strokeStyle =
+      process.season === 'summer'
+        ? '#4dabf7'
+        : process.season === 'winter'
+        ? '#ff6b6b'
+        : '#6b7280';
     ctx.lineWidth = 3;
     ctx.setLineDash([5, 5]);
     

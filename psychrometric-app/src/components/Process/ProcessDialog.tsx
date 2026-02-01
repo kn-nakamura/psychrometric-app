@@ -62,7 +62,11 @@ export const ProcessDialog = ({
   useEffect(() => {
     if (type !== 'mixing') return;
     setParameters((prev) => {
+      const baseAirflow = prev.airflow ?? 1000;
       const ratio1 = prev.mixingRatios?.stream1.ratio ?? 0.5;
+      const fallbackAirflow1 = baseAirflow * Math.max(0, Math.min(1, ratio1));
+      const fallbackAirflow2 = Math.max(0, baseAirflow - fallbackAirflow1);
+      const airflow1 = prev.mixingRatios?.stream1.airflow ?? fallbackAirflow1;
       const stream1PointId = prev.mixingRatios?.stream1.pointId ?? fromPointId;
       const stream2PointId =
         prev.mixingRatios?.stream2.pointId ??
@@ -71,8 +75,11 @@ export const ProcessDialog = ({
       return {
         ...prev,
         mixingRatios: {
-          stream1: { pointId: stream1PointId, ratio: ratio1 },
-          stream2: { pointId: stream2PointId, ratio: 1 - ratio1 },
+          stream1: { pointId: stream1PointId, airflow: airflow1 },
+          stream2: {
+            pointId: stream2PointId,
+            airflow: prev.mixingRatios?.stream2.airflow ?? fallbackAirflow2,
+          },
         },
       };
     });
@@ -95,12 +102,18 @@ export const ProcessDialog = ({
     }
     if (type === 'mixing') {
       const stream2Id = parameters.mixingRatios?.stream2.pointId;
+      const stream1Airflow = parameters.mixingRatios?.stream1.airflow;
+      const stream2Airflow = parameters.mixingRatios?.stream2.airflow;
       if (!stream2Id) {
         alert('混合流2の状態点を選択してください');
         return;
       }
       if (stream2Id === fromPointId) {
         alert('混合流2は混合流1と異なる状態点を選択してください');
+        return;
+      }
+      if (!stream1Airflow || stream1Airflow <= 0 || !stream2Airflow || stream2Airflow <= 0) {
+        alert('混合流1・混合流2の風量を正しく入力してください');
         return;
       }
     }
@@ -124,40 +137,44 @@ export const ProcessDialog = ({
     }));
   };
 
-  const handleMixingRatioChange = (value: number) => {
-    const ratio1 = Math.max(0, Math.min(1, value / 100));
-    setParameters((prev) => ({
-      ...prev,
-      mixingRatios: {
-        stream1: {
-          pointId: prev.mixingRatios?.stream1.pointId ?? fromPointId,
-          ratio: ratio1,
-        },
-        stream2: {
-          pointId: prev.mixingRatios?.stream2.pointId ?? '',
-          ratio: 1 - ratio1,
-        },
-      },
-    }));
-  };
-
   const handleMixingStreamChange = (streamKey: 'stream1' | 'stream2', pointId: string) => {
     setParameters((prev) => {
-      const ratio1 = prev.mixingRatios?.stream1.ratio ?? 0.5;
       return {
         ...prev,
         mixingRatios: {
           stream1: {
             pointId: streamKey === 'stream1' ? pointId : prev.mixingRatios?.stream1.pointId ?? fromPointId,
-            ratio: ratio1,
+            airflow: prev.mixingRatios?.stream1.airflow ?? prev.airflow ?? 500,
           },
           stream2: {
             pointId: streamKey === 'stream2' ? pointId : prev.mixingRatios?.stream2.pointId ?? '',
-            ratio: 1 - ratio1,
+            airflow: prev.mixingRatios?.stream2.airflow ?? prev.airflow ?? 500,
           },
         },
       };
     });
+  };
+
+  const handleMixingAirflowChange = (streamKey: 'stream1' | 'stream2', value: number) => {
+    setParameters((prev) => ({
+      ...prev,
+      mixingRatios: {
+        stream1: {
+          pointId: prev.mixingRatios?.stream1.pointId ?? fromPointId,
+          airflow:
+            streamKey === 'stream1'
+              ? value
+              : prev.mixingRatios?.stream1.airflow ?? prev.airflow ?? 500,
+        },
+        stream2: {
+          pointId: prev.mixingRatios?.stream2.pointId ?? '',
+          airflow:
+            streamKey === 'stream2'
+              ? value
+              : prev.mixingRatios?.stream2.airflow ?? prev.airflow ?? 500,
+        },
+      },
+    }));
   };
 
   // 季節に応じてフィルターされた状態点
@@ -224,7 +241,7 @@ export const ProcessDialog = ({
                 onClick={() => setSeason('summer')}
                 className={`flex-1 py-2 px-3 rounded ${
                   season === 'summer'
-                    ? 'bg-red-500 text-white'
+                    ? 'bg-blue-500 text-white'
                     : 'bg-gray-200 hover:bg-gray-300'
                 }`}
               >
@@ -234,7 +251,7 @@ export const ProcessDialog = ({
                 onClick={() => setSeason('winter')}
                 className={`flex-1 py-2 px-3 rounded ${
                   season === 'winter'
-                    ? 'bg-blue-500 text-white'
+                    ? 'bg-red-500 text-white'
                     : 'bg-gray-200 hover:bg-gray-300'
                 }`}
               >
@@ -308,17 +325,19 @@ export const ProcessDialog = ({
             <h4 className="text-sm font-medium text-gray-700 mb-3">パラメータ</h4>
 
             {/* 風量（共通） */}
-            <div className="mb-3">
-              <label className="block text-sm text-gray-600 mb-1">
-                風量 [m³/h]
-              </label>
-              <input
-                type="number"
-                value={parameters.airflow || ''}
-                onChange={(e) => handleParameterChange('airflow', parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
+            {type !== 'mixing' && (
+              <div className="mb-3">
+                <label className="block text-sm text-gray-600 mb-1">
+                  風量 [m³/h]
+                </label>
+                <input
+                  type="number"
+                  value={parameters.airflow || ''}
+                  onChange={(e) => handleParameterChange('airflow', parseFloat(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            )}
 
             {/* タイプ別パラメータ */}
             {(type === 'heating' || type === 'cooling') && (
@@ -414,28 +433,29 @@ export const ProcessDialog = ({
                         {point.name} ({point.dryBulbTemp?.toFixed(1)}°C, RH{point.relativeHumidity?.toFixed(0)}%)
                       </option>
                     ))}
-                  </select>
+                    </select>
                 </div>
                 <div className="mb-3">
                   <label className="block text-sm text-gray-600 mb-1">
-                    空気比率（混合流1の割合）[%]
+                    混合流1の風量 [m³/h]
                   </label>
                   <input
                     type="number"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={
-                      parameters.mixingRatios?.stream1.ratio !== undefined
-                        ? Math.round(parameters.mixingRatios.stream1.ratio * 100)
-                        : 50
-                    }
-                    onChange={(e) => handleMixingRatioChange(Number(e.target.value))}
+                    value={parameters.mixingRatios?.stream1.airflow ?? ''}
+                    onChange={(e) => handleMixingAirflowChange('stream1', Number(e.target.value))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    混合流2の割合: {Math.round((parameters.mixingRatios?.stream2.ratio ?? 0.5) * 100)}%
-                  </p>
+                </div>
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-600 mb-1">
+                    混合流2の風量 [m³/h]
+                  </label>
+                  <input
+                    type="number"
+                    value={parameters.mixingRatios?.stream2.airflow ?? ''}
+                    onChange={(e) => handleMixingAirflowChange('stream2', Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
                 </div>
                 <div className="mb-3">
                   <label className="block text-sm text-gray-600 mb-1">

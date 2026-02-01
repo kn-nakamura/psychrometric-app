@@ -126,6 +126,8 @@ function App() {
   const [newPointSeason, setNewPointSeason] = useState<'summer' | 'winter' | 'both'>(activeSeason);
   const [editingPointId, setEditingPointId] = useState<string | null>(null);
   const [editingPointSnapshot, setEditingPointSnapshot] = useState<StatePoint | null>(null);
+  const [copySourceA, setCopySourceA] = useState('');
+  const [copySourceB, setCopySourceB] = useState('');
 
   // Active tab for sidebar
   const [activeTab, setActiveTab] = useState<'points' | 'processes'>('points');
@@ -192,6 +194,8 @@ function App() {
     setInputValueB('60');
     setEditingPointId(null);
     setEditingPointSnapshot(null);
+    setCopySourceA('');
+    setCopySourceB('');
   };
 
   // 状態点の追加
@@ -278,6 +282,28 @@ function App() {
     }
   };
 
+  const copyPointValue = (
+    sourceId: string,
+    valueKey: StatePointValueKey,
+    setter: (nextValue: string) => void
+  ) => {
+    if (!sourceId) {
+      alert('コピー元の状態点を選択してください');
+      return;
+    }
+    const sourcePoint = statePoints.find((point) => point.id === sourceId);
+    if (!sourcePoint) {
+      alert('コピー元の状態点が見つかりません');
+      return;
+    }
+    const sourceValue = sourcePoint[valueKey as keyof StatePoint];
+    if (typeof sourceValue !== 'number') {
+      alert('コピー元の値が取得できません');
+      return;
+    }
+    setter(sourceValue.toString());
+  };
+
   const startEditPoint = (pointId: string) => {
     const point = statePoints.find((item) => item.id === pointId);
     if (!point) return;
@@ -324,16 +350,20 @@ function App() {
   const handleSaveProcess = (processData: Omit<Process, 'id' | 'order'>) => {
     let resolvedProcessData = processData;
     if (processData.type === 'mixing') {
-      const ratio1 =
-        processData.parameters.mixingRatios?.stream1.ratio ??
-        processData.parameters.mixingRatios?.stream2.ratio ??
-        0.5;
-      const normalizedRatio1 = Math.max(0, Math.min(1, ratio1));
       const stream1Id =
         processData.parameters.mixingRatios?.stream1.pointId ?? processData.fromPointId;
       const stream2Id = processData.parameters.mixingRatios?.stream2.pointId;
       const stream1 = statePoints.find((point) => point.id === stream1Id);
       const stream2 = statePoints.find((point) => point.id === stream2Id);
+      const defaultTotalAirflow = processData.parameters.airflow ?? 1000;
+      const ratio1 =
+        processData.parameters.mixingRatios?.stream1.ratio ??
+        processData.parameters.mixingRatios?.stream2.ratio ??
+        0.5;
+      const fallbackAirflow1 = defaultTotalAirflow * Math.max(0, Math.min(1, ratio1));
+      const fallbackAirflow2 = Math.max(0, defaultTotalAirflow - fallbackAirflow1);
+      const airflow1 = processData.parameters.mixingRatios?.stream1.airflow ?? fallbackAirflow1;
+      const airflow2 = processData.parameters.mixingRatios?.stream2.airflow ?? fallbackAirflow2;
       const exhaustPoint = processData.parameters.exhaustPointId
         ? statePoints.find((point) => point.id === processData.parameters.exhaustPointId)
         : undefined;
@@ -346,12 +376,14 @@ function App() {
             ? MixingProcess.mixWithHeatExchange(
                 stream1,
                 stream2,
-                normalizedRatio1,
+                airflow1,
+                airflow2,
                 efficiency,
                 exhaustPoint,
                 pressure
               ).mixedPoint
-            : MixingProcess.mixByRatio(stream1, stream2, normalizedRatio1, pressure);
+            : MixingProcess.mixTwoStreams(stream1, airflow1, stream2, airflow2, pressure)
+                .mixedPoint;
         const newPointId = `point-${Date.now()}`;
         addStatePoint({
           id: newPointId,
@@ -458,7 +490,7 @@ function App() {
                 onClick={() => setActiveSeason('summer')}
                 className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
                   activeSeason === 'summer'
-                    ? 'bg-red-500 text-white'
+                    ? 'bg-blue-500 text-white'
                     : 'bg-gray-100 hover:bg-gray-200'
                 }`}
               >
@@ -468,7 +500,7 @@ function App() {
                 onClick={() => setActiveSeason('winter')}
                 className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
                   activeSeason === 'winter'
-                    ? 'bg-blue-500 text-white'
+                    ? 'bg-red-500 text-white'
                     : 'bg-gray-100 hover:bg-gray-200'
                 }`}
               >
@@ -527,7 +559,7 @@ function App() {
                         designConditions.outdoor.summer.relativeHumidity
                       )
                     }
-                    className="py-2 px-3 bg-orange-100 hover:bg-orange-200 rounded text-sm text-orange-800"
+                    className="py-2 px-3 bg-blue-100 hover:bg-blue-200 rounded text-sm text-blue-800"
                   >
                     夏季外気
                   </button>
@@ -540,7 +572,7 @@ function App() {
                         designConditions.indoor.summer.relativeHumidity
                       )
                     }
-                    className="py-2 px-3 bg-green-100 hover:bg-green-200 rounded text-sm text-green-800"
+                    className="py-2 px-3 bg-sky-100 hover:bg-sky-200 rounded text-sm text-sky-800"
                   >
                     夏季室内
                   </button>
@@ -553,7 +585,7 @@ function App() {
                         designConditions.outdoor.winter.relativeHumidity
                       )
                     }
-                    className="py-2 px-3 bg-indigo-100 hover:bg-indigo-200 rounded text-sm text-indigo-800"
+                    className="py-2 px-3 bg-red-100 hover:bg-red-200 rounded text-sm text-red-800"
                   >
                     冬季外気
                   </button>
@@ -566,7 +598,7 @@ function App() {
                         designConditions.indoor.winter.relativeHumidity
                       )
                     }
-                    className="py-2 px-3 bg-teal-100 hover:bg-teal-200 rounded text-sm text-teal-800"
+                    className="py-2 px-3 bg-rose-100 hover:bg-rose-200 rounded text-sm text-rose-800"
                   >
                     冬季室内
                   </button>
@@ -625,6 +657,30 @@ function App() {
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-2 items-center">
+                      <span className="text-xs text-gray-500">コピー元</span>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={copySourceA}
+                          onChange={(e) => setCopySourceA(e.target.value)}
+                          className="flex-1 px-3 py-2 border rounded text-xs bg-white"
+                        >
+                          <option value="">状態点を選択</option>
+                          {statePoints.map((point) => (
+                            <option key={point.id} value={point.id}>
+                              {point.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => copyPointValue(copySourceA, inputTypeA, setInputValueA)}
+                          className="px-3 py-2 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+                        >
+                          値をコピー
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-2 items-center">
                       <select
                         value={inputTypeB}
                         onChange={(e) => setInputTypeB(e.target.value as StatePointValueKey)}
@@ -650,6 +706,30 @@ function App() {
                         </span>
                       </div>
                     </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-2 items-center">
+                      <span className="text-xs text-gray-500">コピー元</span>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={copySourceB}
+                          onChange={(e) => setCopySourceB(e.target.value)}
+                          className="flex-1 px-3 py-2 border rounded text-xs bg-white"
+                        >
+                          <option value="">状態点を選択</option>
+                          {statePoints.map((point) => (
+                            <option key={point.id} value={point.id}>
+                              {point.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => copyPointValue(copySourceB, inputTypeB, setInputValueB)}
+                          className="px-3 py-2 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+                        >
+                          値をコピー
+                        </button>
+                      </div>
+                    </div>
                     <p className="text-xs text-gray-500">
                       選択した2項目の入力値から他の物性値を計算します。
                     </p>
@@ -659,7 +739,7 @@ function App() {
                       onClick={() => setNewPointSeason('summer')}
                       className={`flex-1 py-1.5 text-xs rounded ${
                         newPointSeason === 'summer'
-                          ? 'bg-red-500 text-white'
+                          ? 'bg-blue-500 text-white'
                           : 'bg-gray-200'
                       }`}
                     >
@@ -669,7 +749,7 @@ function App() {
                       onClick={() => setNewPointSeason('winter')}
                       className={`flex-1 py-1.5 text-xs rounded ${
                         newPointSeason === 'winter'
-                          ? 'bg-blue-500 text-white'
+                          ? 'bg-red-500 text-white'
                           : 'bg-gray-200'
                       }`}
                     >
@@ -735,9 +815,9 @@ function App() {
                               <span
                                 className={`text-xs px-1.5 py-0.5 rounded ${
                                   point.season === 'summer'
-                                    ? 'bg-orange-100 text-orange-700'
-                                    : point.season === 'winter'
                                     ? 'bg-blue-100 text-blue-700'
+                                    : point.season === 'winter'
+                                    ? 'bg-red-100 text-red-700'
                                     : 'bg-purple-100 text-purple-700'
                                 }`}
                               >
