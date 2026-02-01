@@ -190,6 +190,10 @@ export const ProcessDialog = ({
         alert('混合流2は混合流1と異なる状態点を選択してください');
         return;
       }
+      if (!stream1Airflow || !stream2Airflow || stream1Airflow <= 0 || stream2Airflow <= 0) {
+        alert('混合流の風量を正しく入力してください');
+        return;
+      }
     }
     if (type === 'heatExchange') {
       const exhaustPointId = parameters.exhaustPointId;
