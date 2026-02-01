@@ -315,20 +315,10 @@ function drawStatePoints(
 
     const { x, y } = coordinates.toCanvas(point.dryBulbTemp, point.humidity);
 
-    // 点を描画
+    // 点の色
     const defaultPointColor =
       point.season === 'summer' ? '#4dabf7' : point.season === 'winter' ? '#ff6b6b' : '#6b7280';
-    ctx.fillStyle = point.color || defaultPointColor;
-    ctx.beginPath();
-    ctx.arc(x, y, selectedId === point.id ? 8 : 6, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 選択された点は外枠を描画
-    if (selectedId === point.id) {
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
+    const pointColor = point.color || defaultPointColor;
 
     // Generate label based on season and index
     let label = '';
@@ -339,32 +329,38 @@ function drawStatePoints(
       label = `H${winterIndex}`;
       winterIndex++;
     } else {
-      // For 'both' season, use the original name or a neutral label
-      label = point.name;
+      // For 'both' season
+      if (activeSeason === 'summer') {
+        label = `C${summerIndex}`;
+        summerIndex++;
+      } else if (activeSeason === 'winter') {
+        label = `H${winterIndex}`;
+        winterIndex++;
+      } else {
+        label = point.name.substring(0, 3);
+      }
     }
 
-    // Draw point number/label in a circle
-    ctx.fillStyle = '#fff';
+    // 小さいポイントを描画
+    const pointRadius = selectedId === point.id ? 6 : 5;
+    ctx.fillStyle = pointColor;
     ctx.beginPath();
-    ctx.arc(x, y, 10, 0, Math.PI * 2);
+    ctx.arc(x, y, pointRadius, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = point.color || defaultPointColor;
-    ctx.lineWidth = 2;
-    ctx.stroke();
 
-    ctx.fillStyle = point.color || defaultPointColor;
-    ctx.font = 'bold 11px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, x, y);
+    // 選択された点は外枠を描画
+    if (selectedId === point.id) {
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
 
-    // Display values to the right of the point
-    ctx.fillStyle = '#000';
-    ctx.font = '11px sans-serif';
+    // ラベルを右横に表示
+    ctx.fillStyle = pointColor;
+    ctx.font = 'bold 12px sans-serif';
     ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    const valueText = `${point.dryBulbTemp.toFixed(1)}°C, ${point.relativeHumidity?.toFixed(0)}%`;
-    ctx.fillText(valueText, x + 15, y - 5);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, x + 8, y);
   });
 }
 
