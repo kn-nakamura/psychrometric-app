@@ -23,6 +23,187 @@ export const ExportDialog = ({
   const [isExporting, setIsExporting] = useState(false);
   const [exportType, setExportType] = useState<'pdf' | 'png' | null>(null);
 
+  const A4_SIZE_MM = { width: 297, height: 210 };
+  const A4_DPI = 300;
+
+  const mmToPx = (mm: number) => Math.round((mm / 25.4) * A4_DPI);
+
+  const formatNumber = (value?: number, digits = 1) =>
+    value === undefined || Number.isNaN(value) ? '-' : value.toFixed(digits);
+
+  const wrapText = (
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number
+  ) => {
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let currentLine = '';
+
+    words.forEach((word) => {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    });
+
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+
+    return lines;
+  };
+
+  const buildA4Canvas = (chartCanvas: HTMLCanvasElement) => {
+    const a4Canvas = document.createElement('canvas');
+    a4Canvas.width = mmToPx(A4_SIZE_MM.width);
+    a4Canvas.height = mmToPx(A4_SIZE_MM.height);
+
+    const ctx = a4Canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('キャンバスの生成に失敗しました');
+    }
+
+    const marginMm = 12;
+    const headerHeightMm = 16;
+    const chartAreaHeightMm = 110;
+    const sectionGapMm = 6;
+    const columnGapMm = 6;
+
+    const marginPx = mmToPx(marginMm);
+    const headerHeightPx = mmToPx(headerHeightMm);
+    const chartAreaHeightPx = mmToPx(chartAreaHeightMm);
+    const sectionGapPx = mmToPx(sectionGapMm);
+    const columnGapPx = mmToPx(columnGapMm);
+
+    const contentWidthPx = a4Canvas.width - marginPx * 2;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, a4Canvas.width, a4Canvas.height);
+
+    ctx.fillStyle = '#111827';
+    ctx.font = `${mmToPx(4)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
+    ctx.fillText(designConditions.project.name || '空気線図', marginPx, marginPx);
+
+    ctx.font = `${mmToPx(2.8)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
+    const infoLines = [
+      `場所: ${designConditions.project.location || '-'}`,
+      `日付: ${designConditions.project.date || '-'}`,
+    ];
+    if (designConditions.project.designer) {
+      infoLines.push(`設計者: ${designConditions.project.designer}`);
+    }
+    infoLines.forEach((line, index) => {
+      ctx.fillText(line, marginPx, marginPx + mmToPx(6) + index * mmToPx(4));
+    });
+
+    const chartWidthPx = contentWidthPx;
+    const chartHeightPx = Math.min(
+      (chartCanvas.height / chartCanvas.width) * chartWidthPx,
+      chartAreaHeightPx
+    );
+    const chartX = marginPx;
+    const chartY = marginPx + headerHeightPx;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(chartCanvas, chartX, chartY, chartWidthPx, chartHeightPx);
+
+    const sectionStartY = chartY + chartHeightPx + sectionGapPx;
+    const sectionBottom = a4Canvas.height - marginPx;
+    const columnWidthPx =
+      (contentWidthPx - columnGapPx * 2) / 3;
+
+    const drawSection = (title: string, lines: string[], startX: number) => {
+      let y = sectionStartY;
+      ctx.fillStyle = '#111827';
+      ctx.font = `${mmToPx(3.2)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
+      ctx.fillText(title, startX, y);
+      y += mmToPx(4.5);
+
+      ctx.font = `${mmToPx(2.6)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
+      lines.forEach((line) => {
+        if (y > sectionBottom) {
+          return;
+        }
+        wrapText(ctx, line, columnWidthPx).forEach((wrappedLine) => {
+          if (y > sectionBottom) {
+            return;
+          }
+          ctx.fillText(wrappedLine, startX, y);
+          y += mmToPx(3.8);
+        });
+      });
+    };
+
+    const designLines = [
+      `外気(夏): 乾球 ${formatNumber(
+        designConditions.outdoor.summer.dryBulbTemp
+      )}℃ / RH ${formatNumber(
+        designConditions.outdoor.summer.relativeHumidity,
+        0
+      )}%`,
+      `外気(冬): 乾球 ${formatNumber(
+        designConditions.outdoor.winter.dryBulbTemp
+      )}℃ / RH ${formatNumber(
+        designConditions.outdoor.winter.relativeHumidity,
+        0
+      )}%`,
+      `室内(夏): 乾球 ${formatNumber(
+        designConditions.indoor.summer.dryBulbTemp
+      )}℃ / RH ${formatNumber(
+        designConditions.indoor.summer.relativeHumidity,
+        0
+      )}%`,
+      `室内(冬): 乾球 ${formatNumber(
+        designConditions.indoor.winter.dryBulbTemp
+      )}℃ / RH ${formatNumber(
+        designConditions.indoor.winter.relativeHumidity,
+        0
+      )}%`,
+      `風量: 供給 ${formatNumber(designConditions.airflow.supplyAir, 0)} m³/h`,
+      `外気 ${formatNumber(designConditions.airflow.outdoorAir, 0)} m³/h`,
+      `還気 ${formatNumber(designConditions.airflow.returnAir, 0)} m³/h`,
+      `排気 ${formatNumber(designConditions.airflow.exhaustAir, 0)} m³/h`,
+    ];
+
+    const statePointLines = statePoints.map(
+      (point, index) =>
+        `${index + 1}. ${point.name}: ${formatNumber(
+          point.dryBulbTemp
+        )}℃, ${formatNumber(point.relativeHumidity, 0)}%RH`
+    );
+
+    const processLines =
+      processes.length > 0
+        ? processes.map((process) => {
+            const fromPoint = statePoints.find(
+              (p) => p.id === process.fromPointId
+            );
+            const toPoint = statePoints.find((p) => p.id === process.toPointId);
+            return `${process.name}: ${fromPoint?.name || '?'} → ${
+              toPoint?.name || '?'
+            }`;
+          })
+        : ['プロセスは登録されていません'];
+
+    drawSection('設計条件', designLines, marginPx);
+    drawSection(
+      '状態点',
+      statePointLines.length > 0 ? statePointLines : ['状態点がありません'],
+      marginPx + columnWidthPx + columnGapPx
+    );
+    drawSection(
+      'プロセス',
+      processLines,
+      marginPx + (columnWidthPx + columnGapPx) * 2
+    );
+
+    return a4Canvas;
+  };
+
   const handleExportPNG = async () => {
     if (!canvasRef.current) {
       alert('チャートが見つかりません');
@@ -34,7 +215,8 @@ export const ExportDialog = ({
 
     try {
       const canvas = canvasRef.current;
-      const dataUrl = canvas.toDataURL('image/png');
+      const exportCanvas = buildA4Canvas(canvas);
+      const dataUrl = exportCanvas.toDataURL('image/png');
 
       // ダウンロードリンクを作成
       const link = document.createElement('a');
@@ -63,121 +245,17 @@ export const ExportDialog = ({
 
     try {
       const canvas = canvasRef.current;
-      const chartImage = canvas.toDataURL('image/png');
+      const exportCanvas = buildA4Canvas(canvas);
+      const chartImage = exportCanvas.toDataURL('image/png');
 
-      // A4横向きでPDFを作成
       const pdf = new jsPDF('landscape', 'mm', 'a4');
-      const pageHeight = pdf.internal.pageSize.getHeight();
-
-      // タイトル
-      pdf.setFontSize(16);
-      pdf.text(designConditions.project.name, 14, 15);
-
-      pdf.setFontSize(10);
-      pdf.text(`Location: ${designConditions.project.location}`, 14, 22);
-      pdf.text(`Date: ${designConditions.project.date}`, 14, 27);
-      if (designConditions.project.designer) {
-        pdf.text(`Designer: ${designConditions.project.designer}`, 14, 32);
-      }
-
-      // チャート画像を追加
-      const chartWidth = 180;
-      const chartHeight = (canvas.height / canvas.width) * chartWidth;
-      pdf.addImage(chartImage, 'PNG', 14, 38, chartWidth, Math.min(chartHeight, 100));
-
-      // 設計条件テーブル
-      const tableY = 145;
-      pdf.setFontSize(12);
-      pdf.text('Design Conditions', 14, tableY);
-
-      pdf.setFontSize(9);
-      let y = tableY + 8;
-
-      // 外気条件
-      pdf.text('Outdoor Conditions:', 14, y);
-      y += 5;
-      pdf.text(
-        `  Summer: ${designConditions.outdoor.summer.dryBulbTemp}C DB, ${designConditions.outdoor.summer.relativeHumidity}% RH`,
-        14,
-        y
-      );
-      y += 4;
-      pdf.text(
-        `  Winter: ${designConditions.outdoor.winter.dryBulbTemp}C DB, ${designConditions.outdoor.winter.relativeHumidity}% RH`,
-        14,
-        y
-      );
-      y += 6;
-
-      // 室内条件
-      pdf.text('Indoor Conditions:', 14, y);
-      y += 5;
-      pdf.text(
-        `  Summer: ${designConditions.indoor.summer.dryBulbTemp}C DB, ${designConditions.indoor.summer.relativeHumidity}% RH`,
-        14,
-        y
-      );
-      y += 4;
-      pdf.text(
-        `  Winter: ${designConditions.indoor.winter.dryBulbTemp}C DB, ${designConditions.indoor.winter.relativeHumidity}% RH`,
-        14,
-        y
-      );
-      y += 6;
-
-      // 風量条件
-      pdf.text('Airflow:', 14, y);
-      y += 5;
-      pdf.text(
-        `  Supply: ${designConditions.airflow.supplyAir} m3/h, OA: ${designConditions.airflow.outdoorAir} m3/h`,
-        14,
-        y
-      );
-
-      // 状態点リスト（右側）
-      const rightColumnX = 150;
-      y = tableY + 8;
-      pdf.setFontSize(12);
-      pdf.text('State Points', rightColumnX, tableY);
-
-      pdf.setFontSize(9);
-      statePoints.forEach((point, index) => {
-        if (y > pageHeight - 20) return;
-        pdf.text(
-          `${index + 1}. ${point.name}: ${point.dryBulbTemp?.toFixed(1)}C, ${point.relativeHumidity?.toFixed(0)}% RH`,
-          rightColumnX,
-          y
-        );
-        y += 4;
-      });
-
-      // プロセスリスト
-      if (processes.length > 0) {
-        y += 4;
-        pdf.setFontSize(12);
-        pdf.text('Processes', rightColumnX, y);
-        y += 6;
-
-        pdf.setFontSize(9);
-        processes.forEach((process) => {
-          if (y > pageHeight - 10) return;
-          const fromPoint = statePoints.find((p) => p.id === process.fromPointId);
-          const toPoint = statePoints.find((p) => p.id === process.toPointId);
-          pdf.text(
-            `${process.name}: ${fromPoint?.name || '?'} -> ${toPoint?.name || '?'}`,
-            rightColumnX,
-            y
-          );
-          y += 4;
-        });
-      }
-
-      // フッター
-      pdf.setFontSize(8);
-      pdf.text(
-        `Generated: ${new Date().toLocaleString()}`,
-        14,
-        pageHeight - 5
+      pdf.addImage(
+        chartImage,
+        'PNG',
+        0,
+        0,
+        A4_SIZE_MM.width,
+        A4_SIZE_MM.height
       );
 
       // PDFを保存
@@ -225,7 +303,9 @@ export const ExportDialog = ({
               )}
               <div>
                 <div className="font-semibold">PDFファイル</div>
-                <div className="text-sm text-blue-100">空気線図と設計条件表を含む</div>
+                <div className="text-sm text-blue-100">
+                  空気線図と設計条件・状態点・プロセスを含む
+                </div>
               </div>
             </button>
 
@@ -241,7 +321,9 @@ export const ExportDialog = ({
               )}
               <div>
                 <div className="font-semibold">PNG画像</div>
-                <div className="text-sm text-gray-600">空気線図のみ</div>
+                <div className="text-sm text-gray-600">
+                  空気線図と状態点・プロセスを含む
+                </div>
               </div>
             </button>
           </div>
