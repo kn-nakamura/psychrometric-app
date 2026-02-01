@@ -165,6 +165,20 @@ export const ProcessList = ({
                         {(Math.abs(capacity.humidityDiff) * process.parameters.airflow * 1.2).toFixed(2)} L/h
                       </div>
                     )}
+                    {(process.type === 'heating' || process.type === 'cooling') && (
+                      <>
+                        {(() => {
+                          const waterTempDiff = process.parameters.waterTempDiff || 7;
+                          const waterFlowRate = (Math.abs(capacity.totalCapacity) * 60) / (4.186 * waterTempDiff);
+                          return (
+                            <>
+                              <div>水温度差: {waterTempDiff.toFixed(1)}℃</div>
+                              <div>水量: {waterFlowRate.toFixed(2)} L/min</div>
+                            </>
+                          );
+                        })()}
+                      </>
+                    )}
                   </div>
                 )}
               </div>

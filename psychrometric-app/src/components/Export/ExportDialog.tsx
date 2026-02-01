@@ -178,14 +178,48 @@ export const ExportDialog = ({
 
     const processLines =
       processes.length > 0
-        ? processes.map((process) => {
+        ? processes.flatMap((process) => {
             const fromPoint = statePoints.find(
               (p) => p.id === process.fromPointId
             );
             const toPoint = statePoints.find((p) => p.id === process.toPointId);
-            return `${process.name}: ${fromPoint?.name || '?'} → ${
-              toPoint?.name || '?'
-            }`;
+            const lines = [`${process.name}: ${fromPoint?.name || '?'} → ${toPoint?.name || '?'}`];
+
+            // Add detailed parameters
+            if (fromPoint && toPoint && fromPoint.enthalpy && toPoint.enthalpy) {
+              const enthalpyDiff = toPoint.enthalpy - fromPoint.enthalpy;
+              const humidityDiff = (toPoint.humidity || 0) - (fromPoint.humidity || 0);
+              const tempDiff = (toPoint.dryBulbTemp || 0) - (fromPoint.dryBulbTemp || 0);
+
+              if (process.parameters.airflow) {
+                const totalCapacity = (enthalpyDiff * process.parameters.airflow * 1.2) / 3600;
+                lines.push(`  全熱: ${Math.abs(totalCapacity).toFixed(2)} kW`);
+                lines.push(`  比エンタルピー差: ${enthalpyDiff.toFixed(2)} kJ/kg'`);
+
+                if (humidityDiff !== 0) {
+                  const moistureAmount = Math.abs(humidityDiff) * process.parameters.airflow * 1.2;
+                  lines.push(`  ${humidityDiff < 0 ? '除湿量' : '加湿量'}: ${moistureAmount.toFixed(2)} L/h`);
+                }
+              }
+
+              if (tempDiff !== 0) {
+                lines.push(`  温度差: ${tempDiff.toFixed(1)}°C`);
+              }
+            }
+
+            if (process.parameters.airflow) {
+              lines.push(`  風量: ${process.parameters.airflow.toFixed(0)} m³/h`);
+            }
+
+            if (process.parameters.capacity) {
+              lines.push(`  能力: ${process.parameters.capacity.toFixed(1)} kW`);
+            }
+
+            if (process.parameters.heatExchangeEfficiency) {
+              lines.push(`  全熱交換効率: ${process.parameters.heatExchangeEfficiency.toFixed(0)}%`);
+            }
+
+            return lines;
           })
         : ['プロセスは登録されていません'];
 

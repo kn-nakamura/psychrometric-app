@@ -521,6 +521,23 @@ export const ProcessDialog = ({
                     />
                   </div>
                 )}
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-600 mb-1">
+                    {type === 'cooling' ? '冷水温度差 [℃]' : '温水温度差 [℃]'}
+                  </label>
+                  <input
+                    type="number"
+                    value={parameters.waterTempDiff ?? 7}
+                    onChange={(e) =>
+                      handleParameterChange('waterTempDiff', parseOptionalNumber(e.target.value))
+                    }
+                    placeholder="7"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    入口と出口の水温度差（デフォルト: 7℃）
+                  </p>
+                </div>
               </>
             )}
 
