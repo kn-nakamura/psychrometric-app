@@ -132,9 +132,6 @@ export class CoolingProcess {
     // 潜熱 [kW]
     const latentHeat = (massFlow * LATENT_HEAT_0C * humidityDiff) / 3600;
     
-    // SHF
-    const SHF = sensibleHeat / coolingCapacity;
-    
     // 計算結果
     const results: ProcessResults = {
       sensibleHeat,

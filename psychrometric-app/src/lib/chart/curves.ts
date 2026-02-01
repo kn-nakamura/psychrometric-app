@@ -1,5 +1,4 @@
 import { PsychrometricCalculator } from '../psychrometric/properties';
-import { StatePointConverter } from '../psychrometric/conversions';
 import { TEMP_RANGE, CHART_CONSTANTS, STANDARD_PRESSURE } from '../psychrometric/constants';
 import { Point } from './rhCurves';
 

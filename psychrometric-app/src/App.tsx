@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useProjectStore } from './store/projectStore';
 import { PsychrometricChart } from './components/Chart/PsychrometricChart';
 import { StatePointConverter } from './lib/psychrometric/conversions';
