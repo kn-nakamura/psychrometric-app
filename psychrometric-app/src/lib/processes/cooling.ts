@@ -1,8 +1,9 @@
 import { StatePoint } from '@/types/psychrometric';
+import type { PsychrometricConstants } from '@/types/calculationSettings';
 import { ProcessResults } from '@/types/process';
 import { StatePointConverter } from '../psychrometric/conversions';
 import { PsychrometricCalculator } from '../psychrometric/properties';
-import { STANDARD_PRESSURE, CP_AIR, LATENT_HEAT_0C } from '../psychrometric/constants';
+import { resolvePsychrometricConstants } from '../psychrometric/constants';
 
 /**
  * 冷却・除湿プロセスの計算
@@ -29,14 +30,18 @@ export class CoolingProcess {
     coolingCapacity: number,
     SHF: number,
     airflow: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): { toPoint: Partial<StatePoint>; results: ProcessResults } {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     
     // 質量流量を計算 [kg/h]
     const density = PsychrometricCalculator.airDensity(
       fromPoint.dryBulbTemp!,
       fromPoint.humidity!,
-      pressure
+      effectivePressure,
+      resolved
     );
     const massFlow = airflow * density;
     
@@ -50,12 +55,12 @@ export class CoolingProcess {
     // 温度差 [°C]
     // 顕熱: Q_s = cp × Δt × G
     // Δt = Q_s / (cp × G) × 3600
-    const temperatureDiff = (sensibleHeat * 3600) / (CP_AIR * massFlow);
+    const temperatureDiff = (sensibleHeat * 3600) / (resolved.cpAir * massFlow);
     
     // 絶対湿度差 [kg/kg']
     // 潜熱: Q_l = L0 × Δx × G
     // Δx = Q_l / (L0 × G) × 3600
-    const humidityDiff = (latentHeat * 3600) / (LATENT_HEAT_0C * massFlow);
+    const humidityDiff = (latentHeat * 3600) / (resolved.latentHeat0c * massFlow);
     
     // 出口状態
     const toTemp = fromPoint.dryBulbTemp! - temperatureDiff;
@@ -65,7 +70,8 @@ export class CoolingProcess {
     const toPoint = StatePointConverter.fromDryBulbAndHumidity(
       toTemp,
       toHumidity,
-      pressure
+      effectivePressure,
+      resolved
     );
     
     // 計算結果
@@ -96,14 +102,18 @@ export class CoolingProcess {
     toTemp: number,
     toRH: number,
     airflow: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): { toPoint: Partial<StatePoint>; results: ProcessResults } {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     
     // 出口状態点を計算
     const toPoint = StatePointConverter.fromDryBulbAndRH(
       toTemp,
       toRH,
-      pressure
+      effectivePressure,
+      resolved
     );
     
     // エンタルピー差
@@ -119,7 +129,8 @@ export class CoolingProcess {
     const density = PsychrometricCalculator.airDensity(
       fromPoint.dryBulbTemp!,
       fromPoint.humidity!,
-      pressure
+      effectivePressure,
+      resolved
     );
     const massFlow = airflow * density;
     
@@ -127,10 +138,10 @@ export class CoolingProcess {
     const coolingCapacity = (massFlow * enthalpyDiff) / 3600;
     
     // 顕熱 [kW]
-    const sensibleHeat = (massFlow * CP_AIR * temperatureDiff) / 3600;
+    const sensibleHeat = (massFlow * resolved.cpAir * temperatureDiff) / 3600;
     
     // 潜熱 [kW]
-    const latentHeat = (massFlow * LATENT_HEAT_0C * humidityDiff) / 3600;
+    const latentHeat = (massFlow * resolved.latentHeat0c * humidityDiff) / 3600;
     
     // 計算結果
     const results: ProcessResults = {
@@ -160,14 +171,18 @@ export class CoolingProcess {
     apparatusDewPoint: number,
     bypassFactor: number,
     airflow: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): { toPoint: Partial<StatePoint>; results: ProcessResults } {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     
     // 装置露点における飽和状態
     const adpState = StatePointConverter.fromDryBulbAndRH(
       apparatusDewPoint,
       100,
-      pressure
+      effectivePressure,
+      resolved
     );
     
     // バイパスファクターを考慮した出口状態
@@ -184,7 +199,8 @@ export class CoolingProcess {
     const toPoint = StatePointConverter.fromEnthalpyAndHumidity(
       toEnthalpy,
       toHumidity,
-      pressure
+      effectivePressure,
+      resolved
     );
     
     // エンタルピー差
@@ -194,7 +210,8 @@ export class CoolingProcess {
     const density = PsychrometricCalculator.airDensity(
       fromPoint.dryBulbTemp!,
       fromPoint.humidity!,
-      pressure
+      effectivePressure,
+      resolved
     );
     const massFlow = airflow * density;
     
@@ -206,8 +223,8 @@ export class CoolingProcess {
     const humidityDiff = fromPoint.humidity! - toPoint.humidity!;
     
     // 顕熱・潜熱
-    const sensibleHeat = (massFlow * CP_AIR * temperatureDiff) / 3600;
-    const latentHeat = (massFlow * LATENT_HEAT_0C * humidityDiff) / 3600;
+    const sensibleHeat = (massFlow * resolved.cpAir * temperatureDiff) / 3600;
+    const latentHeat = (massFlow * resolved.latentHeat0c * humidityDiff) / 3600;
     
     const results: ProcessResults = {
       sensibleHeat,

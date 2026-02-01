@@ -1,8 +1,9 @@
 import { StatePoint } from '@/types/psychrometric';
+import type { PsychrometricConstants } from '@/types/calculationSettings';
 import { ProcessResults } from '@/types/process';
 import { StatePointConverter } from '../psychrometric/conversions';
 import { PsychrometricCalculator } from '../psychrometric/properties';
-import { STANDARD_PRESSURE, CP_VAPOR, LATENT_HEAT_0C } from '../psychrometric/constants';
+import { resolvePsychrometricConstants } from '../psychrometric/constants';
 
 /**
  * 加湿プロセスの計算
@@ -33,14 +34,18 @@ export class HumidifyingProcess {
     humidifyingCapacity: number,
     airflow: number,
     waterTemp: number = 15, // 水温 [°C]
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): { toPoint: Partial<StatePoint>; results: ProcessResults } {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     
     // 質量流量を計算
     const density = PsychrometricCalculator.airDensity(
       fromPoint.dryBulbTemp!,
       fromPoint.humidity!,
-      pressure
+      effectivePressure,
+      resolved
     );
     const massFlow = airflow * density; // [kg/h]
     
@@ -60,7 +65,8 @@ export class HumidifyingProcess {
     const toPoint = StatePointConverter.fromEnthalpyAndHumidity(
       toEnthalpy,
       toHumidity,
-      pressure
+      effectivePressure,
+      resolved
     );
     
     // 温度変化
@@ -99,14 +105,18 @@ export class HumidifyingProcess {
     humidifyingCapacity: number,
     airflow: number,
     steamTemp: number = 100,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): { toPoint: Partial<StatePoint>; results: ProcessResults } {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     
     // 質量流量を計算
     const density = PsychrometricCalculator.airDensity(
       fromPoint.dryBulbTemp!,
       fromPoint.humidity!,
-      pressure
+      effectivePressure,
+      resolved
     );
     const massFlow = airflow * density; // [kg/h]
     
@@ -116,7 +126,7 @@ export class HumidifyingProcess {
     
     // 蒸気のエンタルピー [kJ/kg]
     // h_steam = L0 + cp,v × t_steam
-    const steamEnthalpy = LATENT_HEAT_0C + CP_VAPOR * steamTemp;
+    const steamEnthalpy = resolved.latentHeat0c + resolved.cpVapor * steamTemp;
     
     // 空気のエンタルピー増加
     const enthalpyIncrease = steamEnthalpy * humidityIncrease;
@@ -126,7 +136,8 @@ export class HumidifyingProcess {
     const toPoint = StatePointConverter.fromEnthalpyAndHumidity(
       toEnthalpy,
       toHumidity,
-      pressure
+      effectivePressure,
+      resolved
     );
     
     // 温度変化
@@ -163,14 +174,18 @@ export class HumidifyingProcess {
     targetRH: number,
     airflow: number,
     humidifierType: 'water' | 'steam' = 'water',
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): { capacity: number; toPoint: Partial<StatePoint> } {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     
     // 断熱加湿の場合、エンタルピー一定で相対湿度を上げる
     const targetHumidity = PsychrometricCalculator.absoluteHumidity(
       fromPoint.dryBulbTemp!,
       targetRH,
-      pressure
+      effectivePressure,
+      resolved
     );
     
     // より正確には、エンタルピー一定で絶対湿度を増やした時の温度を求める
@@ -181,14 +196,16 @@ export class HumidifyingProcess {
       toPoint = StatePointConverter.fromEnthalpyAndHumidity(
         fromPoint.enthalpy!,
         targetHumidity,
-        pressure
+        effectivePressure,
+        resolved
       );
     } else {
       // 蒸気加湿：温度がほぼ一定（若干上昇）
       toPoint = StatePointConverter.fromDryBulbAndHumidity(
         fromPoint.dryBulbTemp!,
         targetHumidity,
-        pressure
+        effectivePressure,
+        resolved
       );
     }
     
@@ -196,7 +213,8 @@ export class HumidifyingProcess {
     const density = PsychrometricCalculator.airDensity(
       fromPoint.dryBulbTemp!,
       fromPoint.humidity!,
-      pressure
+      effectivePressure,
+      resolved
     );
     const massFlow = airflow * density;
     const capacity = massFlow * (targetHumidity - fromPoint.humidity!);
@@ -218,14 +236,18 @@ export class HumidifyingProcess {
     fromPoint: StatePoint,
     _targetRH: number,
     efficiency: number = 80,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): Partial<StatePoint> {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     
     // 理論的な飽和状態（エンタルピー一定、RH100%）
     const saturatedState = StatePointConverter.fromDryBulbAndRH(
       fromPoint.wetBulbTemp!, // 湿球温度まで冷却される
       100,
-      pressure
+      effectivePressure,
+      resolved
     );
     
     // 効率を考慮した実際の状態
@@ -238,7 +260,8 @@ export class HumidifyingProcess {
     const toPoint = StatePointConverter.fromEnthalpyAndHumidity(
       fromPoint.enthalpy!,
       toHumidity,
-      pressure
+      effectivePressure,
+      resolved
     );
     
     return toPoint;

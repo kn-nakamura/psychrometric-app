@@ -1,8 +1,9 @@
 import { StatePoint } from '@/types/psychrometric';
+import type { PsychrometricConstants } from '@/types/calculationSettings';
 import { ProcessResults } from '@/types/process';
 import { StatePointConverter } from '../psychrometric/conversions';
 import { PsychrometricCalculator } from '../psychrometric/properties';
-import { STANDARD_PRESSURE } from '../psychrometric/constants';
+import { resolvePsychrometricConstants } from '../psychrometric/constants';
 
 /**
  * 混合プロセスの計算
@@ -29,21 +30,26 @@ export class MixingProcess {
     airflow1: number,
     point2: StatePoint,
     airflow2: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): { mixedPoint: Partial<StatePoint>; results: ProcessResults } {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     
     // 質量流量を計算
     const density1 = PsychrometricCalculator.airDensity(
       point1.dryBulbTemp!,
       point1.humidity!,
-      pressure
+      effectivePressure,
+      resolved
     );
     const massFlow1 = airflow1 * density1; // [kg/h]
     
     const density2 = PsychrometricCalculator.airDensity(
       point2.dryBulbTemp!,
       point2.humidity!,
-      pressure
+      effectivePressure,
+      resolved
     );
     const massFlow2 = airflow2 * density2; // [kg/h]
     
@@ -61,7 +67,8 @@ export class MixingProcess {
     const mixedPoint = StatePointConverter.fromEnthalpyAndHumidity(
       mixedEnthalpy,
       mixedHumidity,
-      pressure
+      effectivePressure,
+      resolved
     );
     
     // 計算結果
@@ -86,8 +93,11 @@ export class MixingProcess {
    */
   static mixMultipleStreams(
     streams: Array<{ point: StatePoint; airflow: number }>,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): Partial<StatePoint> {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     
     if (streams.length === 0) {
       throw new Error('混合する空気流が指定されていません');
@@ -102,7 +112,8 @@ export class MixingProcess {
       const density = PsychrometricCalculator.airDensity(
         point.dryBulbTemp!,
         point.humidity!,
-        pressure
+        effectivePressure,
+        resolved
       );
       return airflow * density;
     });
@@ -123,7 +134,8 @@ export class MixingProcess {
     return StatePointConverter.fromEnthalpyAndHumidity(
       mixedEnthalpy,
       mixedHumidity,
-      pressure
+      effectivePressure,
+      resolved
     );
   }
   
@@ -142,8 +154,11 @@ export class MixingProcess {
     point1: StatePoint,
     point2: StatePoint,
     ratio1: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): Partial<StatePoint> {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     
     const ratio2 = 1 - ratio1;
     
@@ -157,7 +172,8 @@ export class MixingProcess {
     return StatePointConverter.fromEnthalpyAndHumidity(
       mixedEnthalpy,
       mixedHumidity,
-      pressure
+      effectivePressure,
+      resolved
     );
   }
 

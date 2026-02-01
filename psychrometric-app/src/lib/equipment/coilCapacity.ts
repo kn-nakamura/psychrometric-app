@@ -1,6 +1,7 @@
 import { StatePoint } from '@/types/psychrometric';
+import type { PsychrometricConstants } from '@/types/calculationSettings';
 import { PsychrometricCalculator } from '../psychrometric/properties';
-import { STANDARD_PRESSURE, CP_AIR, LATENT_HEAT_0C } from '../psychrometric/constants';
+import { resolvePsychrometricConstants } from '../psychrometric/constants';
 
 /**
  * コイル能力計算
@@ -24,7 +25,8 @@ export class CoilCapacityCalculator {
     inletPoint: StatePoint,
     outletPoint: StatePoint,
     airflow: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): {
     totalCapacity: number;      // 全熱容量 [kW]
     sensibleCapacity: number;   // 顕熱容量 [kW]
@@ -37,10 +39,13 @@ export class CoilCapacityCalculator {
   } {
     
     // 質量流量を計算
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     const density = PsychrometricCalculator.airDensity(
       inletPoint.dryBulbTemp!,
       inletPoint.humidity!,
-      pressure
+      effectivePressure,
+      resolved
     );
     const massFlow = airflow * density; // [kg/h]
     
@@ -59,11 +64,11 @@ export class CoilCapacityCalculator {
     
     // 顕熱容量 [kW]
     // Q_s = G × cp × Δt / 3600
-    const sensibleCapacity = (massFlow * CP_AIR * temperatureDiff) / 3600;
+    const sensibleCapacity = (massFlow * resolved.cpAir * temperatureDiff) / 3600;
     
     // 潜熱容量 [kW]
     // Q_l = G × L0 × Δx / 3600
-    const latentCapacity = (massFlow * LATENT_HEAT_0C * humidityDiff) / 3600;
+    const latentCapacity = (massFlow * resolved.latentHeat0c * humidityDiff) / 3600;
     
     // 顕熱比
     const SHF = Math.abs(totalCapacity) > 0.001 
@@ -99,7 +104,8 @@ export class CoilCapacityCalculator {
     airflow: number,
     waterFlowRate?: number,
     inletWaterTemp?: number,
-    outletWaterTemp?: number
+    outletWaterTemp?: number,
+    constants?: Partial<PsychrometricConstants>
   ): {
     airSideCapacity: number;    // 空気側熱量 [kW]
     waterSideCapacity?: number; // 水側熱量 [kW]
@@ -110,7 +116,7 @@ export class CoilCapacityCalculator {
     condensateRemoval: number;  // 除湿水量 [L/h]
   } {
     
-    const airSide = this.calculate(inletPoint, outletPoint, airflow);
+    const airSide = this.calculate(inletPoint, outletPoint, airflow, undefined, constants);
     
     // 除湿水量 [L/h]
     // 密度を1kg/L と仮定
@@ -162,14 +168,15 @@ export class CoilCapacityCalculator {
     airflow: number,
     waterFlowRate?: number,
     inletWaterTemp?: number,
-    outletWaterTemp?: number
+    outletWaterTemp?: number,
+    constants?: Partial<PsychrometricConstants>
   ): {
     airSideCapacity: number;    // 空気側熱量 [kW]
     waterSideCapacity?: number; // 水側熱量 [kW]
     heatBalance?: number;       // 熱収支差 [%]
   } {
     
-    const airSide = this.calculate(inletPoint, outletPoint, airflow);
+    const airSide = this.calculate(inletPoint, outletPoint, airflow, undefined, constants);
     
     let waterSideCapacity: number | undefined;
     let heatBalance: number | undefined;

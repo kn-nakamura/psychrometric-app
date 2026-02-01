@@ -1,14 +1,5 @@
-import {
-  STANDARD_PRESSURE,
-  CP_AIR,
-  CP_VAPOR,
-  LATENT_HEAT_0C,
-  MOLECULAR_WEIGHT_RATIO,
-  R_AIR,
-  WET_BULB_COEFFICIENT,
-  CONVERGENCE_TOLERANCE,
-  MAX_ITERATIONS,
-} from './constants';
+import type { PsychrometricConstants } from '@/types/calculationSettings';
+import { resolvePsychrometricConstants } from './constants';
 import {
   saturationPressure,
   saturationPressureDerivative,
@@ -35,13 +26,17 @@ export class PsychrometricCalculator {
   static absoluteHumidity(
     temp: number,
     rh: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): number {
-    const pv = vaporPressure(temp, rh);
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
+    const pv = vaporPressure(temp, rh, resolved);
     
     // x = ε × Pv / (P - Pv)
     // ε = 0.622 (分子量比)
-    const humidity = MOLECULAR_WEIGHT_RATIO * pv / (pressure - pv);
+    const humidity =
+      resolved.molecularWeightRatio * pv / (effectivePressure - pv);
     
     return humidity;
   }
@@ -57,13 +52,16 @@ export class PsychrometricCalculator {
   static relativeHumidity(
     temp: number,
     humidity: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): number {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     // x = ε × Pv / (P - Pv) より
     // Pv = x × P / (ε + x)
-    const pv = humidity * pressure / (MOLECULAR_WEIGHT_RATIO + humidity);
+    const pv = humidity * effectivePressure / (resolved.molecularWeightRatio + humidity);
     
-    return calcRelativeHumidity(temp, pv);
+    return calcRelativeHumidity(temp, pv, resolved);
   }
   
   /**
@@ -78,8 +76,14 @@ export class PsychrometricCalculator {
    * cp,v: 水蒸気の定圧比熱 = 1.805 kJ/(kg·K)
    * L0: 0°Cにおける蒸発潜熱 = 2501 kJ/kg
    */
-  static enthalpy(temp: number, humidity: number): number {
-    const h = CP_AIR * temp + humidity * (LATENT_HEAT_0C + CP_VAPOR * temp);
+  static enthalpy(
+    temp: number,
+    humidity: number,
+    constants?: Partial<PsychrometricConstants>
+  ): number {
+    const resolved = resolvePsychrometricConstants(constants);
+    const h =
+      resolved.cpAir * temp + humidity * (resolved.latentHeat0c + resolved.cpVapor * temp);
     return h;
   }
   
@@ -90,14 +94,19 @@ export class PsychrometricCalculator {
    * @param humidity 絶対湿度 [kg/kg']
    * @returns 乾球温度 [°C]
    */
-  static temperatureFromEnthalpy(enthalpy: number, humidity: number): number {
+  static temperatureFromEnthalpy(
+    enthalpy: number,
+    humidity: number,
+    constants?: Partial<PsychrometricConstants>
+  ): number {
     // h = cp,a × t + x × (L0 + cp,v × t)
     // h = cp,a × t + x × L0 + x × cp,v × t
     // h - x × L0 = t × (cp,a + x × cp,v)
     // t = (h - x × L0) / (cp,a + x × cp,v)
     
-    const temp = (enthalpy - humidity * LATENT_HEAT_0C) / 
-                 (CP_AIR + humidity * CP_VAPOR);
+    const resolved = resolvePsychrometricConstants(constants);
+    const temp = (enthalpy - humidity * resolved.latentHeat0c) /
+                 (resolved.cpAir + humidity * resolved.cpVapor);
     
     return temp;
   }
@@ -118,34 +127,41 @@ export class PsychrometricCalculator {
   static wetBulbTemperature(
     dryTemp: number,
     humidity: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): number {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     // 初期推定値（露点温度を使用）
-    const pv = humidity * pressure / (MOLECULAR_WEIGHT_RATIO + humidity);
-    let twb = dewPointTemperature(pv);
+    const pv =
+      humidity * effectivePressure / (resolved.molecularWeightRatio + humidity);
+    let twb = dewPointTemperature(pv, resolved);
     
     // Newton-Raphson法で反復計算
-    for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const ps_wb = saturationPressure(twb);
-      const dps_dt = saturationPressureDerivative(twb);
+    for (let i = 0; i < resolved.maxIterations; i++) {
+      const ps_wb = saturationPressure(twb, resolved);
+      const dps_dt = saturationPressureDerivative(twb, resolved);
       
       // 熱収支式
       const f = (ps_wb - pv) - 
                 (dryTemp - twb) / 
-                (WET_BULB_COEFFICIENT * (LATENT_HEAT_0C + CP_VAPOR * twb));
+                (resolved.wetBulbCoefficient *
+                  (resolved.latentHeat0c + resolved.cpVapor * twb));
       
       // 微分
       const df = dps_dt + 
-                 1 / (WET_BULB_COEFFICIENT * (LATENT_HEAT_0C + CP_VAPOR * twb)) +
-                 (dryTemp - twb) * CP_VAPOR / 
-                 (WET_BULB_COEFFICIENT * Math.pow(LATENT_HEAT_0C + CP_VAPOR * twb, 2));
+                 1 / (resolved.wetBulbCoefficient *
+                  (resolved.latentHeat0c + resolved.cpVapor * twb)) +
+                 (dryTemp - twb) * resolved.cpVapor /
+                 (resolved.wetBulbCoefficient *
+                  Math.pow(resolved.latentHeat0c + resolved.cpVapor * twb, 2));
       
       // 更新
       const delta = f / df;
       twb -= delta;
       
       // 収束判定
-      if (Math.abs(delta) < CONVERGENCE_TOLERANCE) {
+      if (Math.abs(delta) < resolved.convergenceTolerance) {
         break;
       }
     }
@@ -164,19 +180,24 @@ export class PsychrometricCalculator {
   static humidityFromWetBulb(
     dryTemp: number,
     wetTemp: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): number {
-    const ps_wb = saturationPressure(wetTemp);
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
+    const ps_wb = saturationPressure(wetTemp, resolved);
     
     // 簡易式（Carrier式）
     // x = ((2501 - 2.381 × twb) × x_wb - 1.006 × (t - twb)) / (2501 + 1.805 × t - 4.186 × twb)
     // x_wb: 湿球温度における飽和絶対湿度
     
-    const x_wb = MOLECULAR_WEIGHT_RATIO * ps_wb / (pressure - ps_wb);
+    const x_wb =
+      resolved.molecularWeightRatio * ps_wb / (effectivePressure - ps_wb);
     
     const humidity = 
-      ((LATENT_HEAT_0C - 2.381 * wetTemp) * x_wb - CP_AIR * (dryTemp - wetTemp)) /
-      (LATENT_HEAT_0C + CP_VAPOR * dryTemp - 4.186 * wetTemp);
+      ((resolved.latentHeat0c - 2.381 * wetTemp) * x_wb -
+        resolved.cpAir * (dryTemp - wetTemp)) /
+      (resolved.latentHeat0c + resolved.cpVapor * dryTemp - 4.186 * wetTemp);
     
     return Math.max(0, humidity); // 負の値にならないように
   }
@@ -192,10 +213,14 @@ export class PsychrometricCalculator {
   static dewPoint(
     _temp: number,
     humidity: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): number {
-    const pv = humidity * pressure / (MOLECULAR_WEIGHT_RATIO + humidity);
-    return dewPointTemperature(pv);
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
+    const pv =
+      humidity * effectivePressure / (resolved.molecularWeightRatio + humidity);
+    return dewPointTemperature(pv, resolved);
   }
   
   /**
@@ -213,12 +238,15 @@ export class PsychrometricCalculator {
   static specificVolume(
     temp: number,
     humidity: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): number {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     const T = temp + 273.15; // [K]
     
     // v = R × T × (1 + 1.608 × x) / P
-    const volume = R_AIR * T * (1 + 1.608 * humidity) / pressure;
+    const volume = resolved.rAir * T * (1 + 1.608 * humidity) / effectivePressure;
     
     return volume;
   }
@@ -234,9 +262,10 @@ export class PsychrometricCalculator {
   static airDensity(
     temp: number,
     humidity: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): number {
-    const volume = this.specificVolume(temp, humidity, pressure);
+    const volume = this.specificVolume(temp, humidity, pressure, constants);
     return 1 / volume;
   }
 }

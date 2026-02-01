@@ -1,8 +1,9 @@
 import { StatePoint } from '@/types/psychrometric';
+import type { PsychrometricConstants } from '@/types/calculationSettings';
 import { ProcessResults } from '@/types/process';
 import { StatePointConverter } from '../psychrometric/conversions';
 import { PsychrometricCalculator } from '../psychrometric/properties';
-import { STANDARD_PRESSURE } from '../psychrometric/constants';
+import { resolvePsychrometricConstants } from '../psychrometric/constants';
 
 /**
  * 全熱交換プロセスの計算
@@ -44,8 +45,11 @@ export class HeatExchangeProcess {
     eaAirflowIn: number,
     eaAirflowOut: number,
     efficiency: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): { supplyAir: Partial<StatePoint>; results: ProcessResults } {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     
     // 風量比による効率補正
     const effectiveSupplyAirflow = this.getEffectiveAirflow(oaAirflowIn, oaAirflowOut);
@@ -71,14 +75,16 @@ export class HeatExchangeProcess {
     const supplyAir = StatePointConverter.fromEnthalpyAndHumidity(
       saEnthalpy,
       saHumidity,
-      pressure
+      effectivePressure,
+      resolved
     );
     
     // 交換熱量を計算
     const density = PsychrometricCalculator.airDensity(
       outdoorAir.dryBulbTemp!,
       outdoorAir.humidity!,
-      pressure
+      effectivePressure,
+      resolved
     );
     const massFlow = effectiveSupplyAirflow * density;
     
@@ -121,8 +127,11 @@ export class HeatExchangeProcess {
     eaAirflowOut: number,
     sensibleEfficiency: number,
     latentEfficiency: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): { supplyAir: Partial<StatePoint>; results: ProcessResults } {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     
     // 風量比による効率補正
     const effectiveSupplyAirflow = this.getEffectiveAirflow(oaAirflowIn, oaAirflowOut);
@@ -147,14 +156,16 @@ export class HeatExchangeProcess {
     const supplyAir = StatePointConverter.fromDryBulbAndHumidity(
       saTemp,
       saHumidity,
-      pressure
+      effectivePressure,
+      resolved
     );
     
     // 交換熱量を計算
     const density = PsychrometricCalculator.airDensity(
       outdoorAir.dryBulbTemp!,
       outdoorAir.humidity!,
-      pressure
+      effectivePressure,
+      resolved
     );
     const massFlow = effectiveSupplyAirflow * density;
     
@@ -163,8 +174,8 @@ export class HeatExchangeProcess {
     const enthalpyDiff = supplyAir.enthalpy! - outdoorAir.enthalpy!;
     
     // 顕熱・潜熱を個別に計算
-    const sensibleHeat = (massFlow * 1.006 * temperatureDiff) / 3600; // [kW]
-    const latentHeat = (massFlow * 2501 * humidityDiff) / 3600;       // [kW]
+    const sensibleHeat = (massFlow * resolved.cpAir * temperatureDiff) / 3600; // [kW]
+    const latentHeat = (massFlow * resolved.latentHeat0c * humidityDiff) / 3600;       // [kW]
     
     const results: ProcessResults = {
       sensibleHeat,
@@ -197,7 +208,8 @@ export class HeatExchangeProcess {
     eaAirflowIn: number,
     eaAirflowOut: number,
     efficiency: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): {
     supplyAir: Partial<StatePoint>;
     exhaustOut: Partial<StatePoint>;
@@ -213,7 +225,8 @@ export class HeatExchangeProcess {
       eaAirflowIn,
       eaAirflowOut,
       efficiency,
-      pressure
+      pressure,
+      constants
     );
     
     // 排気側（室内空気→処理後排気）
@@ -238,7 +251,8 @@ export class HeatExchangeProcess {
     const exhaustOut = StatePointConverter.fromEnthalpyAndHumidity(
       eoEnthalpy,
       eoHumidity,
-      pressure
+      pressure,
+      constants
     );
     
     return { supplyAir, exhaustOut, results };

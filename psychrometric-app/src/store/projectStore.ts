@@ -2,6 +2,10 @@ import { create } from 'zustand';
 import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
 import { DesignConditions } from '@/types/designConditions';
+import {
+  DEFAULT_PSYCHROMETRIC_CONSTANTS,
+  resolvePsychrometricConstants,
+} from '@/lib/psychrometric/constants';
 
 interface ProjectState {
   // 設計条件
@@ -85,6 +89,9 @@ const initialDesignConditions: DesignConditions = {
     exhaustAirName: '排気量',
   },
   equipment: {},
+  calculation: {
+    constants: { ...DEFAULT_PSYCHROMETRIC_CONSTANTS },
+  },
 };
 
 export const useProjectStore = create<ProjectState>((set) => ({
@@ -102,6 +109,24 @@ export const useProjectStore = create<ProjectState>((set) => ({
       designConditions: {
         ...state.designConditions,
         ...conditions,
+        calculation: conditions.calculation
+          ? {
+              ...state.designConditions.calculation,
+              ...conditions.calculation,
+              constants: resolvePsychrometricConstants({
+                ...state.designConditions.calculation.constants,
+                ...conditions.calculation.constants,
+                tetensWater: {
+                  ...state.designConditions.calculation.constants.tetensWater,
+                  ...conditions.calculation.constants.tetensWater,
+                },
+                tetensIce: {
+                  ...state.designConditions.calculation.constants.tetensIce,
+                  ...conditions.calculation.constants.tetensIce,
+                },
+              }),
+            }
+          : state.designConditions.calculation,
       },
     })),
   

@@ -1,8 +1,9 @@
 import { StatePoint } from '@/types/psychrometric';
+import type { PsychrometricConstants } from '@/types/calculationSettings';
 import { ProcessResults } from '@/types/process';
 import { StatePointConverter } from '../psychrometric/conversions';
 import { PsychrometricCalculator } from '../psychrometric/properties';
-import { STANDARD_PRESSURE } from '../psychrometric/constants';
+import { resolvePsychrometricConstants } from '../psychrometric/constants';
 
 /**
  * 加熱プロセスの計算
@@ -27,14 +28,18 @@ export class HeatingProcess {
     fromPoint: StatePoint,
     heatingCapacity: number,
     airflow: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): { toPoint: Partial<StatePoint>; results: ProcessResults } {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     
     // 質量流量を計算 [kg/h]
     const density = PsychrometricCalculator.airDensity(
       fromPoint.dryBulbTemp!,
       fromPoint.humidity!,
-      pressure
+      effectivePressure,
+      resolved
     );
     const massFlow = airflow * density; // [kg/h]
     
@@ -53,7 +58,8 @@ export class HeatingProcess {
     const toPoint = StatePointConverter.fromEnthalpyAndHumidity(
       toEnthalpy,
       toHumidity,
-      pressure
+      effectivePressure,
+      resolved
     );
     
     // 温度差
@@ -85,8 +91,11 @@ export class HeatingProcess {
     fromPoint: StatePoint,
     toTemp: number,
     airflow: number,
-    pressure: number = STANDARD_PRESSURE
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
   ): { toPoint: Partial<StatePoint>; results: ProcessResults } {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
     
     // 絶対湿度は変化しない
     const toHumidity = fromPoint.humidity!;
@@ -95,7 +104,8 @@ export class HeatingProcess {
     const toPoint = StatePointConverter.fromDryBulbAndHumidity(
       toTemp,
       toHumidity,
-      pressure
+      effectivePressure,
+      resolved
     );
     
     // エンタルピー差
@@ -105,7 +115,8 @@ export class HeatingProcess {
     const density = PsychrometricCalculator.airDensity(
       fromPoint.dryBulbTemp!,
       fromPoint.humidity!,
-      pressure
+      effectivePressure,
+      resolved
     );
     const massFlow = airflow * density;
     

@@ -1,3 +1,5 @@
+import { CalculationSettings } from './calculationSettings';
+
 /**
  * プロジェクト情報
  */
@@ -101,4 +103,5 @@ export interface DesignConditions {
   indoor: IndoorConditions;
   airflow: AirflowConditions;
   equipment: EquipmentSpecifications;
+  calculation: CalculationSettings;
 }
