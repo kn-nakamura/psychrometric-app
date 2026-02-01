@@ -49,8 +49,8 @@ export interface ProcessParameters {
   
   // 混合
   mixingRatios?: {
-    stream1: { pointId: string; ratio: number };
-    stream2: { pointId: string; ratio: number };
+    stream1: { pointId: string; airflow?: number; ratio?: number };
+    stream2: { pointId: string; airflow?: number; ratio?: number };
   };
   
   // 全熱交換

@@ -167,7 +167,8 @@ export class MixingProcess {
    *
    * @param stream1 外気などの混合流1
    * @param stream2 混合流2（還気など）
-   * @param ratio1 stream1の比率 (0-1)
+   * @param airflow1 stream1の風量 [m³/h]
+   * @param airflow2 stream2の風量 [m³/h]
    * @param heatExchangeEfficiency 全熱交換効率 [%]
    * @param exhaustPoint 排気側状態点
    * @param pressure 大気圧 [kPa]
@@ -176,27 +177,26 @@ export class MixingProcess {
   static mixWithHeatExchange(
     stream1: StatePoint,
     stream2: StatePoint,
-    ratio1: number,
+    airflow1: number,
+    airflow2: number,
     heatExchangeEfficiency: number,
     exhaustPoint: StatePoint,
     pressure: number = STANDARD_PRESSURE
   ): { mixedPoint: Partial<StatePoint>; results: ProcessResults } {
-    const normalizedRatio1 = Math.max(0, Math.min(1, ratio1));
-    const ratio2 = Math.max(0, Math.min(1, 1 - normalizedRatio1));
     const { supplyAir } = HeatExchangeProcess.calculateTotalHeat(
       stream1,
       exhaustPoint,
-      normalizedRatio1,
-      ratio2,
+      airflow1,
+      airflow2,
       heatExchangeEfficiency,
       pressure
     );
 
     return this.mixTwoStreams(
       supplyAir as StatePoint,
-      normalizedRatio1,
+      airflow1,
       stream2,
-      ratio2,
+      airflow2,
       pressure
     );
   }

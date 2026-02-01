@@ -49,9 +49,9 @@ export const StatePointList = () => {
                 <span
                   className={`text-xs px-2 py-0.5 rounded ${
                     point.season === 'summer'
-                      ? 'bg-orange-100 text-orange-700'
-                      : point.season === 'winter'
                       ? 'bg-blue-100 text-blue-700'
+                      : point.season === 'winter'
+                      ? 'bg-red-100 text-red-700'
                       : 'bg-purple-100 text-purple-700'
                   }`}
                 >
