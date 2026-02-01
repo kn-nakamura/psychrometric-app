@@ -107,9 +107,12 @@ export const ProcessDialog = ({
     if (type !== 'heatExchange') return;
     setParameters((prev) => {
       const baseAirflow = prev.airflow ?? 1000;
-      const supplyAirflowIn = prev.supplyAirflowIn ?? baseAirflow;
+      const defaultSupplyAirflow = designConditions.airflow.outdoorAir ?? baseAirflow;
+      const defaultExhaustAirflow =
+        designConditions.airflow.exhaustAir ?? designConditions.airflow.outdoorAir ?? baseAirflow;
+      const supplyAirflowIn = prev.supplyAirflowIn ?? defaultSupplyAirflow;
       const supplyAirflowOut = prev.supplyAirflowOut ?? supplyAirflowIn;
-      const exhaustAirflowIn = prev.exhaustAirflowIn ?? baseAirflow;
+      const exhaustAirflowIn = prev.exhaustAirflowIn ?? defaultExhaustAirflow;
       const exhaustAirflowOut = prev.exhaustAirflowOut ?? exhaustAirflowIn;
       const exhaustPointId =
         prev.exhaustPointId ??
@@ -124,8 +127,8 @@ export const ProcessDialog = ({
           : undefined);
       const resolvedExhaust =
         exhaustPoint?.airflow ??
-        (exhaustPoint?.airflowSource
-          ? designConditions.airflow[exhaustPoint.airflowSource]
+        (exhaustPoint?.airflowSource === 'exhaustAir'
+          ? designConditions.airflow.exhaustAir
           : undefined);
       return {
         ...prev,

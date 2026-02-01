@@ -453,16 +453,25 @@ function App() {
       const pressure = designConditions.outdoor.pressure ?? STANDARD_PRESSURE;
       const efficiency = processData.parameters.heatExchangeEfficiency ?? 0;
       const resolvedSupplyAirflow = resolvePointAirflow(outdoorPoint);
-      const resolvedExhaustAirflow = resolvePointAirflow(exhaustPoint);
+      const resolvedExhaustAirflow =
+        exhaustPoint?.airflow ??
+        (exhaustPoint?.airflowSource === 'exhaustAir'
+          ? designConditions.airflow.exhaustAir
+          : undefined);
+      const defaultSupplyAirflow = designConditions.airflow.outdoorAir;
+      const defaultExhaustAirflow =
+        designConditions.airflow.exhaustAir ?? designConditions.airflow.outdoorAir;
       const supplyAirflowIn =
         processData.parameters.supplyAirflowIn ??
         resolvedSupplyAirflow ??
+        defaultSupplyAirflow ??
         processData.parameters.airflow ??
         1000;
       const supplyAirflowOut = processData.parameters.supplyAirflowOut ?? supplyAirflowIn;
       const exhaustAirflowIn =
         processData.parameters.exhaustAirflowIn ??
         resolvedExhaustAirflow ??
+        defaultExhaustAirflow ??
         processData.parameters.airflow ??
         1000;
       const exhaustAirflowOut = processData.parameters.exhaustAirflowOut ?? exhaustAirflowIn;
