@@ -92,6 +92,15 @@ export const ProcessList = ({
         const fromPoint = statePoints.find((p) => p.id === process.fromPointId);
         const toPoint = statePoints.find((p) => p.id === process.toPointId);
         const capacity = calculateCapacity(process);
+        const stream1Id =
+          process.parameters.mixingRatios?.stream1.pointId ?? process.fromPointId;
+        const stream2Id = process.parameters.mixingRatios?.stream2.pointId;
+        const stream1Point = statePoints.find((p) => p.id === stream1Id);
+        const stream2Point = statePoints.find((p) => p.id === stream2Id);
+        const mixingAirflowTotal =
+          typeof stream1Point?.airflow === 'number' && typeof stream2Point?.airflow === 'number'
+            ? stream1Point.airflow + stream2Point.airflow
+            : undefined;
 
         return (
           <div
@@ -133,6 +142,12 @@ export const ProcessList = ({
                   <ArrowRight className="w-4 h-4 mx-1 flex-shrink-0" />
                   <span className="truncate">{toPoint?.name || '不明'}</span>
                 </div>
+
+                {process.type === 'mixing' && mixingAirflowTotal !== undefined && (
+                  <div className="mt-1 text-xs text-gray-600">
+                    混合後風量: {mixingAirflowTotal.toFixed(0)} m³/h
+                  </div>
+                )}
 
                 {/* 能力表示 */}
                 {capacity && (

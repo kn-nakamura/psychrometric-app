@@ -64,6 +64,12 @@ export const StatePointList = () => {
                 <div>RH: {point.relativeHumidity?.toFixed(0)}%</div>
                 <div>絶対湿度: {point.humidity?.toFixed(4)} kg/kg'</div>
                 <div>エンタルピー: {point.enthalpy?.toFixed(1)} kJ/kg'</div>
+                <div>
+                  風量:{' '}
+                  {typeof point.airflow === 'number'
+                    ? `${point.airflow.toFixed(0)} m³/h`
+                    : '-'}
+                </div>
               </div>
             </div>
             

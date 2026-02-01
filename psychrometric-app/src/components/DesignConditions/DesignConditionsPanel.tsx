@@ -93,19 +93,19 @@ export const DesignConditionsPanel = () => {
         <h4 className="text-sm font-semibold text-gray-700">風量条件</h4>
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div>
-            <span className="text-gray-600">給気量:</span>{' '}
+            <span className="text-gray-600">{designConditions.airflow.supplyAirName}:</span>{' '}
             <span className="font-medium">{designConditions.airflow.supplyAir} m³/h</span>
           </div>
           <div>
-            <span className="text-gray-600">外気量:</span>{' '}
+            <span className="text-gray-600">{designConditions.airflow.outdoorAirName}:</span>{' '}
             <span className="font-medium">{designConditions.airflow.outdoorAir} m³/h</span>
           </div>
           <div>
-            <span className="text-gray-600">還気量:</span>{' '}
+            <span className="text-gray-600">{designConditions.airflow.returnAirName}:</span>{' '}
             <span className="font-medium">{designConditions.airflow.returnAir} m³/h</span>
           </div>
           <div>
-            <span className="text-gray-600">排気量:</span>{' '}
+            <span className="text-gray-600">{designConditions.airflow.exhaustAirName}:</span>{' '}
             <span className="font-medium">{designConditions.airflow.exhaustAir} m³/h</span>
           </div>
         </div>

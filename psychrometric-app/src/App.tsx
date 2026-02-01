@@ -125,6 +125,10 @@ function App() {
   const [inputValueB, setInputValueB] = useState('60');
   const [newPointName, setNewPointName] = useState('');
   const [newPointSeason, setNewPointSeason] = useState<'summer' | 'winter' | 'both'>(activeSeason);
+  const [newPointAirflow, setNewPointAirflow] = useState('');
+  const [newPointAirflowSource, setNewPointAirflowSource] = useState<
+    '' | StatePoint['airflowSource']
+  >('');
   const [editingPointId, setEditingPointId] = useState<string | null>(null);
   const [editingPointSnapshot, setEditingPointSnapshot] = useState<StatePoint | null>(null);
   const [copySourceA, setCopySourceA] = useState('');
@@ -193,10 +197,21 @@ function App() {
     setInputTypeB('relativeHumidity');
     setInputValueA('25');
     setInputValueB('60');
+    setNewPointAirflow('');
+    setNewPointAirflowSource('');
     setEditingPointId(null);
     setEditingPointSnapshot(null);
     setCopySourceA('');
     setCopySourceB('');
+  };
+
+  const resolvePointAirflow = (point?: StatePoint | null) => {
+    if (!point) return undefined;
+    if (typeof point.airflow === 'number') return point.airflow;
+    if (point.airflowSource) {
+      return designConditions.airflow[point.airflowSource];
+    }
+    return undefined;
   };
 
   // 状態点の追加
@@ -252,10 +267,19 @@ function App() {
       return;
     }
 
+    const airflowValue =
+      newPointAirflow === '' ? undefined : Number.parseFloat(newPointAirflow);
+    if (newPointAirflow !== '' && Number.isNaN(airflowValue)) {
+      alert('風量の入力値を確認してください');
+      return;
+    }
+
     if (editingPointId) {
       updateStatePoint(editingPointId, {
         name: newPointName || `Point ${statePoints.length}`,
         season: newPointSeason,
+        airflow: airflowValue,
+        airflowSource: newPointAirflowSource || undefined,
         ...stateData,
       });
     } else {
@@ -264,6 +288,8 @@ function App() {
         name: newPointName || `Point ${statePoints.length + 1}`,
         season: newPointSeason,
         order: statePoints.length,
+        airflow: airflowValue,
+        airflowSource: newPointAirflowSource || undefined,
         ...stateData,
       };
 
@@ -313,6 +339,8 @@ function App() {
     setShowAddPoint(true);
     setNewPointName(point.name);
     setNewPointSeason(point.season);
+    setNewPointAirflow(point.airflow?.toString() ?? '');
+    setNewPointAirflowSource(point.airflowSource ?? '');
     setInputTypeA('dryBulbTemp');
     setInputTypeB('relativeHumidity');
     setInputValueA(point.dryBulbTemp?.toString() ?? '');
@@ -335,14 +363,18 @@ function App() {
     name: string,
     season: 'summer' | 'winter',
     temp: number,
-    rh: number
+    rh: number,
+    airflowSource?: StatePoint['airflowSource']
   ) => {
     const stateData = StatePointConverter.fromDryBulbAndRH(temp, rh);
+    const airflow = airflowSource ? designConditions.airflow[airflowSource] : undefined;
     addStatePoint({
       id: `point-${Date.now()}`,
       name,
       season,
       order: statePoints.length,
+      airflow,
+      airflowSource,
       ...stateData,
     });
   };
@@ -363,15 +395,21 @@ function App() {
         0.5;
       const fallbackAirflow1 = defaultTotalAirflow * Math.max(0, Math.min(1, ratio1));
       const fallbackAirflow2 = Math.max(0, defaultTotalAirflow - fallbackAirflow1);
-      const airflow1 = processData.parameters.mixingRatios?.stream1.airflow ?? fallbackAirflow1;
-      const airflow2 = processData.parameters.mixingRatios?.stream2.airflow ?? fallbackAirflow2;
+      const resolvedAirflow1 =
+        processData.parameters.mixingRatios?.stream1.airflow ??
+        resolvePointAirflow(stream1) ??
+        fallbackAirflow1;
+      const resolvedAirflow2 =
+        processData.parameters.mixingRatios?.stream2.airflow ??
+        resolvePointAirflow(stream2) ??
+        fallbackAirflow2;
       if (stream1 && stream2) {
         const pressure = designConditions.outdoor.pressure ?? STANDARD_PRESSURE;
         const mixedPoint = MixingProcess.mixTwoStreams(
           stream1,
-          airflow1,
+          resolvedAirflow1,
           stream2,
-          airflow2,
+          resolvedAirflow2,
           pressure
         ).mixedPoint;
         const newPointId = `point-${Date.now()}`;
@@ -380,11 +418,30 @@ function App() {
           name: `${processData.name} 混合点`,
           season: processData.season,
           order: statePoints.length,
+          airflow:
+            typeof resolvedAirflow1 === 'number' && typeof resolvedAirflow2 === 'number'
+              ? resolvedAirflow1 + resolvedAirflow2
+              : undefined,
           ...mixedPoint,
         });
         resolvedProcessData = {
           ...processData,
           toPointId: newPointId,
+          parameters: {
+            ...processData.parameters,
+            mixingRatios: {
+              stream1: {
+                ...processData.parameters.mixingRatios?.stream1,
+                pointId: stream1Id,
+                airflow: resolvedAirflow1,
+              },
+              stream2: {
+                ...processData.parameters.mixingRatios?.stream2,
+                pointId: stream2Id ?? '',
+                airflow: resolvedAirflow2,
+              },
+            },
+          },
         };
       }
     }
@@ -395,9 +452,19 @@ function App() {
         : undefined;
       const pressure = designConditions.outdoor.pressure ?? STANDARD_PRESSURE;
       const efficiency = processData.parameters.heatExchangeEfficiency ?? 0;
-      const supplyAirflowIn = processData.parameters.supplyAirflowIn ?? processData.parameters.airflow ?? 1000;
+      const resolvedSupplyAirflow = resolvePointAirflow(outdoorPoint);
+      const resolvedExhaustAirflow = resolvePointAirflow(exhaustPoint);
+      const supplyAirflowIn =
+        processData.parameters.supplyAirflowIn ??
+        resolvedSupplyAirflow ??
+        processData.parameters.airflow ??
+        1000;
       const supplyAirflowOut = processData.parameters.supplyAirflowOut ?? supplyAirflowIn;
-      const exhaustAirflowIn = processData.parameters.exhaustAirflowIn ?? processData.parameters.airflow ?? 1000;
+      const exhaustAirflowIn =
+        processData.parameters.exhaustAirflowIn ??
+        resolvedExhaustAirflow ??
+        processData.parameters.airflow ??
+        1000;
       const exhaustAirflowOut = processData.parameters.exhaustAirflowOut ?? exhaustAirflowIn;
 
       if (outdoorPoint && exhaustPoint) {
@@ -417,6 +484,7 @@ function App() {
           name: `${processData.name} 全熱交換器出口`,
           season: processData.season,
           order: statePoints.length,
+          airflow: supplyAirflowOut,
           ...supplyAir,
         });
         resolvedProcessData = {
@@ -425,9 +493,35 @@ function App() {
           parameters: {
             ...processData.parameters,
             airflow: supplyAirflowOut,
+            supplyAirflowIn,
+            supplyAirflowOut,
+            exhaustAirflowIn,
+            exhaustAirflowOut,
           },
         };
       }
+    }
+
+    if (processData.type === 'heatExchange' && processData.parameters.heatExchangeEfficiency) {
+      const nextEquipment = {
+        ...designConditions.equipment,
+        heatExchanger: {
+          ...designConditions.equipment.heatExchanger,
+          type: designConditions.equipment.heatExchanger?.type ?? '',
+          efficiencySummer:
+            processData.season === 'winter'
+              ? designConditions.equipment.heatExchanger?.efficiencySummer
+              : processData.parameters.heatExchangeEfficiency,
+          efficiencyWinter:
+            processData.season === 'summer'
+              ? designConditions.equipment.heatExchanger?.efficiencyWinter
+              : processData.parameters.heatExchangeEfficiency,
+        },
+      };
+      setDesignConditions({
+        ...designConditions,
+        equipment: nextEquipment,
+      });
     }
 
     if (editingProcess) {
@@ -453,8 +547,33 @@ function App() {
   };
 
   // 設計条件の保存
+  const normalizeDesignConditions = (conditions: DesignConditions): DesignConditions => ({
+    ...conditions,
+    airflow: {
+      ...conditions.airflow,
+      supplyAirName: conditions.airflow.supplyAirName ?? '給気量',
+      outdoorAirName: conditions.airflow.outdoorAirName ?? '外気量',
+      returnAirName: conditions.airflow.returnAirName ?? '還気量',
+      exhaustAirName: conditions.airflow.exhaustAirName ?? '排気量',
+    },
+    equipment: {
+      ...conditions.equipment,
+      heatExchanger: conditions.equipment.heatExchanger
+        ? {
+            ...conditions.equipment.heatExchanger,
+            efficiencySummer:
+              conditions.equipment.heatExchanger.efficiencySummer ??
+              conditions.equipment.heatExchanger.efficiency,
+            efficiencyWinter:
+              conditions.equipment.heatExchanger.efficiencyWinter ??
+              conditions.equipment.heatExchanger.efficiency,
+          }
+        : undefined,
+    },
+  });
+
   const handleSaveDesignConditions = (conditions: DesignConditions) => {
-    setDesignConditions(conditions);
+    setDesignConditions(normalizeDesignConditions(conditions));
   };
 
   // プロジェクトの読み込み
@@ -463,7 +582,21 @@ function App() {
     statePoints: typeof statePoints;
     processes: typeof processes;
   }) => {
-    loadProject(data);
+    const normalizedDesignConditions = normalizeDesignConditions(data.designConditions);
+    const normalizedStatePoints = data.statePoints.map((point) => {
+      if (point.airflow === undefined && point.airflowSource) {
+        return {
+          ...point,
+          airflow: normalizedDesignConditions.airflow[point.airflowSource],
+        };
+      }
+      return point;
+    });
+    loadProject({
+      ...data,
+      designConditions: normalizedDesignConditions,
+      statePoints: normalizedStatePoints,
+    });
   };
 
   // Canvas refを取得
@@ -587,7 +720,8 @@ function App() {
                         '外気(夏)',
                         'summer',
                         designConditions.outdoor.summer.dryBulbTemp,
-                        designConditions.outdoor.summer.relativeHumidity
+                        designConditions.outdoor.summer.relativeHumidity,
+                        'outdoorAir'
                       )
                     }
                     className="py-2 px-3 bg-blue-100 hover:bg-blue-200 rounded text-sm text-blue-800"
@@ -613,7 +747,8 @@ function App() {
                         '外気(冬)',
                         'winter',
                         designConditions.outdoor.winter.dryBulbTemp,
-                        designConditions.outdoor.winter.relativeHumidity
+                        designConditions.outdoor.winter.relativeHumidity,
+                        'outdoorAir'
                       )
                     }
                     className="py-2 px-3 bg-red-100 hover:bg-red-200 rounded text-sm text-red-800"
@@ -765,6 +900,43 @@ function App() {
                       選択した2項目の入力値から他の物性値を計算します。
                     </p>
                   </div>
+                  <div className="space-y-2">
+                    <label className="block text-xs text-gray-500">風量（オプション）</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-2 items-center">
+                      <select
+                        value={newPointAirflowSource}
+                        onChange={(e) => {
+                          const nextSource = e.target.value as StatePoint['airflowSource'] | '';
+                          setNewPointAirflowSource(nextSource);
+                          if (nextSource) {
+                            setNewPointAirflow(
+                              designConditions.airflow[nextSource].toString()
+                            );
+                          }
+                        }}
+                        className="px-3 py-2 border rounded text-sm bg-white"
+                      >
+                        <option value="">手入力</option>
+                        <option value="supplyAir">{designConditions.airflow.supplyAirName}</option>
+                        <option value="outdoorAir">{designConditions.airflow.outdoorAirName}</option>
+                        <option value="returnAir">{designConditions.airflow.returnAirName}</option>
+                        <option value="exhaustAir">{designConditions.airflow.exhaustAirName}</option>
+                      </select>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="風量"
+                          value={newPointAirflow}
+                          onChange={(e) => handleNumericInput(e.target.value, setNewPointAirflow)}
+                          className="flex-1 px-3 py-2 border rounded text-sm"
+                        />
+                        <span className="text-xs text-gray-500 min-w-[56px] text-right">
+                          m³/h
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                   <div className="flex flex-wrap gap-1">
                     <button
                       onClick={() => setNewPointSeason('summer')}
@@ -880,6 +1052,14 @@ function App() {
                               </div>
                               <div>
                                 比体積: {point.specificVolume?.toFixed(3) ?? '-'} m³/kg'
+                              </div>
+                              <div>
+                                風量:{' '}
+                                {typeof point.airflow === 'number'
+                                  ? `${point.airflow.toFixed(0)} m³/h`
+                                  : point.airflowSource
+                                  ? `${designConditions.airflow[point.airflowSource].toFixed(0)} m³/h`
+                                  : '-'}
                               </div>
                             </div>
                           </div>
@@ -1010,8 +1190,12 @@ function App() {
               <div>
                 <h3 className="font-medium text-gray-700 mb-2">風量</h3>
                 <div className="text-gray-600 space-y-1">
-                  <p>給気: {designConditions.airflow.supplyAir} m³/h</p>
-                  <p>外気: {designConditions.airflow.outdoorAir} m³/h</p>
+                  <p>
+                    {designConditions.airflow.supplyAirName}: {designConditions.airflow.supplyAir} m³/h
+                  </p>
+                  <p>
+                    {designConditions.airflow.outdoorAirName}: {designConditions.airflow.outdoorAir} m³/h
+                  </p>
                 </div>
               </div>
             </div>
@@ -1029,6 +1213,7 @@ function App() {
         onSave={handleSaveProcess}
         statePoints={statePoints}
         activeSeason={activeSeason}
+        designConditions={designConditions}
         editingProcess={editingProcess}
       />
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { ProcessType, Process, ProcessParameters } from '@/types/process';
 import { StatePoint } from '@/types/psychrometric';
+import { DesignConditions } from '@/types/designConditions';
 
 interface ProcessDialogProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ interface ProcessDialogProps {
   onSave: (process: Omit<Process, 'id' | 'order'>) => void;
   statePoints: StatePoint[];
   activeSeason: 'summer' | 'winter' | 'both';
+  designConditions: DesignConditions;
   editingProcess?: Process | null;
 }
 
@@ -29,6 +31,7 @@ export const ProcessDialog = ({
   onSave,
   statePoints,
   activeSeason,
+  designConditions,
   editingProcess,
 }: ProcessDialogProps) => {
   const [name, setName] = useState('');
@@ -66,24 +69,39 @@ export const ProcessDialog = ({
       const ratio1 = prev.mixingRatios?.stream1.ratio ?? 0.5;
       const fallbackAirflow1 = baseAirflow * Math.max(0, Math.min(1, ratio1));
       const fallbackAirflow2 = Math.max(0, baseAirflow - fallbackAirflow1);
-      const airflow1 = prev.mixingRatios?.stream1.airflow ?? fallbackAirflow1;
       const stream1PointId = prev.mixingRatios?.stream1.pointId ?? fromPointId;
       const stream2PointId =
         prev.mixingRatios?.stream2.pointId ??
         statePoints.find((point) => point.id !== stream1PointId)?.id ??
         '';
+      const stream1Point = statePoints.find((point) => point.id === stream1PointId);
+      const stream2Point = statePoints.find((point) => point.id === stream2PointId);
+      const resolvedStream1Airflow =
+        prev.mixingRatios?.stream1.airflow ??
+        stream1Point?.airflow ??
+        (stream1Point?.airflowSource
+          ? designConditions.airflow[stream1Point.airflowSource]
+          : undefined) ??
+        fallbackAirflow1;
+      const resolvedStream2Airflow =
+        prev.mixingRatios?.stream2.airflow ??
+        stream2Point?.airflow ??
+        (stream2Point?.airflowSource
+          ? designConditions.airflow[stream2Point.airflowSource]
+          : undefined) ??
+        fallbackAirflow2;
       return {
         ...prev,
         mixingRatios: {
-          stream1: { pointId: stream1PointId, airflow: airflow1 },
+          stream1: { pointId: stream1PointId, airflow: resolvedStream1Airflow },
           stream2: {
             pointId: stream2PointId,
-            airflow: prev.mixingRatios?.stream2.airflow ?? fallbackAirflow2,
+            airflow: resolvedStream2Airflow,
           },
         },
       };
     });
-  }, [type, fromPointId, statePoints]);
+  }, [type, fromPointId, statePoints, designConditions]);
 
   useEffect(() => {
     if (type !== 'heatExchange') return;
@@ -97,18 +115,55 @@ export const ProcessDialog = ({
         prev.exhaustPointId ??
         statePoints.find((point) => point.id !== fromPointId)?.id ??
         '';
+      const outdoorPoint = statePoints.find((point) => point.id === fromPointId);
+      const exhaustPoint = statePoints.find((point) => point.id === exhaustPointId);
+      const resolvedSupply =
+        outdoorPoint?.airflow ??
+        (outdoorPoint?.airflowSource
+          ? designConditions.airflow[outdoorPoint.airflowSource]
+          : undefined);
+      const resolvedExhaust =
+        exhaustPoint?.airflow ??
+        (exhaustPoint?.airflowSource
+          ? designConditions.airflow[exhaustPoint.airflowSource]
+          : undefined);
       return {
         ...prev,
-        supplyAirflowIn,
-        supplyAirflowOut,
-        exhaustAirflowIn,
-        exhaustAirflowOut,
+        supplyAirflowIn: resolvedSupply ?? supplyAirflowIn,
+        supplyAirflowOut: prev.supplyAirflowOut ?? resolvedSupply ?? supplyAirflowOut,
+        exhaustAirflowIn: resolvedExhaust ?? exhaustAirflowIn,
+        exhaustAirflowOut: prev.exhaustAirflowOut ?? resolvedExhaust ?? exhaustAirflowOut,
         exhaustPointId,
       };
     });
-  }, [type, fromPointId, statePoints]);
+  }, [type, fromPointId, statePoints, designConditions]);
+
+  useEffect(() => {
+    if (type !== 'heatExchange') return;
+    setParameters((prev) => {
+      if (prev.heatExchangeEfficiency !== undefined) {
+        return prev;
+      }
+      const defaultEfficiency =
+        season === 'winter'
+          ? designConditions.equipment.heatExchanger?.efficiencyWinter ??
+            designConditions.equipment.heatExchanger?.efficiency
+          : designConditions.equipment.heatExchanger?.efficiencySummer ??
+            designConditions.equipment.heatExchanger?.efficiency;
+      if (defaultEfficiency === undefined) {
+        return prev;
+      }
+      return {
+        ...prev,
+        heatExchangeEfficiency: defaultEfficiency,
+      };
+    });
+  }, [type, season, designConditions]);
 
   if (!isOpen) return null;
+
+  const parseOptionalNumber = (value: string) =>
+    value === '' ? undefined : Number.parseFloat(value);
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -135,10 +190,6 @@ export const ProcessDialog = ({
         alert('混合流2は混合流1と異なる状態点を選択してください');
         return;
       }
-      if (!stream1Airflow || stream1Airflow <= 0 || !stream2Airflow || stream2Airflow <= 0) {
-        alert('混合流1・混合流2の風量を正しく入力してください');
-        return;
-      }
     }
     if (type === 'heatExchange') {
       const exhaustPointId = parameters.exhaustPointId;
@@ -156,7 +207,7 @@ export const ProcessDialog = ({
         parameters.exhaustAirflowIn,
         parameters.exhaustAirflowOut,
       ];
-      if (airflowValues.some((value) => !value || value <= 0)) {
+      if (airflowValues.some((value) => value !== undefined && value <= 0)) {
         alert('全熱交換器の風量を正しく入力してください');
         return;
       }
@@ -174,32 +225,66 @@ export const ProcessDialog = ({
     onClose();
   };
 
-  const handleParameterChange = (key: keyof ProcessParameters, value: number | string) => {
-    setParameters((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+  const handleParameterChange = (
+    key: keyof ProcessParameters,
+    value: number | string | undefined
+  ) => {
+    setParameters((prev) => {
+      if (key === 'exhaustPointId') {
+        const exhaustPoint = statePoints.find((point) => point.id === value);
+        const resolvedExhaust =
+          exhaustPoint?.airflow ??
+          (exhaustPoint?.airflowSource
+            ? designConditions.airflow[exhaustPoint.airflowSource]
+            : undefined);
+        return {
+          ...prev,
+          exhaustPointId: value as string,
+          exhaustAirflowIn: resolvedExhaust ?? prev.exhaustAirflowIn,
+          exhaustAirflowOut: resolvedExhaust ?? prev.exhaustAirflowOut,
+        };
+      }
+      return {
+        ...prev,
+        [key]: value,
+      };
+    });
   };
 
   const handleMixingStreamChange = (streamKey: 'stream1' | 'stream2', pointId: string) => {
     setParameters((prev) => {
+      const streamPoint = statePoints.find((point) => point.id === pointId);
+      const resolvedAirflow =
+        streamPoint?.airflow ??
+        (streamPoint?.airflowSource
+          ? designConditions.airflow[streamPoint.airflowSource]
+          : undefined);
       return {
         ...prev,
         mixingRatios: {
           stream1: {
             pointId: streamKey === 'stream1' ? pointId : prev.mixingRatios?.stream1.pointId ?? fromPointId,
-            airflow: prev.mixingRatios?.stream1.airflow ?? prev.airflow ?? 500,
+            airflow:
+              streamKey === 'stream1'
+                ? resolvedAirflow ?? prev.mixingRatios?.stream1.airflow ?? prev.airflow ?? 500
+                : prev.mixingRatios?.stream1.airflow ?? prev.airflow ?? 500,
           },
           stream2: {
             pointId: streamKey === 'stream2' ? pointId : prev.mixingRatios?.stream2.pointId ?? '',
-            airflow: prev.mixingRatios?.stream2.airflow ?? prev.airflow ?? 500,
+            airflow:
+              streamKey === 'stream2'
+                ? resolvedAirflow ?? prev.mixingRatios?.stream2.airflow ?? prev.airflow ?? 500
+                : prev.mixingRatios?.stream2.airflow ?? prev.airflow ?? 500,
           },
         },
       };
     });
   };
 
-  const handleMixingAirflowChange = (streamKey: 'stream1' | 'stream2', value: number) => {
+  const handleMixingAirflowChange = (
+    streamKey: 'stream1' | 'stream2',
+    value: number | undefined
+  ) => {
     setParameters((prev) => ({
       ...prev,
       mixingRatios: {
@@ -379,7 +464,9 @@ export const ProcessDialog = ({
                 <input
                   type="number"
                   value={parameters.airflow || ''}
-                  onChange={(e) => handleParameterChange('airflow', parseFloat(e.target.value))}
+                  onChange={(e) =>
+                    handleParameterChange('airflow', parseOptionalNumber(e.target.value))
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
@@ -392,14 +479,16 @@ export const ProcessDialog = ({
                   <label className="block text-sm text-gray-600 mb-1">
                     能力 [kW]（オプション）
                   </label>
-                  <input
-                    type="number"
-                    value={parameters.capacity || ''}
-                    onChange={(e) => handleParameterChange('capacity', parseFloat(e.target.value))}
-                    placeholder="自動計算"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+                    <input
+                      type="number"
+                      value={parameters.capacity || ''}
+                      onChange={(e) =>
+                        handleParameterChange('capacity', parseOptionalNumber(e.target.value))
+                      }
+                      placeholder="自動計算"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 {type === 'cooling' && (
                   <div className="mb-3">
                     <label className="block text-sm text-gray-600 mb-1">
@@ -409,7 +498,9 @@ export const ProcessDialog = ({
                       type="number"
                       step="0.01"
                       value={parameters.SHF || ''}
-                      onChange={(e) => handleParameterChange('SHF', parseFloat(e.target.value))}
+                      onChange={(e) =>
+                        handleParameterChange('SHF', parseOptionalNumber(e.target.value))
+                      }
                       placeholder="0.0 - 1.0"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
@@ -424,13 +515,18 @@ export const ProcessDialog = ({
                   <label className="block text-sm text-gray-600 mb-1">
                     加湿量 [kg/h]
                   </label>
-                  <input
-                    type="number"
-                    value={parameters.humidifyingCapacity || ''}
-                    onChange={(e) => handleParameterChange('humidifyingCapacity', parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+                    <input
+                      type="number"
+                      value={parameters.humidifyingCapacity || ''}
+                      onChange={(e) =>
+                        handleParameterChange(
+                          'humidifyingCapacity',
+                          parseOptionalNumber(e.target.value)
+                        )
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 <div className="mb-3">
                   <label className="block text-sm text-gray-600 mb-1">
                     加湿方式
@@ -453,14 +549,19 @@ export const ProcessDialog = ({
                   <label className="block text-sm text-gray-600 mb-1">
                     全熱交換効率 [%]（終点側基準）
                   </label>
-                  <input
-                    type="number"
-                    value={parameters.heatExchangeEfficiency || ''}
-                    onChange={(e) => handleParameterChange('heatExchangeEfficiency', parseFloat(e.target.value))}
-                    placeholder="例: 65"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+                    <input
+                      type="number"
+                      value={parameters.heatExchangeEfficiency || ''}
+                      onChange={(e) =>
+                        handleParameterChange(
+                          'heatExchangeEfficiency',
+                          parseOptionalNumber(e.target.value)
+                        )
+                      }
+                      placeholder="例: 65"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 <div className="mb-3">
                   <label className="block text-sm text-gray-600 mb-1">
                     排気側の状態点（室内側）
@@ -482,46 +583,60 @@ export const ProcessDialog = ({
                   <label className="block text-sm text-gray-600 mb-1">
                     外気側入口風量 [m³/h]
                   </label>
-                  <input
-                    type="number"
-                    value={parameters.supplyAirflowIn ?? ''}
-                    onChange={(e) => handleParameterChange('supplyAirflowIn', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+                    <input
+                      type="number"
+                      value={parameters.supplyAirflowIn ?? ''}
+                      onChange={(e) =>
+                        handleParameterChange('supplyAirflowIn', parseOptionalNumber(e.target.value))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 <div className="mb-3">
                   <label className="block text-sm text-gray-600 mb-1">
                     外気側出口風量 [m³/h]
                   </label>
-                  <input
-                    type="number"
-                    value={parameters.supplyAirflowOut ?? ''}
-                    onChange={(e) => handleParameterChange('supplyAirflowOut', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+                    <input
+                      type="number"
+                      value={parameters.supplyAirflowOut ?? ''}
+                      onChange={(e) =>
+                        handleParameterChange('supplyAirflowOut', parseOptionalNumber(e.target.value))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 <div className="mb-3">
                   <label className="block text-sm text-gray-600 mb-1">
                     排気側入口風量 [m³/h]
                   </label>
-                  <input
-                    type="number"
-                    value={parameters.exhaustAirflowIn ?? ''}
-                    onChange={(e) => handleParameterChange('exhaustAirflowIn', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+                    <input
+                      type="number"
+                      value={parameters.exhaustAirflowIn ?? ''}
+                      onChange={(e) =>
+                        handleParameterChange(
+                          'exhaustAirflowIn',
+                          parseOptionalNumber(e.target.value)
+                        )
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 <div className="mb-3">
                   <label className="block text-sm text-gray-600 mb-1">
                     排気側出口風量 [m³/h]
                   </label>
-                  <input
-                    type="number"
-                    value={parameters.exhaustAirflowOut ?? ''}
-                    onChange={(e) => handleParameterChange('exhaustAirflowOut', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+                    <input
+                      type="number"
+                      value={parameters.exhaustAirflowOut ?? ''}
+                      onChange={(e) =>
+                        handleParameterChange(
+                          'exhaustAirflowOut',
+                          parseOptionalNumber(e.target.value)
+                        )
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
               </>
             )}
 
@@ -548,24 +663,34 @@ export const ProcessDialog = ({
                   <label className="block text-sm text-gray-600 mb-1">
                     混合流1の風量 [m³/h]
                   </label>
-                  <input
-                    type="number"
-                    value={parameters.mixingRatios?.stream1.airflow ?? ''}
-                    onChange={(e) => handleMixingAirflowChange('stream1', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+                    <input
+                      type="number"
+                      value={parameters.mixingRatios?.stream1.airflow ?? ''}
+                      onChange={(e) =>
+                        handleMixingAirflowChange(
+                          'stream1',
+                          parseOptionalNumber(e.target.value)
+                        )
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 <div className="mb-3">
                   <label className="block text-sm text-gray-600 mb-1">
                     混合流2の風量 [m³/h]
                   </label>
-                  <input
-                    type="number"
-                    value={parameters.mixingRatios?.stream2.airflow ?? ''}
-                    onChange={(e) => handleMixingAirflowChange('stream2', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+                    <input
+                      type="number"
+                      value={parameters.mixingRatios?.stream2.airflow ?? ''}
+                      onChange={(e) =>
+                        handleMixingAirflowChange(
+                          'stream2',
+                          parseOptionalNumber(e.target.value)
+                        )
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
               </>
             )}
 
@@ -575,25 +700,29 @@ export const ProcessDialog = ({
                   <label className="block text-sm text-gray-600 mb-1">
                     ファン動力 [kW]
                   </label>
-                  <input
-                    type="number"
-                    value={parameters.fanPower || ''}
-                    onChange={(e) => handleParameterChange('fanPower', parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+                    <input
+                      type="number"
+                      value={parameters.fanPower || ''}
+                      onChange={(e) =>
+                        handleParameterChange('fanPower', parseOptionalNumber(e.target.value))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 <div className="mb-3">
                   <label className="block text-sm text-gray-600 mb-1">
                     ファン効率 [%]
                   </label>
-                  <input
-                    type="number"
-                    value={parameters.fanEfficiency || ''}
-                    onChange={(e) => handleParameterChange('fanEfficiency', parseFloat(e.target.value))}
-                    placeholder="例: 70"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+                    <input
+                      type="number"
+                      value={parameters.fanEfficiency || ''}
+                      onChange={(e) =>
+                        handleParameterChange('fanEfficiency', parseOptionalNumber(e.target.value))
+                      }
+                      placeholder="例: 70"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
               </>
             )}
           </div>

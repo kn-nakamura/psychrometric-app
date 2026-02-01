@@ -362,13 +362,47 @@ function drawProcesses(
     ctx.lineWidth = 3;
     ctx.setLineDash([5, 5]);
     
+    if (process.type === 'mixing') {
+      const stream1Id = process.parameters.mixingRatios?.stream1.pointId ?? process.fromPointId;
+      const stream2Id = process.parameters.mixingRatios?.stream2.pointId;
+      const stream1Point = points.find((p) => p.id === stream1Id);
+      const stream2Point = points.find((p) => p.id === stream2Id);
+      if (!stream1Point || !stream2Point) return;
+      if (!stream1Point.dryBulbTemp || !stream1Point.humidity) return;
+      if (!stream2Point.dryBulbTemp || !stream2Point.humidity) return;
+      const stream1 = coordinates.toCanvas(stream1Point.dryBulbTemp, stream1Point.humidity);
+      const stream2 = coordinates.toCanvas(stream2Point.dryBulbTemp, stream2Point.humidity);
+
+      ctx.beginPath();
+      ctx.moveTo(stream1.x, stream1.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(stream2.x, stream2.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+
+      ctx.setLineDash([]);
+      drawArrow(ctx, stream1.x, stream1.y, to.x, to.y);
+      drawArrow(ctx, stream2.x, stream2.y, to.x, to.y);
+
+      if (typeof stream1Point.airflow === 'number' && typeof stream2Point.airflow === 'number') {
+        const totalAirflow = stream1Point.airflow + stream2Point.airflow;
+        ctx.fillStyle = '#333';
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(`${totalAirflow.toFixed(0)} m³/h`, to.x + 10, to.y + 12);
+      }
+      return;
+    }
+
     ctx.beginPath();
     ctx.moveTo(from.x, from.y);
     ctx.lineTo(to.x, to.y);
     ctx.stroke();
-    
+
     ctx.setLineDash([]);
-    
+
     // 矢印を描画
     drawArrow(ctx, from.x, from.y, to.x, to.y);
   });

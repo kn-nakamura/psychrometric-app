@@ -18,6 +18,10 @@ export interface StatePoint {
   enthalpy?: number;        // エンタルピー [kJ/kg']
   dewPoint?: number;        // 露点温度 [°C]
   specificVolume?: number;  // 比体積 [m³/kg']
+
+  // 風量（任意）
+  airflow?: number;         // 風量 [m³/h]
+  airflowSource?: 'supplyAir' | 'outdoorAir' | 'returnAir' | 'exhaustAir';
   
   // 表示用の色（季節やプロセスごとに変える）
   color?: string;

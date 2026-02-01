@@ -45,9 +45,13 @@ export interface IndoorConditions {
  */
 export interface AirflowConditions {
   supplyAir: number;        // 給気量 [m³/h]
+  supplyAirName: string;    // 給気量のパラメーター名
   outdoorAir: number;       // 外気量 [m³/h]
+  outdoorAirName: string;   // 外気量のパラメーター名
   returnAir: number;        // 還気量 [m³/h]
+  returnAirName: string;    // 還気量のパラメーター名
   exhaustAir: number;       // 排気量 [m³/h]
+  exhaustAirName: string;   // 排気量のパラメーター名
   toiletExhaust?: number;   // トイレ排気量 [m³/h]
 }
 
@@ -57,7 +61,9 @@ export interface AirflowConditions {
 export interface EquipmentSpecifications {
   heatExchanger?: {
     type: string;
-    efficiency: number;      // [%]
+    efficiency?: number;      // [%] 旧フィールド互換
+    efficiencySummer?: number; // [%]
+    efficiencyWinter?: number; // [%]
     sensibleEfficiency?: number;
     latentEfficiency?: number;
   };
