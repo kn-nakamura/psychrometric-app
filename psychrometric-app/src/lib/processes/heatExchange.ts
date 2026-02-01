@@ -15,7 +15,7 @@ import { STANDARD_PRESSURE } from '../psychrometric/constants';
 export class HeatExchangeProcess {
   private static getEffectiveAirflow(inlet: number, outlet?: number): number {
     if (!Number.isFinite(inlet) || inlet <= 0) return 0;
-    if (!Number.isFinite(outlet) || outlet <= 0) return inlet;
+    if (outlet === undefined || !Number.isFinite(outlet) || outlet <= 0) return inlet;
     return Math.min(inlet, outlet);
   }
 
