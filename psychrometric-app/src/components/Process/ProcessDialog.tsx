@@ -85,11 +85,11 @@ export const ProcessDialog = ({
       alert('名前を入力してください');
       return;
     }
-    if (!fromPointId || !toPointId) {
+    if (!fromPointId || (!toPointId && type !== 'mixing')) {
       alert('始点と終点を選択してください');
       return;
     }
-    if (fromPointId === toPointId) {
+    if (type !== 'mixing' && fromPointId === toPointId) {
       alert('始点と終点は異なる状態点を選択してください');
       return;
     }
@@ -279,23 +279,29 @@ export const ProcessDialog = ({
           </div>
 
           {/* 終点 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              終点（出口）
-            </label>
-            <select
-              value={toPointId}
-              onChange={(e) => setToPointId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">選択してください</option>
-              {filteredPoints.map((point) => (
-                <option key={point.id} value={point.id}>
-                  {point.name} ({point.dryBulbTemp?.toFixed(1)}°C, RH{point.relativeHumidity?.toFixed(0)}%)
-                </option>
-              ))}
-            </select>
-          </div>
+          {type === 'mixing' ? (
+            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+              混合点は保存時に自動で追加されます。
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                終点（出口）
+              </label>
+              <select
+                value={toPointId}
+                onChange={(e) => setToPointId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">選択してください</option>
+                {filteredPoints.map((point) => (
+                  <option key={point.id} value={point.id}>
+                    {point.name} ({point.dryBulbTemp?.toFixed(1)}°C, RH{point.relativeHumidity?.toFixed(0)}%)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* プロセスパラメータ */}
           <div className="border-t pt-4">
