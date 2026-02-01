@@ -461,20 +461,26 @@ function App() {
       const defaultSupplyAirflow = designConditions.airflow.outdoorAir;
       const defaultExhaustAirflow =
         designConditions.airflow.exhaustAir ?? designConditions.airflow.outdoorAir;
-      const supplyAirflowIn =
+      const supplyAirflow =
+        processData.parameters.supplyAirflow ??
         processData.parameters.supplyAirflowIn ??
+        processData.parameters.supplyAirflowOut ??
         resolvedSupplyAirflow ??
         defaultSupplyAirflow ??
         processData.parameters.airflow ??
         1000;
-      const supplyAirflowOut = processData.parameters.supplyAirflowOut ?? supplyAirflowIn;
-      const exhaustAirflowIn =
+      const exhaustAirflow =
+        processData.parameters.exhaustAirflow ??
         processData.parameters.exhaustAirflowIn ??
+        processData.parameters.exhaustAirflowOut ??
         resolvedExhaustAirflow ??
         defaultExhaustAirflow ??
         processData.parameters.airflow ??
         1000;
-      const exhaustAirflowOut = processData.parameters.exhaustAirflowOut ?? exhaustAirflowIn;
+      const supplyAirflowIn = supplyAirflow;
+      const supplyAirflowOut = supplyAirflow;
+      const exhaustAirflowIn = exhaustAirflow;
+      const exhaustAirflowOut = exhaustAirflow;
 
       if (outdoorPoint && exhaustPoint) {
         const { supplyAir } = HeatExchangeProcess.calculateTotalHeat(
@@ -502,6 +508,8 @@ function App() {
           parameters: {
             ...processData.parameters,
             airflow: supplyAirflowOut,
+            supplyAirflow,
+            exhaustAirflow,
             supplyAirflowIn,
             supplyAirflowOut,
             exhaustAirflowIn,

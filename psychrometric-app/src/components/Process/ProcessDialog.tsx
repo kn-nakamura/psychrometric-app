@@ -110,10 +110,13 @@ export const ProcessDialog = ({
       const defaultSupplyAirflow = designConditions.airflow.outdoorAir ?? baseAirflow;
       const defaultExhaustAirflow =
         designConditions.airflow.exhaustAir ?? designConditions.airflow.outdoorAir ?? baseAirflow;
-      const supplyAirflowIn = prev.supplyAirflowIn ?? defaultSupplyAirflow;
-      const supplyAirflowOut = prev.supplyAirflowOut ?? supplyAirflowIn;
-      const exhaustAirflowIn = prev.exhaustAirflowIn ?? defaultExhaustAirflow;
-      const exhaustAirflowOut = prev.exhaustAirflowOut ?? exhaustAirflowIn;
+      const supplyAirflow =
+        prev.supplyAirflow ?? prev.supplyAirflowIn ?? prev.supplyAirflowOut ?? defaultSupplyAirflow;
+      const exhaustAirflow =
+        prev.exhaustAirflow ??
+        prev.exhaustAirflowIn ??
+        prev.exhaustAirflowOut ??
+        defaultExhaustAirflow;
       const exhaustPointId =
         prev.exhaustPointId ??
         statePoints.find((point) => point.id !== fromPointId)?.id ??
@@ -132,10 +135,8 @@ export const ProcessDialog = ({
           : undefined);
       return {
         ...prev,
-        supplyAirflowIn: resolvedSupply ?? supplyAirflowIn,
-        supplyAirflowOut: prev.supplyAirflowOut ?? resolvedSupply ?? supplyAirflowOut,
-        exhaustAirflowIn: resolvedExhaust ?? exhaustAirflowIn,
-        exhaustAirflowOut: prev.exhaustAirflowOut ?? resolvedExhaust ?? exhaustAirflowOut,
+        supplyAirflow: resolvedSupply ?? supplyAirflow,
+        exhaustAirflow: resolvedExhaust ?? exhaustAirflow,
         exhaustPointId,
       };
     });
@@ -153,12 +154,9 @@ export const ProcessDialog = ({
             designConditions.equipment.heatExchanger?.efficiency
           : designConditions.equipment.heatExchanger?.efficiencySummer ??
             designConditions.equipment.heatExchanger?.efficiency;
-      if (defaultEfficiency === undefined) {
-        return prev;
-      }
       return {
         ...prev,
-        heatExchangeEfficiency: defaultEfficiency,
+        heatExchangeEfficiency: defaultEfficiency ?? 65,
       };
     });
   }, [type, season, designConditions]);
@@ -169,10 +167,7 @@ export const ProcessDialog = ({
     value === '' ? undefined : Number.parseFloat(value);
 
   const handleSave = () => {
-    if (!name.trim()) {
-      alert('名前を入力してください');
-      return;
-    }
+    const resolvedName = name.trim() || processTypeLabels[type];
     if (!fromPointId || (!toPointId && type !== 'mixing' && type !== 'heatExchange')) {
       alert('始点と終点を選択してください');
       return;
@@ -209,6 +204,8 @@ export const ProcessDialog = ({
         return;
       }
       const airflowValues = [
+        parameters.supplyAirflow,
+        parameters.exhaustAirflow,
         parameters.supplyAirflowIn,
         parameters.supplyAirflowOut,
         parameters.exhaustAirflowIn,
@@ -221,7 +218,7 @@ export const ProcessDialog = ({
     }
 
     onSave({
-      name: name.trim(),
+      name: resolvedName,
       type,
       season,
       fromPointId,
@@ -247,8 +244,7 @@ export const ProcessDialog = ({
         return {
           ...prev,
           exhaustPointId: value as string,
-          exhaustAirflowIn: resolvedExhaust ?? prev.exhaustAirflowIn,
-          exhaustAirflowOut: resolvedExhaust ?? prev.exhaustAirflowOut,
+          exhaustAirflow: resolvedExhaust ?? prev.exhaustAirflow,
         };
       }
       return {
@@ -588,58 +584,26 @@ export const ProcessDialog = ({
                 </div>
                 <div className="mb-3">
                   <label className="block text-sm text-gray-600 mb-1">
-                    外気側入口風量 [m³/h]
+                    外気側風量 [m³/h]
                   </label>
                     <input
                       type="number"
-                      value={parameters.supplyAirflowIn ?? ''}
+                      value={parameters.supplyAirflow ?? ''}
                       onChange={(e) =>
-                        handleParameterChange('supplyAirflowIn', parseOptionalNumber(e.target.value))
+                        handleParameterChange('supplyAirflow', parseOptionalNumber(e.target.value))
                       }
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                 <div className="mb-3">
                   <label className="block text-sm text-gray-600 mb-1">
-                    外気側出口風量 [m³/h]
+                    排気側風量 [m³/h]
                   </label>
                     <input
                       type="number"
-                      value={parameters.supplyAirflowOut ?? ''}
+                      value={parameters.exhaustAirflow ?? ''}
                       onChange={(e) =>
-                        handleParameterChange('supplyAirflowOut', parseOptionalNumber(e.target.value))
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                <div className="mb-3">
-                  <label className="block text-sm text-gray-600 mb-1">
-                    排気側入口風量 [m³/h]
-                  </label>
-                    <input
-                      type="number"
-                      value={parameters.exhaustAirflowIn ?? ''}
-                      onChange={(e) =>
-                        handleParameterChange(
-                          'exhaustAirflowIn',
-                          parseOptionalNumber(e.target.value)
-                        )
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                <div className="mb-3">
-                  <label className="block text-sm text-gray-600 mb-1">
-                    排気側出口風量 [m³/h]
-                  </label>
-                    <input
-                      type="number"
-                      value={parameters.exhaustAirflowOut ?? ''}
-                      onChange={(e) =>
-                        handleParameterChange(
-                          'exhaustAirflowOut',
-                          parseOptionalNumber(e.target.value)
-                        )
+                        handleParameterChange('exhaustAirflow', parseOptionalNumber(e.target.value))
                       }
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
