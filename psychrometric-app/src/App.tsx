@@ -135,12 +135,9 @@ function App() {
   const [editingPointSnapshot, setEditingPointSnapshot] = useState<StatePoint | null>(null);
   const [copySourceA, setCopySourceA] = useState('');
   const [copySourceB, setCopySourceB] = useState('');
-  const headerRef = useRef<HTMLElement>(null);
-  const designConditionsRef = useRef<HTMLDivElement>(null);
-
   // Active tab for sidebar
   const [activeTab, setActiveTab] = useState<'points' | 'processes'>('points');
-  const [chartSize, setChartSize] = useState({ width: 900, height: 600 });
+  const [chartSize, setChartSize] = useState({ width: 1, height: 1 });
   const inputOptionA =
     STATE_POINT_INPUT_OPTIONS.find((option) => option.key === inputTypeA) ??
     STATE_POINT_INPUT_OPTIONS[0];
@@ -156,33 +153,9 @@ function App() {
     if (!container) return;
 
     const updateSize = () => {
-      const containerWidth = Math.max(320, Math.floor(container.clientWidth));
-      const headerHeight = headerRef.current?.offsetHeight ?? 60;
-      const designConditionsHeight = designConditionsRef.current?.offsetHeight ?? 200;
-      const mainPadding = 32; // main p-4 top + bottom
-      const chartContainerPadding = 32; // chart container p-4 top + bottom
-      const sectionGap = 16; // mt-4 between chart and design conditions
-      const availableHeight =
-        window.innerHeight -
-        headerHeight -
-        mainPadding -
-        chartContainerPadding -
-        sectionGap -
-        designConditionsHeight;
-
-      // Calculate chart dimensions
-      // Default aspect ratio is 0.65 (height/width), but limit height to fit viewport
-      const idealHeight = Math.floor(containerWidth * 0.65);
-      const maxHeight = Math.max(320, Math.floor(availableHeight));
-      const height = Math.min(idealHeight, maxHeight);
-
-      // If height is constrained, adjust width to maintain aspect ratio
-      let width = containerWidth;
-      if (height < idealHeight) {
-        width = Math.floor(height / 0.65);
-      }
-
-      setChartSize({ width: Math.max(320, width), height: Math.max(320, height) });
+      const width = Math.max(1, Math.floor(container.clientWidth));
+      const height = Math.max(1, Math.floor(container.clientHeight));
+      setChartSize({ width, height });
     };
 
     updateSize();
@@ -194,14 +167,8 @@ function App() {
 
     const observer = new ResizeObserver(() => updateSize());
     observer.observe(container);
-    if (designConditionsRef.current) {
-      observer.observe(designConditionsRef.current);
-    }
-    // Also listen for window resize to handle fullscreen changes
-    window.addEventListener('resize', updateSize);
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', updateSize);
     };
   }, []);
 
@@ -735,9 +702,9 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-gray-50">
       {/* ヘッダー */}
-      <header ref={headerRef} className="bg-white border-b border-gray-200 px-4 py-3">
+      <header className="flex-none bg-white border-b border-gray-200 px-4 py-3">
         <div className="max-w-full mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-lg sm:text-xl font-bold text-gray-900">
@@ -780,9 +747,9 @@ function App() {
         </div>
       </header>
 
-      <div className="flex flex-col lg:flex-row">
+      <div className="flex min-h-0 flex-1">
         {/* 左サイドバー */}
-        <aside className="w-full lg:w-80 bg-white border-r border-gray-200 lg:h-[calc(100vh-60px)] overflow-y-auto">
+        <aside className="w-80 flex-none bg-white border-r border-gray-200 overflow-y-auto min-h-0">
           {/* 季節切替 */}
           <div className="p-4 border-b border-gray-200">
             <h2 className="font-semibold text-sm text-gray-700 mb-2">表示モード</h2>
@@ -1350,29 +1317,8 @@ function App() {
               </div>
             </div>
           )}
-        </aside>
 
-        {/* メインコンテンツ */}
-        <main className="flex-1 p-4 overflow-auto">
-          <div
-            className="bg-white rounded-lg shadow p-4 overflow-x-auto"
-            ref={chartContainerRef}
-          >
-            <PsychrometricChart
-              ref={chartRef}
-              width={chartSize.width}
-              height={chartSize.height}
-              statePoints={statePoints}
-              processes={processes}
-              activeSeason={activeSeason}
-              selectedPointId={selectedPointId}
-              onPointClick={setSelectedPoint}
-              onPointMove={handlePointMove}
-            />
-          </div>
-
-          {/* 設計条件表示 */}
-          <div ref={designConditionsRef} className="bg-white rounded-lg shadow p-4 mt-4">
+          <div className="p-4 border-t border-gray-200">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold text-gray-900">設計条件</h2>
               <button
@@ -1383,10 +1329,10 @@ function App() {
                 編集
               </button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div className="space-y-4 text-sm text-gray-600">
               <div>
                 <h3 className="font-medium text-gray-700 mb-2">外気条件</h3>
-                <div className="text-gray-600 space-y-1">
+                <div className="space-y-1">
                   <p>
                     夏季: {designConditions.outdoor.summer.dryBulbTemp}°C, RH
                     {designConditions.outdoor.summer.relativeHumidity}%
@@ -1399,7 +1345,7 @@ function App() {
               </div>
               <div>
                 <h3 className="font-medium text-gray-700 mb-2">室内条件</h3>
-                <div className="text-gray-600 space-y-1">
+                <div className="space-y-1">
                   <p>
                     夏季: {designConditions.indoor.summer.dryBulbTemp}°C, RH
                     {designConditions.indoor.summer.relativeHumidity}%
@@ -1412,15 +1358,36 @@ function App() {
               </div>
               <div>
                 <h3 className="font-medium text-gray-700 mb-2">風量</h3>
-                <div className="text-gray-600 space-y-1">
+                <div className="space-y-1">
                   <p>
-                    {designConditions.airflow.supplyAirName}: {designConditions.airflow.supplyAir} m³/h
+                    {designConditions.airflow.supplyAirName}: {designConditions.airflow.supplyAir}{' '}
+                    m³/h
                   </p>
                   <p>
-                    {designConditions.airflow.outdoorAirName}: {designConditions.airflow.outdoorAir} m³/h
+                    {designConditions.airflow.outdoorAirName}:{' '}
+                    {designConditions.airflow.outdoorAir} m³/h
                   </p>
                 </div>
               </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* メインコンテンツ */}
+        <main className="flex-1 min-h-0 min-w-0 overflow-hidden p-4">
+          <div className="bg-white rounded-lg shadow h-full min-h-0 min-w-0 p-4">
+            <div ref={chartContainerRef} className="h-full min-h-0 min-w-0">
+              <PsychrometricChart
+                ref={chartRef}
+                width={chartSize.width}
+                height={chartSize.height}
+                statePoints={statePoints}
+                processes={processes}
+                activeSeason={activeSeason}
+                selectedPointId={selectedPointId}
+                onPointClick={setSelectedPoint}
+                onPointMove={handlePointMove}
+              />
             </div>
           </div>
         </main>

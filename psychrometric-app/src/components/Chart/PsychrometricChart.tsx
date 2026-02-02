@@ -222,7 +222,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         cursor: isDragging ? 'grabbing' : 'default',
         border: '1px solid #ddd',
         width: '100%',
-        height: 'auto',
+        height: '100%',
         touchAction: 'none',
         display: 'block',
       }}
