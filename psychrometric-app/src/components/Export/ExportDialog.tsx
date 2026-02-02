@@ -69,10 +69,11 @@ export const ExportDialog = ({
   const [isExporting, setIsExporting] = useState(false);
   const [exportType, setExportType] = useState<'pdf' | 'png' | null>(null);
 
-  // A4縦向き (mm)
-  const A4_WIDTH_MM = 210;
-  const A4_HEIGHT_MM = 297;
-  const A4_DPI = 96; // Webビュー相当の解像度で軽量化
+  // A4横向き (mm)
+  const A4_WIDTH_MM = 297;
+  const A4_HEIGHT_MM = 210;
+  const exportScale = Math.min(2.5, Math.max(2, window.devicePixelRatio || 1));
+  const A4_DPI = Math.round(96 * exportScale);
 
   const mmToPx = (mm: number) => Math.round((mm / 25.4) * A4_DPI);
   const mmToPt = (mm: number) => mm * 2.83465;
@@ -197,12 +198,11 @@ export const ExportDialog = ({
   };
 
   const renderPdfPages = (chartCanvas: HTMLCanvasElement, pdf: jsPDF, hasJapaneseFont: boolean) => {
-
-    const marginMm = 8;
-    const headerHeightMm = 14;
+    const marginMm = 6;
+    const headerHeightMm = 12;
     const chartTopMm = marginMm + headerHeightMm + 2;
-    const chartHeightMm = 120;
-    const bottomSectionStartMm = chartTopMm + chartHeightMm + 6;
+    const chartHeightMm = 96;
+    const bottomSectionStartMm = chartTopMm + chartHeightMm + 4;
     const contentWidthMm = A4_WIDTH_MM - marginMm * 2;
 
     const setFont = (style: 'normal' | 'bold', sizeMm: number) => {
@@ -246,8 +246,12 @@ export const ExportDialog = ({
       activeSeason,
       resolutionScale: 1,
     });
-    // JPEG形式で軽量化（品質0.85でファイルサイズを削減）
-    const chartImage = chartRenderCanvas.toDataURL('image/jpeg', 0.85);
+    const pngDataUrl = chartRenderCanvas.toDataURL('image/png');
+    const estimatedPngBytes = Math.round((pngDataUrl.length - 'data:image/png;base64,'.length) * 0.75);
+    const useJpeg = estimatedPngBytes > 2_500_000;
+    const chartImage = useJpeg
+      ? chartRenderCanvas.toDataURL('image/jpeg', 0.9)
+      : pngDataUrl;
 
     const drawStatePointCard = (point: StatePoint, index: number, x: number, y: number) => {
       const label = getPointLabel(point, index);
@@ -416,11 +420,13 @@ export const ExportDialog = ({
     pdf.rect(marginMm, chartY, chartWidthMm, chartHeightMm, 'S');
     pdf.addImage(
       chartImage,
-      'JPEG',
+      useJpeg ? 'JPEG' : 'PNG',
       chartXOffset,
       chartY + (chartHeightMm - drawChartHeightMm) / 2,
       drawChartWidthMm,
-      drawChartHeightMm
+      drawChartHeightMm,
+      undefined,
+      'FAST'
     );
 
     const bottomY = bottomSectionStartMm;
@@ -540,11 +546,11 @@ export const ExportDialog = ({
     const pages: HTMLCanvasElement[] = [];
 
     // 設定値 (mm)
-    const marginMm = 8;
-    const headerHeightMm = 14;
+    const marginMm = 6;
+    const headerHeightMm = 12;
     const chartTopMm = marginMm + headerHeightMm + 2;
-    const chartHeightMm = 120; // グラフ領域の高さ
-    const bottomSectionStartMm = chartTopMm + chartHeightMm + 6;
+    const chartHeightMm = 96; // グラフ領域の高さ
+    const bottomSectionStartMm = chartTopMm + chartHeightMm + 4;
 
     const marginPx = mmToPx(marginMm);
     const pageWidthPx = mmToPx(A4_WIDTH_MM);
@@ -1024,6 +1030,11 @@ export const ExportDialog = ({
       return;
     }
 
+    const preview = window.open('', '_blank', 'noopener,noreferrer');
+    if (preview) {
+      preview.document.write('<title>PDF生成中...</title><p style="font-family:sans-serif">生成中…</p>');
+    }
+
     setIsExporting(true);
     setExportType('pdf');
 
@@ -1039,7 +1050,7 @@ export const ExportDialog = ({
         await document.fonts.ready;
       }
 
-      const pdf = new jsPDF('portrait', 'mm', 'a4');
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const hasJapaneseFont = await preparePdfFonts(pdf);
       if (!hasJapaneseFont) {
         throw new Error(
@@ -1055,15 +1066,15 @@ export const ExportDialog = ({
       }
 
       const blobUrl = URL.createObjectURL(pdfBlob);
-      const newWindow = window.open(blobUrl, '_blank');
-
-      // ポップアップブロック対策: 新しいウィンドウが開けなかった場合はダウンロード
-      if (!newWindow) {
+      if (preview) {
+        preview.location.href = blobUrl;
+      } else {
         const link = document.createElement('a');
         link.href = blobUrl;
         link.download = `psychrometric-chart-${designConditions.project.name || 'export'}.pdf`;
         link.click();
       }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
 
       onClose();
     } catch (error) {
