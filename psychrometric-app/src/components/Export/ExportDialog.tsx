@@ -16,6 +16,32 @@ interface ExportDialogProps {
   activeSeason: 'summer' | 'winter' | 'both';
 }
 
+const NOTO_SANS_JP_FONT_URL =
+  'https://unpkg.com/@fontsource/noto-sans-jp@5.0.10/files/noto-sans-jp-japanese-400-normal.ttf';
+let notoSansJpFontDataPromise: Promise<string> | null = null;
+
+const loadNotoSansJpFontData = async () => {
+  if (!notoSansJpFontDataPromise) {
+    notoSansJpFontDataPromise = fetch(NOTO_SANS_JP_FONT_URL)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('フォントの取得に失敗しました');
+        }
+        return response.arrayBuffer();
+      })
+      .then((buffer) => {
+        const bytes = new Uint8Array(buffer);
+        const chunkSize = 0x8000;
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+        }
+        return btoa(binary);
+      });
+  }
+  return notoSansJpFontDataPromise;
+};
+
 export const ExportDialog = ({
   onClose,
   canvasRef,
@@ -33,6 +59,7 @@ export const ExportDialog = ({
   const A4_DPI = 96; // Webビュー相当の解像度で軽量化
 
   const mmToPx = (mm: number) => Math.round((mm / 25.4) * A4_DPI);
+  const mmToPt = (mm: number) => mm * 2.83465;
   const formatNumber = (value?: number, digits = 1) =>
     value === undefined || Number.isNaN(value) ? '-' : value.toFixed(digits);
 
@@ -130,6 +157,352 @@ export const ExportDialog = ({
       return undefined;
     }
     return stream1Point.airflow + stream2Point.airflow;
+  };
+
+  const preparePdfFonts = async (pdf: jsPDF) => {
+    if (!pdf.existsFileInVFS('NotoSansJP-Regular.ttf')) {
+      const fontData = await loadNotoSansJpFontData();
+      pdf.addFileToVFS('NotoSansJP-Regular.ttf', fontData);
+      pdf.addFont('NotoSansJP-Regular.ttf', 'NotoSansJP', 'normal');
+      pdf.addFont('NotoSansJP-Regular.ttf', 'NotoSansJP', 'bold');
+    }
+    pdf.setFont('NotoSansJP', 'normal');
+  };
+
+  const renderPdfPages = async (chartCanvas: HTMLCanvasElement, pdf: jsPDF) => {
+    await preparePdfFonts(pdf);
+
+    const marginMm = 8;
+    const headerHeightMm = 14;
+    const chartTopMm = marginMm + headerHeightMm + 2;
+    const chartHeightMm = 120;
+    const bottomSectionStartMm = chartTopMm + chartHeightMm + 6;
+    const contentWidthMm = A4_WIDTH_MM - marginMm * 2;
+
+    const setFont = (style: 'normal' | 'bold', sizeMm: number) => {
+      pdf.setFont('NotoSansJP', style);
+      pdf.setFontSize(mmToPt(sizeMm));
+    };
+
+    const drawPageBackground = () => {
+      pdf.setFillColor(255, 255, 255);
+      pdf.rect(0, 0, A4_WIDTH_MM, A4_HEIGHT_MM, 'F');
+    };
+
+    const formatAirflow = (airflow?: number) =>
+      typeof airflow === 'number' ? `${airflow.toFixed(0)} m³/h` : '-';
+
+    // チャート画像を準備
+    const chartWidthMm = contentWidthMm;
+    const chartAspectRatio = chartCanvas.width / chartCanvas.height;
+    let drawChartWidthMm = chartWidthMm;
+    let drawChartHeightMm = chartWidthMm / chartAspectRatio;
+    if (drawChartHeightMm > chartHeightMm) {
+      drawChartHeightMm = chartHeightMm;
+      drawChartWidthMm = chartHeightMm * chartAspectRatio;
+    }
+    const chartXOffset = marginMm + (chartWidthMm - drawChartWidthMm) / 2;
+    const chartRenderWidth = Math.round((drawChartWidthMm / 25.4) * A4_DPI);
+    const chartRenderHeight = Math.round((drawChartHeightMm / 25.4) * A4_DPI);
+    const chartRenderCanvas = document.createElement('canvas');
+    chartRenderCanvas.width = chartRenderWidth;
+    chartRenderCanvas.height = chartRenderHeight;
+    renderPsychrometricChart({
+      canvas: chartRenderCanvas,
+      width: chartRenderWidth,
+      height: chartRenderHeight,
+      statePoints: filteredStatePoints,
+      processes: filteredProcesses,
+      activeSeason,
+      resolutionScale: 1,
+    });
+    const chartImage = chartRenderCanvas.toDataURL('image/png');
+
+    const drawStatePointCard = (point: StatePoint, index: number, x: number, y: number) => {
+      const label = getPointLabel(point, index);
+      const seasonColor =
+        point.season === 'summer' ? [59, 130, 246] :
+        point.season === 'winter' ? [239, 68, 68] : [139, 92, 246];
+
+      pdf.setFillColor(seasonColor[0], seasonColor[1], seasonColor[2]);
+      pdf.roundedRect(x, y, 6, 3.5, 0.5, 0.5, 'F');
+
+      pdf.setTextColor(255, 255, 255);
+      setFont('bold', 1.9);
+      pdf.text(label, x + 3, y + 2.3, { align: 'center', baseline: 'middle' });
+
+      pdf.setTextColor(17, 24, 39);
+      setFont('bold', 2.1);
+      pdf.text(point.name, x + 7, y + 2.2);
+
+      pdf.setTextColor(107, 114, 128);
+      setFont('normal', 1.6);
+      const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}% | 絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg'`;
+      const propTextLine2 = `エンタルピー: ${formatNumber(point.enthalpy)} kJ/kg' | 風量: ${formatAirflow(point.airflow)} | 季節: ${seasonLabel(point.season)}`;
+      pdf.text(propTextLine1, x + 7, y + 4.8);
+      pdf.text(propTextLine2, x + 7, y + 7);
+    };
+
+    const drawProcessCard = (process: Process, x: number, y: number) => {
+      const fromPoint = filteredStatePoints.find((p) => p.id === process.fromPointId);
+      const toPoint = filteredStatePoints.find((p) => p.id === process.toPointId);
+      const detailLines: string[] = [
+        `種別: ${processTypeLabels[process.type]} | 季節: ${seasonLabel(process.season)}`,
+        `状態点: ${fromPoint?.name || '不明'} → ${toPoint?.name || '不明'}`,
+      ];
+      const mixingAirflowTotal = getMixingAirflowTotal(process, filteredStatePoints);
+      if (process.type === 'mixing' && mixingAirflowTotal !== undefined) {
+        detailLines.push(`混合後風量: ${mixingAirflowTotal.toFixed(0)} m³/h`);
+      }
+      const capacity = calculateProcessCapacity(process, filteredStatePoints);
+      if (capacity) {
+        detailLines.push(
+          `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${Math.abs(capacity.sensibleCapacity).toFixed(2)} kW | 潜熱: ${Math.abs(capacity.latentCapacity).toFixed(2)} kW`
+        );
+        detailLines.push(
+          `SHF: ${capacity.SHF.toFixed(2)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
+        );
+        detailLines.push(`比エンタルピー差: ${capacity.enthalpyDiff.toFixed(2)} kJ/kg'`);
+        if (process.parameters.airflow && capacity.humidityDiff !== 0) {
+          detailLines.push(
+            `${capacity.humidityDiff < 0 ? '除湿量' : '加湿量'}: ${(Math.abs(capacity.humidityDiff) * process.parameters.airflow * 1.2).toFixed(2)} L/h`
+          );
+        }
+        if (process.type === 'heating' || process.type === 'cooling') {
+          const waterTempDiff = process.parameters.waterTempDiff || 7;
+          const waterFlowRate = (Math.abs(capacity.totalCapacity) * 60) / (4.186 * waterTempDiff);
+          detailLines.push(
+            `水温度差: ${waterTempDiff.toFixed(1)}℃ | 水量: ${waterFlowRate.toFixed(2)} L/min`
+          );
+        }
+      }
+
+      const processLineHeight = 2.4;
+      const processHeaderHeight = 5;
+      const processCardHeight = processHeaderHeight + detailLines.length * processLineHeight + 1;
+
+      const seasonColor =
+        process.season === 'summer' ? [59, 130, 246] :
+        process.season === 'winter' ? [239, 68, 68] : [139, 92, 246];
+
+      pdf.setFillColor(seasonColor[0], seasonColor[1], seasonColor[2]);
+      pdf.rect(x, y, 1, processCardHeight - 1, 'F');
+
+      pdf.setTextColor(17, 24, 39);
+      setFont('bold', 2.1);
+      pdf.text(process.name, x + 2.5, y + 2.4);
+
+      const fromLabel = getPointLabelById(process.fromPointId);
+      const toLabel = getPointLabelById(process.toPointId);
+      pdf.setTextColor(107, 114, 128);
+      setFont('normal', 1.7);
+      pdf.text(`${fromLabel} → ${toLabel}`, x + 2.5, y + 4.4);
+
+      setFont('normal', 1.6);
+      detailLines.forEach((line, lineIndex) => {
+        pdf.text(line, x + 2.5, y + 6.4 + lineIndex * processLineHeight);
+      });
+
+      return processCardHeight;
+    };
+
+    drawPageBackground();
+
+    const headerY = marginMm;
+    pdf.setTextColor(17, 24, 39);
+    setFont('bold', 4.5);
+    pdf.text(designConditions.project.name || '空気線図', marginMm, headerY + 4);
+
+    const projectInfo = [
+      designConditions.project.location,
+      designConditions.project.date,
+      designConditions.project.designer,
+    ].filter(Boolean).join(' | ');
+    setFont('normal', 2.2);
+    pdf.setTextColor(107, 114, 128);
+    pdf.text(projectInfo || '-', marginMm, headerY + 7.5);
+
+    const conditionsX = marginMm + contentWidthMm * 0.45;
+    const conditionsWidth = contentWidthMm * 0.55;
+    setFont('bold', 2.2);
+    pdf.setTextColor(55, 65, 81);
+    pdf.text('設計条件', conditionsX, headerY + 2);
+
+    const col1X = conditionsX;
+    const col2X = conditionsX + conditionsWidth / 3;
+    const col3X = conditionsX + (conditionsWidth / 3) * 2;
+    const condRowHeight = 2.2;
+
+    setFont('bold', 1.7);
+    pdf.text('外気条件', col1X, headerY + 4.5);
+    setFont('normal', 1.6);
+    pdf.setTextColor(75, 85, 99);
+    pdf.text(
+      `夏: ${formatNumber(designConditions.outdoor.summer.dryBulbTemp)}°C / ${formatNumber(designConditions.outdoor.summer.relativeHumidity, 0)}%`,
+      col1X,
+      headerY + 4.5 + condRowHeight
+    );
+    pdf.text(
+      `冬: ${formatNumber(designConditions.outdoor.winter.dryBulbTemp)}°C / ${formatNumber(designConditions.outdoor.winter.relativeHumidity, 0)}%`,
+      col1X,
+      headerY + 4.5 + condRowHeight * 2
+    );
+
+    pdf.setTextColor(55, 65, 81);
+    setFont('bold', 1.7);
+    pdf.text('室内条件', col2X, headerY + 4.5);
+    setFont('normal', 1.6);
+    pdf.setTextColor(75, 85, 99);
+    pdf.text(
+      `夏: ${formatNumber(designConditions.indoor.summer.dryBulbTemp)}°C / ${formatNumber(designConditions.indoor.summer.relativeHumidity, 0)}%`,
+      col2X,
+      headerY + 4.5 + condRowHeight
+    );
+    pdf.text(
+      `冬: ${formatNumber(designConditions.indoor.winter.dryBulbTemp)}°C / ${formatNumber(designConditions.indoor.winter.relativeHumidity, 0)}%`,
+      col2X,
+      headerY + 4.5 + condRowHeight * 2
+    );
+
+    pdf.setTextColor(55, 65, 81);
+    setFont('bold', 1.7);
+    pdf.text('風量', col3X, headerY + 4.5);
+    setFont('normal', 1.6);
+    pdf.setTextColor(75, 85, 99);
+    pdf.text(
+      `供給: ${formatNumber(designConditions.airflow.supplyAir, 0)} m³/h`,
+      col3X,
+      headerY + 4.5 + condRowHeight
+    );
+    pdf.text(
+      `外気: ${formatNumber(designConditions.airflow.outdoorAir, 0)} m³/h`,
+      col3X,
+      headerY + 4.5 + condRowHeight * 2
+    );
+
+    const chartY = chartTopMm;
+    pdf.setDrawColor(229, 231, 235);
+    pdf.rect(marginMm, chartY, chartWidthMm, chartHeightMm, 'S');
+    pdf.addImage(
+      chartImage,
+      'PNG',
+      chartXOffset,
+      chartY + (chartHeightMm - drawChartHeightMm) / 2,
+      drawChartWidthMm,
+      drawChartHeightMm
+    );
+
+    const bottomY = bottomSectionStartMm;
+    const halfWidth = contentWidthMm / 2 - 2;
+    let statePointY = bottomY;
+    pdf.setTextColor(17, 24, 39);
+    setFont('bold', 2.8);
+    pdf.text('状態点', marginMm, statePointY + 2.5);
+    statePointY += 5;
+
+    const statePointCardHeight = 9;
+    const statePointMaxY = A4_HEIGHT_MM - marginMm;
+    const statePointOverflow: StatePoint[] = [];
+
+    filteredStatePoints.forEach((point, index) => {
+      if (statePointY + statePointCardHeight > statePointMaxY) {
+        statePointOverflow.push(point);
+        return;
+      }
+      drawStatePointCard(point, index, marginMm, statePointY);
+      statePointY += statePointCardHeight;
+    });
+
+    const processX = marginMm + halfWidth + 4;
+    let processY = bottomY;
+    const processMaxY = A4_HEIGHT_MM - marginMm;
+    const processOverflow: Process[] = [];
+
+    if (filteredProcesses.length > 0) {
+      pdf.setTextColor(17, 24, 39);
+      setFont('bold', 2.8);
+      pdf.text('プロセス', processX, processY + 2.5);
+      processY += 5;
+    }
+
+    filteredProcesses.forEach((process) => {
+      const fromPoint = filteredStatePoints.find((p) => p.id === process.fromPointId);
+      const toPoint = filteredStatePoints.find((p) => p.id === process.toPointId);
+      const detailLines: string[] = [
+        `種別: ${processTypeLabels[process.type]} | 季節: ${seasonLabel(process.season)}`,
+        `状態点: ${fromPoint?.name || '不明'} → ${toPoint?.name || '不明'}`,
+      ];
+      const mixingAirflowTotal = getMixingAirflowTotal(process, filteredStatePoints);
+      if (process.type === 'mixing' && mixingAirflowTotal !== undefined) {
+        detailLines.push(`混合後風量: ${mixingAirflowTotal.toFixed(0)} m³/h`);
+      }
+      const capacity = calculateProcessCapacity(process, filteredStatePoints);
+      if (capacity) {
+        detailLines.push(
+          `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${Math.abs(capacity.sensibleCapacity).toFixed(2)} kW | 潜熱: ${Math.abs(capacity.latentCapacity).toFixed(2)} kW`
+        );
+        detailLines.push(
+          `SHF: ${capacity.SHF.toFixed(2)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
+        );
+        detailLines.push(`比エンタルピー差: ${capacity.enthalpyDiff.toFixed(2)} kJ/kg'`);
+        if (process.parameters.airflow && capacity.humidityDiff !== 0) {
+          detailLines.push(
+            `${capacity.humidityDiff < 0 ? '除湿量' : '加湿量'}: ${(Math.abs(capacity.humidityDiff) * process.parameters.airflow * 1.2).toFixed(2)} L/h`
+          );
+        }
+        if (process.type === 'heating' || process.type === 'cooling') {
+          const waterTempDiff = process.parameters.waterTempDiff || 7;
+          const waterFlowRate = (Math.abs(capacity.totalCapacity) * 60) / (4.186 * waterTempDiff);
+          detailLines.push(
+            `水温度差: ${waterTempDiff.toFixed(1)}℃ | 水量: ${waterFlowRate.toFixed(2)} L/min`
+          );
+        }
+      }
+
+      const processLineHeight = 2.4;
+      const processHeaderHeight = 5;
+      const processCardHeight = processHeaderHeight + detailLines.length * processLineHeight + 1;
+      if (processY + processCardHeight > processMaxY) {
+        processOverflow.push(process);
+        return;
+      }
+      processY += drawProcessCard(process, processX, processY);
+    });
+
+    if (statePointOverflow.length > 0 || processOverflow.length > 0) {
+      pdf.addPage();
+      drawPageBackground();
+
+      pdf.setTextColor(17, 24, 39);
+      setFont('bold', 3.2);
+      pdf.text(`${designConditions.project.name || '空気線図'} - 続き`, marginMm, marginMm + 3);
+
+      let currentY = marginMm + 8;
+
+      if (statePointOverflow.length > 0) {
+        setFont('bold', 2.8);
+        pdf.text('状態点 (続き)', marginMm, currentY + 2.5);
+        currentY += 5;
+
+        statePointOverflow.forEach((point) => {
+          const origIndex = filteredStatePoints.findIndex((p) => p.id === point.id);
+          drawStatePointCard(point, origIndex, marginMm, currentY);
+          currentY += statePointCardHeight;
+        });
+
+        currentY += 5;
+      }
+
+      if (processOverflow.length > 0) {
+        setFont('bold', 2.8);
+        pdf.text('プロセス (続き)', marginMm, currentY + 2.5);
+        currentY += 5;
+
+        processOverflow.forEach((process) => {
+          currentY += drawProcessCard(process, marginMm, currentY);
+        });
+      }
+    }
   };
 
   const buildA4Pages = (chartCanvas: HTMLCanvasElement): HTMLCanvasElement[] => {
@@ -626,14 +999,8 @@ export const ExportDialog = ({
 
     try {
       const canvas = canvasRef.current;
-      const pages = buildA4Pages(canvas);
       const pdf = new jsPDF('portrait', 'mm', 'a4');
-      pages.forEach((page, index) => {
-        if (index > 0) {
-          pdf.addPage();
-        }
-        pdf.addImage(page.toDataURL('image/png'), 'PNG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
-      });
+      await renderPdfPages(canvas, pdf);
 
       // PDFをBlobとして生成し、新しいウィンドウで開く
       const pdfBlob = pdf.output('blob');
