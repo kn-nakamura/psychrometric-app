@@ -30,7 +30,7 @@ export const ExportDialog = ({
   // A4縦向き (mm)
   const A4_WIDTH_MM = 210;
   const A4_HEIGHT_MM = 297;
-  const A4_DPI = 300; // 印刷品質
+  const A4_DPI = 96; // Webビュー相当の解像度で軽量化
 
   const mmToPx = (mm: number) => Math.round((mm / 25.4) * A4_DPI);
 
@@ -274,7 +274,7 @@ export const ExportDialog = ({
       statePoints: filteredStatePoints,
       processes: filteredProcesses,
       activeSeason,
-      resolutionScale: 2,
+      resolutionScale: 1,
     });
 
     ctx1.imageSmoothingEnabled = true;
@@ -635,8 +635,8 @@ export const ExportDialog = ({
           pdf.addPage();
         }
 
-        const pageImage = pageCanvas.toDataURL('image/png');
-        pdf.addImage(pageImage, 'PNG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
+        const pageImage = pageCanvas.toDataURL('image/jpeg', 0.82);
+        pdf.addImage(pageImage, 'JPEG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
       });
 
       // PDFをBlobとして生成し、新しいウィンドウで開く
