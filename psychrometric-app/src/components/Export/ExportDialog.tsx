@@ -16,31 +16,39 @@ interface ExportDialogProps {
   activeSeason: 'summer' | 'winter' | 'both';
 }
 
-// Using Noto Sans CJK JP from GitHub (via jsDelivr CDN for better reliability)
-const NOTO_SANS_JP_FONT_URL =
-  'https://cdn.jsdelivr.net/gh/minoryorg/Noto-Sans-CJK-JP@master/fonts/NotoSansCJKjp-Regular.ttf';
+const NOTO_SANS_JP_FONT_URLS = [
+  '/fonts/NotoSansJP-Regular.ttf',
+  'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts/hinted/ttf/NotoSansJP/NotoSansJP-Regular.ttf',
+];
 let notoSansJpFontDataPromise: Promise<string | null> | null = null;
 
 const loadNotoSansJpFontData = async (): Promise<string | null> => {
   if (!notoSansJpFontDataPromise) {
-    notoSansJpFontDataPromise = fetch(NOTO_SANS_JP_FONT_URL)
-      .then((response) => {
-        if (!response.ok) {
-          console.warn('フォントの取得に失敗しました。標準フォントを使用します。');
-          return null;
+    notoSansJpFontDataPromise = (async () => {
+      for (const url of NOTO_SANS_JP_FONT_URLS) {
+        try {
+          const response = await fetch(url);
+          if (!response.ok) {
+            continue;
+          }
+          const buffer = await response.arrayBuffer();
+          if (!buffer || buffer.byteLength < 10000) {
+            continue;
+          }
+          const bytes = new Uint8Array(buffer);
+          const chunkSize = 0x8000;
+          let binary = '';
+          for (let i = 0; i < bytes.length; i += chunkSize) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+          }
+          return btoa(binary);
+        } catch (error) {
+          console.warn('フォント読み込みエラー:', error);
         }
-        return response.arrayBuffer();
-      })
-      .then((buffer) => {
-        if (!buffer) return null;
-        const bytes = new Uint8Array(buffer);
-        const chunkSize = 0x8000;
-        let binary = '';
-        for (let i = 0; i < bytes.length; i += chunkSize) {
-          binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-        }
-        return btoa(binary);
-      })
+      }
+      console.warn('フォントの取得に失敗しました。');
+      return null;
+    })()
       .catch((error) => {
         console.warn('フォント読み込みエラー:', error);
         notoSansJpFontDataPromise = null; // 次回再試行できるようにリセット
@@ -185,8 +193,6 @@ export const ExportDialog = ({
     } catch (error) {
       console.warn('フォント準備エラー:', error);
     }
-    // フォールバック: Helvetica（日本語非対応だが最低限動作する）
-    pdf.setFont('Helvetica', 'normal');
     return false;
   };
 
@@ -982,17 +988,6 @@ export const ExportDialog = ({
     return pages;
   };
 
-  const renderPdfPagesAsImages = (pages: HTMLCanvasElement[], pdf: jsPDF) => {
-    pages.forEach((page, index) => {
-      if (index > 0) {
-        pdf.addPage();
-      }
-      const imageData = page.toDataURL('image/jpeg', 0.92);
-      pdf.addImage(imageData, 'JPEG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
-    });
-  };
-
-
   const handleExportPNG = async () => {
     if (!canvasRef.current) {
       alert('チャートが見つかりません');
@@ -1040,14 +1035,18 @@ export const ExportDialog = ({
         throw new Error('チャートの描画領域が無効です');
       }
 
+      if (document.fonts?.ready) {
+        await document.fonts.ready;
+      }
+
       const pdf = new jsPDF('portrait', 'mm', 'a4');
       const hasJapaneseFont = await preparePdfFonts(pdf);
-      if (hasJapaneseFont) {
-        renderPdfPages(canvas, pdf, hasJapaneseFont);
-      } else {
-        const pages = buildA4Pages(canvas);
-        renderPdfPagesAsImages(pages, pdf);
+      if (!hasJapaneseFont) {
+        throw new Error(
+          'PDF用フォントが読み込めませんでした。public/fonts/NotoSansJP-Regular.ttf を配置するか、外部フォントURLへのアクセスを許可してください。'
+        );
       }
+      renderPdfPages(canvas, pdf, hasJapaneseFont);
 
       // PDFをBlobとして生成し、新しいウィンドウで開く
       const pdfBlob = pdf.output('blob');
