@@ -142,6 +142,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<'points' | 'processes'>('points');
   const [chartSize, setChartSize] = useState({ width: 900, height: 600 });
   const [headerHeight, setHeaderHeight] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight);
   const inputOptionA =
     STATE_POINT_INPUT_OPTIONS.find((option) => option.key === inputTypeA) ??
     STATE_POINT_INPUT_OPTIONS[0];
@@ -164,7 +165,7 @@ function App() {
       const chartContainerPadding = 32; // chart container p-4 top + bottom
       const sectionGap = 16; // mt-4 between chart and design conditions
       const availableHeight =
-        window.innerHeight -
+        viewportHeight -
         headerHeight -
         mainPadding -
         chartContainerPadding -
@@ -206,6 +207,22 @@ function App() {
     return () => {
       observer.disconnect();
       window.removeEventListener('resize', updateSize);
+    };
+  }, [viewportHeight]);
+
+  useEffect(() => {
+    const updateViewportHeight = () => {
+      const nextHeight = window.visualViewport?.height ?? window.innerHeight;
+      setViewportHeight(Math.floor(nextHeight));
+    };
+
+    updateViewportHeight();
+
+    window.addEventListener('resize', updateViewportHeight);
+    window.visualViewport?.addEventListener('resize', updateViewportHeight);
+    return () => {
+      window.removeEventListener('resize', updateViewportHeight);
+      window.visualViewport?.removeEventListener('resize', updateViewportHeight);
     };
   }, []);
 
@@ -806,7 +823,11 @@ function App() {
 
       <div
         className="flex flex-col lg:flex-row"
-        style={headerHeight ? { height: `calc(100vh - ${headerHeight}px)` } : undefined}
+        style={
+          headerHeight && viewportHeight
+            ? { height: `calc(${viewportHeight}px - ${headerHeight}px)` }
+            : undefined
+        }
       >
         {/* 左サイドバー */}
         <aside className="w-full lg:w-80 bg-white border-r border-gray-200 lg:h-full overflow-y-auto">
