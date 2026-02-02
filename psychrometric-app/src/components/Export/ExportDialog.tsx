@@ -190,8 +190,7 @@ export const ExportDialog = ({
     return false;
   };
 
-  const renderPdfPages = async (chartCanvas: HTMLCanvasElement, pdf: jsPDF) => {
-    const hasJapaneseFont = await preparePdfFonts(pdf);
+  const renderPdfPages = (chartCanvas: HTMLCanvasElement, pdf: jsPDF, hasJapaneseFont: boolean) => {
 
     const marginMm = 8;
     const headerHeightMm = 14;
@@ -983,6 +982,16 @@ export const ExportDialog = ({
     return pages;
   };
 
+  const renderPdfPagesAsImages = (pages: HTMLCanvasElement[], pdf: jsPDF) => {
+    pages.forEach((page, index) => {
+      if (index > 0) {
+        pdf.addPage();
+      }
+      const imageData = page.toDataURL('image/jpeg', 0.92);
+      pdf.addImage(imageData, 'JPEG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
+    });
+  };
+
 
   const handleExportPNG = async () => {
     if (!canvasRef.current) {
@@ -1032,7 +1041,13 @@ export const ExportDialog = ({
       }
 
       const pdf = new jsPDF('portrait', 'mm', 'a4');
-      await renderPdfPages(canvas, pdf);
+      const hasJapaneseFont = await preparePdfFonts(pdf);
+      if (hasJapaneseFont) {
+        renderPdfPages(canvas, pdf, hasJapaneseFont);
+      } else {
+        const pages = buildA4Pages(canvas);
+        renderPdfPagesAsImages(pages, pdf);
+      }
 
       // PDFをBlobとして生成し、新しいウィンドウで開く
       const pdfBlob = pdf.output('blob');
