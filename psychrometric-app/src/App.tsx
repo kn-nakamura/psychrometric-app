@@ -154,9 +154,27 @@ function App() {
     if (!container) return;
 
     const updateSize = () => {
-      const width = Math.max(320, Math.floor(container.clientWidth));
-      const height = Math.max(320, Math.floor(width * 0.65));
-      setChartSize({ width, height });
+      const containerWidth = Math.max(320, Math.floor(container.clientWidth));
+      // Calculate available height: viewport height minus header, padding, and design conditions section
+      // Header (~60px) + padding (32px) + design conditions section (~200px estimated) + extra margin
+      const headerHeight = 60;
+      const paddingAndMargin = 48; // p-4 * 2 + extra margin
+      const designConditionsHeight = 200;
+      const availableHeight = window.innerHeight - headerHeight - paddingAndMargin - designConditionsHeight;
+
+      // Calculate chart dimensions
+      // Default aspect ratio is 0.65 (height/width), but limit height to fit viewport
+      const idealHeight = Math.floor(containerWidth * 0.65);
+      const maxHeight = Math.max(320, Math.floor(availableHeight));
+      const height = Math.min(idealHeight, maxHeight);
+
+      // If height is constrained, adjust width to maintain aspect ratio
+      let width = containerWidth;
+      if (height < idealHeight) {
+        width = Math.floor(height / 0.65);
+      }
+
+      setChartSize({ width: Math.max(320, width), height: Math.max(320, height) });
     };
 
     updateSize();
@@ -168,7 +186,12 @@ function App() {
 
     const observer = new ResizeObserver(() => updateSize());
     observer.observe(container);
-    return () => observer.disconnect();
+    // Also listen for window resize to handle fullscreen changes
+    window.addEventListener('resize', updateSize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
   }, []);
 
   useEffect(() => {
