@@ -20,6 +20,76 @@ export interface PsychrometricChartRef {
   getCanvas: () => HTMLCanvasElement | null;
 }
 
+interface RenderPsychrometricChartOptions {
+  canvas: HTMLCanvasElement;
+  width: number;
+  height: number;
+  statePoints: StatePoint[];
+  processes: Process[];
+  activeSeason: 'summer' | 'winter' | 'both';
+  selectedPointId?: string | null;
+  resolutionScale?: number;
+}
+
+const getDefaultResolutionScale = () => {
+  if (typeof window === 'undefined') {
+    return 1.25;
+  }
+  return 1.25 * (window.devicePixelRatio || 1);
+};
+
+export const renderPsychrometricChart = ({
+  canvas,
+  width,
+  height,
+  statePoints,
+  processes,
+  activeSeason,
+  selectedPointId,
+  resolutionScale = getDefaultResolutionScale(),
+}: RenderPsychrometricChartOptions) => {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const chartConfig = createDynamicChartConfig(width, height, statePoints);
+  const coordinates = new ChartCoordinates(chartConfig.dimensions, chartConfig.range);
+
+  const scaledWidth = Math.max(1, Math.round(width * resolutionScale));
+  const scaledHeight = Math.max(1, Math.round(height * resolutionScale));
+  if (canvas.width !== scaledWidth) {
+    canvas.width = scaledWidth;
+  }
+  if (canvas.height !== scaledHeight) {
+    canvas.height = scaledHeight;
+  }
+  ctx.setTransform(resolutionScale, 0, 0, resolutionScale, 0, 0);
+
+  // クリア
+  ctx.clearRect(0, 0, width, height);
+
+  // 背景
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+
+  // グリッド線を描画
+  drawGrid(ctx, coordinates, chartConfig.range);
+
+  // 相対湿度曲線を描画
+  drawRHCurves(ctx, coordinates, chartConfig.range);
+
+  // 湿球温度線を描画（薄く）
+  drawWetBulbCurves(ctx, coordinates, chartConfig.range);
+
+  // エンタルピー線を描画（薄く）
+  drawEnthalpyCurves(ctx, coordinates, chartConfig.range);
+
+  // プロセス線を描画
+  drawProcesses(ctx, coordinates, processes, statePoints, activeSeason);
+
+  // 状態点を描画
+  drawStatePoints(ctx, coordinates, statePoints, activeSeason, selectedPointId);
+};
+
 export const PsychrometricChart = forwardRef<PsychrometricChartRef, PsychrometricChartProps>(({
   width = 1000,
   height = 700,
@@ -39,10 +109,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   const [isDragging, setIsDragging] = useState(false);
   const [draggedPointId, setDraggedPointId] = useState<string | null>(null);
   const resolutionScale = useMemo(() => {
-    if (typeof window === 'undefined') {
-      return 1.25;
-    }
-    return 1.25 * (window.devicePixelRatio || 1);
+    return getDefaultResolutionScale();
   }, []);
 
   // 座標変換の設定 - 状態点に基づいて動的に範囲を調整
@@ -58,43 +125,16 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const scaledWidth = Math.max(1, Math.round(width * resolutionScale));
-    const scaledHeight = Math.max(1, Math.round(height * resolutionScale));
-    if (canvas.width !== scaledWidth) {
-      canvas.width = scaledWidth;
-    }
-    if (canvas.height !== scaledHeight) {
-      canvas.height = scaledHeight;
-    }
-    ctx.setTransform(resolutionScale, 0, 0, resolutionScale, 0, 0);
-
-    // クリア
-    ctx.clearRect(0, 0, width, height);
-
-    // 背景
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, width, height);
-
-    // グリッド線を描画
-    drawGrid(ctx, coordinates, chartConfig.range);
-
-    // 相対湿度曲線を描画
-    drawRHCurves(ctx, coordinates, chartConfig.range);
-
-    // 湿球温度線を描画（薄く）
-    drawWetBulbCurves(ctx, coordinates, chartConfig.range);
-
-    // エンタルピー線を描画（薄く）
-    drawEnthalpyCurves(ctx, coordinates, chartConfig.range);
-
-    // プロセス線を描画
-    drawProcesses(ctx, coordinates, processes, statePoints, activeSeason);
-
-    // 状態点を描画
-    drawStatePoints(ctx, coordinates, statePoints, activeSeason, selectedPointId);
+    renderPsychrometricChart({
+      canvas,
+      width,
+      height,
+      statePoints,
+      processes,
+      activeSeason,
+      selectedPointId,
+      resolutionScale,
+    });
 
   }, [
     statePoints,

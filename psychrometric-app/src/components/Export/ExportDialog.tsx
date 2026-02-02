@@ -4,6 +4,8 @@ import { jsPDF } from 'jspdf';
 import { DesignConditions } from '@/types/designConditions';
 import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
+import { renderPsychrometricChart } from '@/components/Chart/PsychrometricChart';
+import { CoilCapacityCalculator } from '@/lib/equipment/coilCapacity';
 
 interface ExportDialogProps {
   onClose: () => void;
@@ -34,6 +36,20 @@ export const ExportDialog = ({
 
   const formatNumber = (value?: number, digits = 1) =>
     value === undefined || Number.isNaN(value) ? '-' : value.toFixed(digits);
+
+  const processTypeLabels: Record<Process['type'], string> = {
+    heating: '加熱',
+    cooling: '冷却',
+    humidifying: '加湿',
+    dehumidifying: '除湿',
+    mixing: '混合',
+    heatExchange: '全熱交換',
+    fanHeating: 'ファン発熱',
+    airSupply: '空調吹き出し',
+  };
+
+  const seasonLabel = (season: Process['season'] | StatePoint['season']) =>
+    season === 'summer' ? '夏' : season === 'winter' ? '冬' : '通年';
 
   // Filter state points by active season
   const filteredStatePoints = statePoints
@@ -88,15 +104,44 @@ export const ExportDialog = ({
     return getPointLabel(point, pointIndex);
   };
 
+  const calculateProcessCapacity = (process: Process, points: StatePoint[]) => {
+    const fromPoint = points.find((p) => p.id === process.fromPointId);
+    const toPoint = points.find((p) => p.id === process.toPointId);
+    if (!fromPoint || !toPoint) return null;
+    if (!fromPoint.enthalpy || !toPoint.enthalpy) return null;
+    const airflow = process.parameters.airflow || 1000;
+    try {
+      return CoilCapacityCalculator.calculate(
+        fromPoint as StatePoint,
+        toPoint as StatePoint,
+        airflow
+      );
+    } catch {
+      return null;
+    }
+  };
+
+  const getMixingAirflowTotal = (process: Process, points: StatePoint[]) => {
+    const stream1Id =
+      process.parameters.mixingRatios?.stream1.pointId ?? process.fromPointId;
+    const stream2Id = process.parameters.mixingRatios?.stream2.pointId;
+    const stream1Point = points.find((p) => p.id === stream1Id);
+    const stream2Point = points.find((p) => p.id === stream2Id);
+    if (typeof stream1Point?.airflow !== 'number' || typeof stream2Point?.airflow !== 'number') {
+      return undefined;
+    }
+    return stream1Point.airflow + stream2Point.airflow;
+  };
+
   const buildA4Pages = (chartCanvas: HTMLCanvasElement): HTMLCanvasElement[] => {
     const pages: HTMLCanvasElement[] = [];
 
     // 設定値 (mm)
     const marginMm = 8;
-    const headerHeightMm = 12;
+    const headerHeightMm = 14;
     const chartTopMm = marginMm + headerHeightMm + 2;
-    const chartHeightMm = 110; // グラフ領域の高さ（A4の約1/2より少し上）
-    const bottomSectionStartMm = chartTopMm + chartHeightMm + 5;
+    const chartHeightMm = 120; // グラフ領域の高さ
+    const bottomSectionStartMm = chartTopMm + chartHeightMm + 6;
 
     const marginPx = mmToPx(marginMm);
     const pageWidthPx = mmToPx(A4_WIDTH_MM);
@@ -121,12 +166,12 @@ export const ExportDialog = ({
 
     // プロジェクト名
     ctx1.fillStyle = '#111827';
-    ctx1.font = `bold ${mmToPx(4)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
+    ctx1.font = `bold ${mmToPx(4.5)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
     ctx1.textAlign = 'left';
     ctx1.fillText(designConditions.project.name || '空気線図', marginPx, headerY + mmToPx(4));
 
     // プロジェクト情報（サブタイトル）
-    ctx1.font = `${mmToPx(2)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
+    ctx1.font = `${mmToPx(2.2)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
     ctx1.fillStyle = '#6b7280';
     const projectInfo = [
       designConditions.project.location,
@@ -138,12 +183,12 @@ export const ExportDialog = ({
     // 設計条件（右側）
     const conditionsX = marginPx + contentWidthPx * 0.45;
     const conditionsWidth = contentWidthPx * 0.55;
-    ctx1.font = `bold ${mmToPx(2)}px "Noto Sans JP", sans-serif`;
+    ctx1.font = `bold ${mmToPx(2.2)}px "Noto Sans JP", sans-serif`;
     ctx1.fillStyle = '#374151';
     ctx1.textAlign = 'left';
     ctx1.fillText('設計条件', conditionsX, headerY + mmToPx(2));
 
-    ctx1.font = `${mmToPx(1.6)}px sans-serif`;
+    ctx1.font = `${mmToPx(1.8)}px sans-serif`;
     ctx1.fillStyle = '#4b5563';
 
     const col1X = conditionsX;
@@ -152,9 +197,9 @@ export const ExportDialog = ({
     const condRowHeight = mmToPx(2.2);
 
     // 外気条件
-    ctx1.font = `bold ${mmToPx(1.5)}px sans-serif`;
+    ctx1.font = `bold ${mmToPx(1.7)}px sans-serif`;
     ctx1.fillText('外気条件', col1X, headerY + mmToPx(4.5));
-    ctx1.font = `${mmToPx(1.4)}px sans-serif`;
+    ctx1.font = `${mmToPx(1.6)}px sans-serif`;
     ctx1.fillText(
       `夏: ${formatNumber(designConditions.outdoor.summer.dryBulbTemp)}°C / ${formatNumber(designConditions.outdoor.summer.relativeHumidity, 0)}%`,
       col1X,
@@ -167,9 +212,9 @@ export const ExportDialog = ({
     );
 
     // 室内条件
-    ctx1.font = `bold ${mmToPx(1.5)}px sans-serif`;
+    ctx1.font = `bold ${mmToPx(1.7)}px sans-serif`;
     ctx1.fillText('室内条件', col2X, headerY + mmToPx(4.5));
-    ctx1.font = `${mmToPx(1.4)}px sans-serif`;
+    ctx1.font = `${mmToPx(1.6)}px sans-serif`;
     ctx1.fillText(
       `夏: ${formatNumber(designConditions.indoor.summer.dryBulbTemp)}°C / ${formatNumber(designConditions.indoor.summer.relativeHumidity, 0)}%`,
       col2X,
@@ -182,9 +227,9 @@ export const ExportDialog = ({
     );
 
     // 風量
-    ctx1.font = `bold ${mmToPx(1.5)}px sans-serif`;
+    ctx1.font = `bold ${mmToPx(1.7)}px sans-serif`;
     ctx1.fillText('風量', col3X, headerY + mmToPx(4.5));
-    ctx1.font = `${mmToPx(1.4)}px sans-serif`;
+    ctx1.font = `${mmToPx(1.6)}px sans-serif`;
     ctx1.fillText(
       `供給: ${formatNumber(designConditions.airflow.supplyAir, 0)} m³/h`,
       col3X,
@@ -216,11 +261,26 @@ export const ExportDialog = ({
     ctx1.lineWidth = 1;
     ctx1.strokeRect(marginPx, chartY, chartWidthPx, chartHeightPx);
 
-    // チャート描画
+    // チャート描画 (PDF用にPC相当の解像度で再レンダリング)
+    const chartRenderWidth = Math.round(drawChartWidth);
+    const chartRenderHeight = Math.round(drawChartHeight);
+    const chartRenderCanvas = document.createElement('canvas');
+    chartRenderCanvas.width = chartRenderWidth;
+    chartRenderCanvas.height = chartRenderHeight;
+    renderPsychrometricChart({
+      canvas: chartRenderCanvas,
+      width: chartRenderWidth,
+      height: chartRenderHeight,
+      statePoints: filteredStatePoints,
+      processes: filteredProcesses,
+      activeSeason,
+      resolutionScale: 2,
+    });
+
     ctx1.imageSmoothingEnabled = true;
     ctx1.imageSmoothingQuality = 'high';
     ctx1.drawImage(
-      chartCanvas,
+      chartRenderCanvas,
       chartXOffset,
       chartY + (chartHeightPx - drawChartHeight) / 2,
       drawChartWidth,
@@ -236,15 +296,14 @@ export const ExportDialog = ({
     // ========================================
     let statePointY = bottomY;
     ctx1.fillStyle = '#111827';
-    ctx1.font = `bold ${mmToPx(2.5)}px "Noto Sans JP", sans-serif`;
+    ctx1.font = `bold ${mmToPx(2.8)}px "Noto Sans JP", sans-serif`;
     ctx1.textAlign = 'left';
     ctx1.fillText('状態点', marginPx, statePointY + mmToPx(2.5));
     statePointY += mmToPx(5);
 
     // 状態点テーブルヘッダー
-    const statePointCardHeight = mmToPx(6);
+    const statePointCardHeight = mmToPx(9);
     const statePointMaxY = pageHeightPx - marginPx;
-    let statePointPage1Count = 0;
     const statePointOverflow: StatePoint[] = [];
 
     filteredStatePoints.forEach((point, index) => {
@@ -265,23 +324,26 @@ export const ExportDialog = ({
       ctx1.fill();
 
       ctx1.fillStyle = '#ffffff';
-      ctx1.font = `bold ${mmToPx(1.6)}px sans-serif`;
+      ctx1.font = `bold ${mmToPx(1.9)}px sans-serif`;
       ctx1.textAlign = 'center';
       ctx1.fillText(label, marginPx + mmToPx(3), statePointY + mmToPx(2.3));
       ctx1.textAlign = 'left';
 
       // 名前と物性値
       ctx1.fillStyle = '#111827';
-      ctx1.font = `bold ${mmToPx(1.8)}px "Noto Sans JP", sans-serif`;
+      ctx1.font = `bold ${mmToPx(2.1)}px "Noto Sans JP", sans-serif`;
       ctx1.fillText(point.name, marginPx + mmToPx(7), statePointY + mmToPx(2.2));
 
       ctx1.fillStyle = '#6b7280';
-      ctx1.font = `${mmToPx(1.4)}px sans-serif`;
-      const propText = `${formatNumber(point.dryBulbTemp)}°C | ${formatNumber(point.relativeHumidity, 0)}%RH | ${formatNumber(point.humidity, 4)}kg/kg' | ${formatNumber(point.enthalpy)}kJ/kg'`;
-      ctx1.fillText(propText, marginPx + mmToPx(7), statePointY + mmToPx(4.8));
+      ctx1.font = `${mmToPx(1.6)}px sans-serif`;
+      const airflowText =
+        typeof point.airflow === 'number' ? `${point.airflow.toFixed(0)} m³/h` : '-';
+      const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}% | 絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg'`;
+      const propTextLine2 = `エンタルピー: ${formatNumber(point.enthalpy)} kJ/kg' | 風量: ${airflowText} | 季節: ${seasonLabel(point.season)}`;
+      ctx1.fillText(propTextLine1, marginPx + mmToPx(7), statePointY + mmToPx(4.8));
+      ctx1.fillText(propTextLine2, marginPx + mmToPx(7), statePointY + mmToPx(7));
 
       statePointY += statePointCardHeight;
-      statePointPage1Count++;
     });
 
     // ========================================
@@ -290,23 +352,58 @@ export const ExportDialog = ({
     const processX = marginPx + halfWidth + mmToPx(4);
     let processY = bottomY;
     ctx1.fillStyle = '#111827';
-    ctx1.font = `bold ${mmToPx(2.5)}px "Noto Sans JP", sans-serif`;
     ctx1.textAlign = 'left';
-    ctx1.fillText('プロセス', processX, processY + mmToPx(2.5));
-    processY += mmToPx(5);
+    if (filteredProcesses.length > 0) {
+      ctx1.font = `bold ${mmToPx(2.8)}px "Noto Sans JP", sans-serif`;
+      ctx1.fillText('プロセス', processX, processY + mmToPx(2.5));
+      processY += mmToPx(5);
+    }
 
-    const processCardHeight = mmToPx(9);
+    const processLineHeight = mmToPx(2.4);
+    const processHeaderHeight = mmToPx(5);
     const processMaxY = pageHeightPx - marginPx;
     const processOverflow: Process[] = [];
 
     filteredProcesses.forEach((process) => {
+      const fromPoint = filteredStatePoints.find((p) => p.id === process.fromPointId);
+      const toPoint = filteredStatePoints.find((p) => p.id === process.toPointId);
+      const detailLines: string[] = [
+        `種別: ${processTypeLabels[process.type]} | 季節: ${seasonLabel(process.season)}`,
+        `状態点: ${fromPoint?.name || '不明'} → ${toPoint?.name || '不明'}`,
+      ];
+      const mixingAirflowTotal = getMixingAirflowTotal(process, filteredStatePoints);
+      if (process.type === 'mixing' && mixingAirflowTotal !== undefined) {
+        detailLines.push(`混合後風量: ${mixingAirflowTotal.toFixed(0)} m³/h`);
+      }
+      const capacity = calculateProcessCapacity(process, filteredStatePoints);
+      if (capacity) {
+        detailLines.push(
+          `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${Math.abs(capacity.sensibleCapacity).toFixed(2)} kW | 潜熱: ${Math.abs(capacity.latentCapacity).toFixed(2)} kW`
+        );
+        detailLines.push(
+          `SHF: ${capacity.SHF.toFixed(2)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
+        );
+        detailLines.push(`比エンタルピー差: ${capacity.enthalpyDiff.toFixed(2)} kJ/kg'`);
+        if (process.parameters.airflow && capacity.humidityDiff !== 0) {
+          detailLines.push(
+            `${capacity.humidityDiff < 0 ? '除湿量' : '加湿量'}: ${(Math.abs(capacity.humidityDiff) * process.parameters.airflow * 1.2).toFixed(2)} L/h`
+          );
+        }
+        if (process.type === 'heating' || process.type === 'cooling') {
+          const waterTempDiff = process.parameters.waterTempDiff || 7;
+          const waterFlowRate = (Math.abs(capacity.totalCapacity) * 60) / (4.186 * waterTempDiff);
+          detailLines.push(
+            `水温度差: ${waterTempDiff.toFixed(1)}℃ | 水量: ${waterFlowRate.toFixed(2)} L/min`
+          );
+        }
+      }
+
+      const processCardHeight = processHeaderHeight + detailLines.length * processLineHeight + mmToPx(1);
       if (processY + processCardHeight > processMaxY) {
         processOverflow.push(process);
         return;
       }
 
-      const fromPoint = filteredStatePoints.find((p) => p.id === process.fromPointId);
-      const toPoint = filteredStatePoints.find((p) => p.id === process.toPointId);
       const fromLabel = getPointLabelById(process.fromPointId);
       const toLabel = getPointLabelById(process.toPointId);
 
@@ -320,34 +417,23 @@ export const ExportDialog = ({
 
       // プロセス名
       ctx1.fillStyle = '#111827';
-      ctx1.font = `bold ${mmToPx(1.8)}px "Noto Sans JP", sans-serif`;
-      ctx1.fillText(process.name, processX + mmToPx(2.5), processY + mmToPx(2.2));
+      ctx1.font = `bold ${mmToPx(2.1)}px "Noto Sans JP", sans-serif`;
+      ctx1.fillText(process.name, processX + mmToPx(2.5), processY + mmToPx(2.4));
 
-      // 遷移
+      // 遷移ラベル
       ctx1.fillStyle = '#6b7280';
-      ctx1.font = `${mmToPx(1.5)}px sans-serif`;
-      ctx1.fillText(`${fromLabel} → ${toLabel}`, processX + mmToPx(2.5), processY + mmToPx(4.5));
+      ctx1.font = `${mmToPx(1.7)}px sans-serif`;
+      ctx1.fillText(`${fromLabel} → ${toLabel}`, processX + mmToPx(2.5), processY + mmToPx(4.4));
 
       // 詳細情報
-      if (fromPoint && toPoint && fromPoint.enthalpy && toPoint.enthalpy) {
-        const enthalpyDiff = toPoint.enthalpy - fromPoint.enthalpy;
-        const humidityDiff = (toPoint.humidity || 0) - (fromPoint.humidity || 0);
-
-        let detailText = '';
-        if (process.parameters.airflow) {
-          const totalCapacity = (enthalpyDiff * process.parameters.airflow * 1.2) / 3600;
-          detailText = `全熱: ${Math.abs(totalCapacity).toFixed(2)} kW`;
-          if (humidityDiff !== 0) {
-            const moistureAmount = Math.abs(humidityDiff) * process.parameters.airflow * 1.2;
-            detailText += ` | ${humidityDiff < 0 ? '除湿' : '加湿'}: ${moistureAmount.toFixed(1)} g/h`;
-          }
-        }
-        if (process.parameters.heatExchangeEfficiency) {
-          detailText += (detailText ? ' | ' : '') + `効率: ${process.parameters.heatExchangeEfficiency.toFixed(0)}%`;
-        }
-        ctx1.font = `${mmToPx(1.3)}px sans-serif`;
-        ctx1.fillText(detailText, processX + mmToPx(2.5), processY + mmToPx(6.8));
-      }
+      ctx1.font = `${mmToPx(1.6)}px sans-serif`;
+      detailLines.forEach((line, lineIndex) => {
+        ctx1.fillText(
+          line,
+          processX + mmToPx(2.5),
+          processY + mmToPx(6.4) + lineIndex * processLineHeight
+        );
+      });
 
       processY += processCardHeight;
     });
@@ -370,7 +456,7 @@ export const ExportDialog = ({
 
       // ヘッダー
       ctx2.fillStyle = '#111827';
-      ctx2.font = `bold ${mmToPx(3)}px "Noto Sans JP", sans-serif`;
+      ctx2.font = `bold ${mmToPx(3.2)}px "Noto Sans JP", sans-serif`;
       ctx2.textAlign = 'left';
       ctx2.fillText(`${designConditions.project.name || '空気線図'} - 続き`, marginPx, marginPx + mmToPx(3));
 
@@ -379,7 +465,7 @@ export const ExportDialog = ({
       // 残りの状態点
       if (statePointOverflow.length > 0) {
         ctx2.fillStyle = '#111827';
-        ctx2.font = `bold ${mmToPx(2.5)}px "Noto Sans JP", sans-serif`;
+        ctx2.font = `bold ${mmToPx(2.8)}px "Noto Sans JP", sans-serif`;
         ctx2.fillText('状態点 (続き)', marginPx, currentY + mmToPx(2.5));
         currentY += mmToPx(5);
 
@@ -396,19 +482,23 @@ export const ExportDialog = ({
           ctx2.fill();
 
           ctx2.fillStyle = '#ffffff';
-          ctx2.font = `bold ${mmToPx(1.6)}px sans-serif`;
+          ctx2.font = `bold ${mmToPx(1.9)}px sans-serif`;
           ctx2.textAlign = 'center';
           ctx2.fillText(label, marginPx + mmToPx(3), currentY + mmToPx(2.3));
           ctx2.textAlign = 'left';
 
           ctx2.fillStyle = '#111827';
-          ctx2.font = `bold ${mmToPx(1.8)}px "Noto Sans JP", sans-serif`;
+          ctx2.font = `bold ${mmToPx(2.1)}px "Noto Sans JP", sans-serif`;
           ctx2.fillText(point.name, marginPx + mmToPx(7), currentY + mmToPx(2.2));
 
           ctx2.fillStyle = '#6b7280';
-          ctx2.font = `${mmToPx(1.4)}px sans-serif`;
-          const propText = `${formatNumber(point.dryBulbTemp)}°C | ${formatNumber(point.relativeHumidity, 0)}%RH | ${formatNumber(point.humidity, 4)}kg/kg' | ${formatNumber(point.enthalpy)}kJ/kg'`;
-          ctx2.fillText(propText, marginPx + mmToPx(7), currentY + mmToPx(4.8));
+          ctx2.font = `${mmToPx(1.6)}px sans-serif`;
+          const airflowText =
+            typeof point.airflow === 'number' ? `${point.airflow.toFixed(0)} m³/h` : '-';
+          const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}% | 絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg'`;
+          const propTextLine2 = `エンタルピー: ${formatNumber(point.enthalpy)} kJ/kg' | 風量: ${airflowText} | 季節: ${seasonLabel(point.season)}`;
+          ctx2.fillText(propTextLine1, marginPx + mmToPx(7), currentY + mmToPx(4.8));
+          ctx2.fillText(propTextLine2, marginPx + mmToPx(7), currentY + mmToPx(7));
 
           currentY += statePointCardHeight;
         });
@@ -419,7 +509,7 @@ export const ExportDialog = ({
       // 残りのプロセス
       if (processOverflow.length > 0) {
         ctx2.fillStyle = '#111827';
-        ctx2.font = `bold ${mmToPx(2.5)}px "Noto Sans JP", sans-serif`;
+        ctx2.font = `bold ${mmToPx(2.8)}px "Noto Sans JP", sans-serif`;
         ctx2.fillText('プロセス (続き)', marginPx, currentY + mmToPx(2.5));
         currentY += mmToPx(5);
 
@@ -428,6 +518,38 @@ export const ExportDialog = ({
           const toPoint = filteredStatePoints.find((p) => p.id === process.toPointId);
           const fromLabel = getPointLabelById(process.fromPointId);
           const toLabel = getPointLabelById(process.toPointId);
+          const detailLines: string[] = [
+            `種別: ${processTypeLabels[process.type]} | 季節: ${seasonLabel(process.season)}`,
+            `状態点: ${fromPoint?.name || '不明'} → ${toPoint?.name || '不明'}`,
+          ];
+          const mixingAirflowTotal = getMixingAirflowTotal(process, filteredStatePoints);
+          if (process.type === 'mixing' && mixingAirflowTotal !== undefined) {
+            detailLines.push(`混合後風量: ${mixingAirflowTotal.toFixed(0)} m³/h`);
+          }
+          const capacity = calculateProcessCapacity(process, filteredStatePoints);
+          if (capacity) {
+            detailLines.push(
+              `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${Math.abs(capacity.sensibleCapacity).toFixed(2)} kW | 潜熱: ${Math.abs(capacity.latentCapacity).toFixed(2)} kW`
+            );
+            detailLines.push(
+              `SHF: ${capacity.SHF.toFixed(2)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
+            );
+            detailLines.push(`比エンタルピー差: ${capacity.enthalpyDiff.toFixed(2)} kJ/kg'`);
+            if (process.parameters.airflow && capacity.humidityDiff !== 0) {
+              detailLines.push(
+                `${capacity.humidityDiff < 0 ? '除湿量' : '加湿量'}: ${(Math.abs(capacity.humidityDiff) * process.parameters.airflow * 1.2).toFixed(2)} L/h`
+              );
+            }
+            if (process.type === 'heating' || process.type === 'cooling') {
+              const waterTempDiff = process.parameters.waterTempDiff || 7;
+              const waterFlowRate = (Math.abs(capacity.totalCapacity) * 60) / (4.186 * waterTempDiff);
+              detailLines.push(
+                `水温度差: ${waterTempDiff.toFixed(1)}℃ | 水量: ${waterFlowRate.toFixed(2)} L/min`
+              );
+            }
+          }
+
+          const processCardHeight = processHeaderHeight + detailLines.length * processLineHeight + mmToPx(1);
 
           const seasonColor =
             process.season === 'summer' ? '#3b82f6' :
@@ -437,32 +559,21 @@ export const ExportDialog = ({
           ctx2.fillRect(marginPx, currentY, mmToPx(1), processCardHeight - mmToPx(1));
 
           ctx2.fillStyle = '#111827';
-          ctx2.font = `bold ${mmToPx(1.8)}px "Noto Sans JP", sans-serif`;
-          ctx2.fillText(process.name, marginPx + mmToPx(2.5), currentY + mmToPx(2.2));
+          ctx2.font = `bold ${mmToPx(2.1)}px "Noto Sans JP", sans-serif`;
+          ctx2.fillText(process.name, marginPx + mmToPx(2.5), currentY + mmToPx(2.4));
 
           ctx2.fillStyle = '#6b7280';
-          ctx2.font = `${mmToPx(1.5)}px sans-serif`;
-          ctx2.fillText(`${fromLabel} → ${toLabel}`, marginPx + mmToPx(2.5), currentY + mmToPx(4.5));
+          ctx2.font = `${mmToPx(1.7)}px sans-serif`;
+          ctx2.fillText(`${fromLabel} → ${toLabel}`, marginPx + mmToPx(2.5), currentY + mmToPx(4.4));
 
-          if (fromPoint && toPoint && fromPoint.enthalpy && toPoint.enthalpy) {
-            const enthalpyDiff = toPoint.enthalpy - fromPoint.enthalpy;
-            const humidityDiff = (toPoint.humidity || 0) - (fromPoint.humidity || 0);
-
-            let detailText = '';
-            if (process.parameters.airflow) {
-              const totalCapacity = (enthalpyDiff * process.parameters.airflow * 1.2) / 3600;
-              detailText = `全熱: ${Math.abs(totalCapacity).toFixed(2)} kW`;
-              if (humidityDiff !== 0) {
-                const moistureAmount = Math.abs(humidityDiff) * process.parameters.airflow * 1.2;
-                detailText += ` | ${humidityDiff < 0 ? '除湿' : '加湿'}: ${moistureAmount.toFixed(1)} g/h`;
-              }
-            }
-            if (process.parameters.heatExchangeEfficiency) {
-              detailText += (detailText ? ' | ' : '') + `効率: ${process.parameters.heatExchangeEfficiency.toFixed(0)}%`;
-            }
-            ctx2.font = `${mmToPx(1.3)}px sans-serif`;
-            ctx2.fillText(detailText, marginPx + mmToPx(2.5), currentY + mmToPx(6.8));
-          }
+          ctx2.font = `${mmToPx(1.6)}px sans-serif`;
+          detailLines.forEach((line, lineIndex) => {
+            ctx2.fillText(
+              line,
+              marginPx + mmToPx(2.5),
+              currentY + mmToPx(6.4) + lineIndex * processLineHeight
+            );
+          });
 
           currentY += processCardHeight;
         });
