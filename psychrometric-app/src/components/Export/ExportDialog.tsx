@@ -1011,14 +1011,14 @@ export const ExportDialog = ({
 
     try {
       const canvas = canvasRef.current;
+      const pages = buildA4Pages(canvas);
       const pdf = new jsPDF('portrait', 'mm', 'a4');
-      const statePointOverflow: StatePoint[] = [];
-      const processOverflow: Process[] = [];
-      drawPdfPage1(pdf, canvas, statePointOverflow, processOverflow);
-      if (statePointOverflow.length > 0 || processOverflow.length > 0) {
-        pdf.addPage();
-        drawPdfPage2(pdf, statePointOverflow, processOverflow);
-      }
+      pages.forEach((page, index) => {
+        if (index > 0) {
+          pdf.addPage();
+        }
+        pdf.addImage(page.toDataURL('image/png'), 'PNG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
+      });
 
       // PDFをBlobとして生成し、新しいウィンドウで開く
       const pdfBlob = pdf.output('blob');
