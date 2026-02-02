@@ -609,6 +609,10 @@ export const ExportDialog = ({
     pdf.setFontSize(mmToPt(sizeMm));
   };
 
+  const setPdfFillColor = (pdf: jsPDF, color: [number, number, number]) => {
+    pdf.setFillColor(color[0], color[1], color[2]);
+  };
+
   const drawPdfPage1 = (
     pdf: jsPDF,
     chartCanvas: HTMLCanvasElement,
@@ -738,11 +742,11 @@ export const ExportDialog = ({
       }
 
       const label = getPointLabel(point, index);
-      const seasonColor =
+      const seasonColor: [number, number, number] =
         point.season === 'summer' ? [59, 130, 246] :
         point.season === 'winter' ? [239, 68, 68] : [139, 92, 246];
 
-      pdf.setFillColor(...seasonColor);
+      setPdfFillColor(pdf, seasonColor);
       pdf.roundedRect(marginMm, statePointY, 6, 3.5, 0.5, 0.5, 'F');
 
       pdf.setTextColor(255, 255, 255);
@@ -821,11 +825,11 @@ export const ExportDialog = ({
       const fromLabel = getPointLabelById(process.fromPointId);
       const toLabel = getPointLabelById(process.toPointId);
 
-      const seasonColor =
+      const seasonColor: [number, number, number] =
         process.season === 'summer' ? [59, 130, 246] :
         process.season === 'winter' ? [239, 68, 68] : [139, 92, 246];
 
-      pdf.setFillColor(...seasonColor);
+      setPdfFillColor(pdf, seasonColor);
       pdf.rect(processX, processY, 1, processCardHeight - 1, 'F');
 
       pdf.setTextColor(17, 24, 39);
@@ -867,11 +871,11 @@ export const ExportDialog = ({
       statePointOverflow.forEach((point) => {
         const origIndex = filteredStatePoints.findIndex((p) => p.id === point.id);
         const label = getPointLabel(point, origIndex);
-        const seasonColor =
+        const seasonColor: [number, number, number] =
           point.season === 'summer' ? [59, 130, 246] :
           point.season === 'winter' ? [239, 68, 68] : [139, 92, 246];
 
-        pdf.setFillColor(...seasonColor);
+        setPdfFillColor(pdf, seasonColor);
         pdf.roundedRect(marginMm, currentY, 6, 3.5, 0.5, 0.5, 'F');
 
         pdf.setTextColor(255, 255, 255);
@@ -941,11 +945,11 @@ export const ExportDialog = ({
 
         const processCardHeight = processHeaderHeight + detailLines.length * processLineHeight + 1;
 
-        const seasonColor =
+        const seasonColor: [number, number, number] =
           process.season === 'summer' ? [59, 130, 246] :
           process.season === 'winter' ? [239, 68, 68] : [139, 92, 246];
 
-        pdf.setFillColor(...seasonColor);
+        setPdfFillColor(pdf, seasonColor);
         pdf.rect(marginMm, currentY, 1, processCardHeight - 1, 'F');
 
         pdf.setTextColor(17, 24, 39);
