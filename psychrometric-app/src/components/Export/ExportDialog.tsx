@@ -16,32 +16,39 @@ interface ExportDialogProps {
   activeSeason: 'summer' | 'winter' | 'both';
 }
 
-const NOTO_SANS_JP_FONT_URL = '/fonts/NotoSansJP-Regular.ttf';
+const NOTO_SANS_JP_FONT_URLS = [
+  '/fonts/NotoSansJP-Regular.ttf',
+  'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts/hinted/ttf/NotoSansJP/NotoSansJP-Regular.ttf',
+];
 let notoSansJpFontDataPromise: Promise<string | null> | null = null;
 
 const loadNotoSansJpFontData = async (): Promise<string | null> => {
   if (!notoSansJpFontDataPromise) {
-    notoSansJpFontDataPromise = fetch(NOTO_SANS_JP_FONT_URL)
-      .then((response) => {
-        if (!response.ok) {
-          console.warn('フォントの取得に失敗しました。');
-          return null;
+    notoSansJpFontDataPromise = (async () => {
+      for (const url of NOTO_SANS_JP_FONT_URLS) {
+        try {
+          const response = await fetch(url);
+          if (!response.ok) {
+            continue;
+          }
+          const buffer = await response.arrayBuffer();
+          if (!buffer || buffer.byteLength < 10000) {
+            continue;
+          }
+          const bytes = new Uint8Array(buffer);
+          const chunkSize = 0x8000;
+          let binary = '';
+          for (let i = 0; i < bytes.length; i += chunkSize) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+          }
+          return btoa(binary);
+        } catch (error) {
+          console.warn('フォント読み込みエラー:', error);
         }
-        return response.arrayBuffer();
-      })
-      .then((buffer) => {
-        if (!buffer || buffer.byteLength < 10000) {
-          console.warn('フォントデータが無効です。');
-          return null;
-        }
-        const bytes = new Uint8Array(buffer);
-        const chunkSize = 0x8000;
-        let binary = '';
-        for (let i = 0; i < bytes.length; i += chunkSize) {
-          binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-        }
-        return btoa(binary);
-      })
+      }
+      console.warn('フォントの取得に失敗しました。');
+      return null;
+    })()
       .catch((error) => {
         console.warn('フォント読み込みエラー:', error);
         notoSansJpFontDataPromise = null; // 次回再試行できるようにリセット
@@ -1035,7 +1042,9 @@ export const ExportDialog = ({
       const pdf = new jsPDF('portrait', 'mm', 'a4');
       const hasJapaneseFont = await preparePdfFonts(pdf);
       if (!hasJapaneseFont) {
-        throw new Error('PDF用フォントが読み込めませんでした。public/fonts/NotoSansJP-Regular.ttf を配置してください。');
+        throw new Error(
+          'PDF用フォントが読み込めませんでした。public/fonts/NotoSansJP-Regular.ttf を配置するか、外部フォントURLへのアクセスを許可してください。'
+        );
       }
       renderPdfPages(canvas, pdf, hasJapaneseFont);
 
