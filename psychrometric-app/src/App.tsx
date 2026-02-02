@@ -141,6 +141,7 @@ function App() {
   // Active tab for sidebar
   const [activeTab, setActiveTab] = useState<'points' | 'processes'>('points');
   const [chartSize, setChartSize] = useState({ width: 900, height: 600 });
+  const [headerHeight, setHeaderHeight] = useState(0);
   const inputOptionA =
     STATE_POINT_INPUT_OPTIONS.find((option) => option.key === inputTypeA) ??
     STATE_POINT_INPUT_OPTIONS[0];
@@ -197,12 +198,35 @@ function App() {
     if (designConditionsRef.current) {
       observer.observe(designConditionsRef.current);
     }
+    if (headerRef.current) {
+      observer.observe(headerRef.current);
+    }
     // Also listen for window resize to handle fullscreen changes
     window.addEventListener('resize', updateSize);
     return () => {
       observer.disconnect();
       window.removeEventListener('resize', updateSize);
     };
+  }, []);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+
+    const updateHeaderHeight = () => {
+      setHeaderHeight(header.offsetHeight);
+    };
+
+    updateHeaderHeight();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateHeaderHeight);
+      return () => window.removeEventListener('resize', updateHeaderHeight);
+    }
+
+    const observer = new ResizeObserver(() => updateHeaderHeight());
+    observer.observe(header);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -780,9 +804,12 @@ function App() {
         </div>
       </header>
 
-      <div className="flex flex-col lg:flex-row">
+      <div
+        className="flex flex-col lg:flex-row"
+        style={headerHeight ? { height: `calc(100vh - ${headerHeight}px)` } : undefined}
+      >
         {/* 左サイドバー */}
-        <aside className="w-full lg:w-80 bg-white border-r border-gray-200 lg:h-[calc(100vh-60px)] overflow-y-auto">
+        <aside className="w-full lg:w-80 bg-white border-r border-gray-200 lg:h-full overflow-y-auto">
           {/* 季節切替 */}
           <div className="p-4 border-b border-gray-200">
             <h2 className="font-semibold text-sm text-gray-700 mb-2">表示モード</h2>
@@ -1353,7 +1380,7 @@ function App() {
         </aside>
 
         {/* メインコンテンツ */}
-        <main className="flex-1 p-4 overflow-auto">
+        <main className="flex-1 p-4 overflow-y-auto h-full">
           <div
             className="bg-white rounded-lg shadow p-4 overflow-x-auto"
             ref={chartContainerRef}
