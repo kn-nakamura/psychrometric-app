@@ -16,8 +16,9 @@ interface ExportDialogProps {
   activeSeason: 'summer' | 'winter' | 'both';
 }
 
+// Using Noto Sans CJK JP from GitHub (via jsDelivr CDN for better reliability)
 const NOTO_SANS_JP_FONT_URL =
-  'https://unpkg.com/@fontsource/noto-sans-jp@5.0.10/files/noto-sans-jp-japanese-400-normal.ttf';
+  'https://cdn.jsdelivr.net/gh/minoryorg/Noto-Sans-CJK-JP@master/fonts/NotoSansCJKjp-Regular.ttf';
 let notoSansJpFontDataPromise: Promise<string | null> | null = null;
 
 const loadNotoSansJpFontData = async (): Promise<string | null> => {
