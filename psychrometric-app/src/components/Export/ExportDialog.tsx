@@ -18,18 +18,20 @@ interface ExportDialogProps {
 
 const NOTO_SANS_JP_FONT_URL =
   'https://unpkg.com/@fontsource/noto-sans-jp@5.0.10/files/noto-sans-jp-japanese-400-normal.ttf';
-let notoSansJpFontDataPromise: Promise<string> | null = null;
+let notoSansJpFontDataPromise: Promise<string | null> | null = null;
 
-const loadNotoSansJpFontData = async () => {
+const loadNotoSansJpFontData = async (): Promise<string | null> => {
   if (!notoSansJpFontDataPromise) {
     notoSansJpFontDataPromise = fetch(NOTO_SANS_JP_FONT_URL)
       .then((response) => {
         if (!response.ok) {
-          throw new Error('フォントの取得に失敗しました');
+          console.warn('フォントの取得に失敗しました。標準フォントを使用します。');
+          return null;
         }
         return response.arrayBuffer();
       })
       .then((buffer) => {
+        if (!buffer) return null;
         const bytes = new Uint8Array(buffer);
         const chunkSize = 0x8000;
         let binary = '';
@@ -37,6 +39,11 @@ const loadNotoSansJpFontData = async () => {
           binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
         }
         return btoa(binary);
+      })
+      .catch((error) => {
+        console.warn('フォント読み込みエラー:', error);
+        notoSansJpFontDataPromise = null; // 次回再試行できるようにリセット
+        return null;
       });
   }
   return notoSansJpFontDataPromise;
@@ -159,18 +166,31 @@ export const ExportDialog = ({
     return stream1Point.airflow + stream2Point.airflow;
   };
 
-  const preparePdfFonts = async (pdf: jsPDF) => {
-    if (!pdf.existsFileInVFS('NotoSansJP-Regular.ttf')) {
-      const fontData = await loadNotoSansJpFontData();
-      pdf.addFileToVFS('NotoSansJP-Regular.ttf', fontData);
-      pdf.addFont('NotoSansJP-Regular.ttf', 'NotoSansJP', 'normal');
-      pdf.addFont('NotoSansJP-Regular.ttf', 'NotoSansJP', 'bold');
+  const preparePdfFonts = async (pdf: jsPDF): Promise<boolean> => {
+    try {
+      if (!pdf.existsFileInVFS('NotoSansJP-Regular.ttf')) {
+        const fontData = await loadNotoSansJpFontData();
+        if (fontData) {
+          pdf.addFileToVFS('NotoSansJP-Regular.ttf', fontData);
+          pdf.addFont('NotoSansJP-Regular.ttf', 'NotoSansJP', 'normal');
+          pdf.addFont('NotoSansJP-Regular.ttf', 'NotoSansJP', 'bold');
+          pdf.setFont('NotoSansJP', 'normal');
+          return true;
+        }
+      } else {
+        pdf.setFont('NotoSansJP', 'normal');
+        return true;
+      }
+    } catch (error) {
+      console.warn('フォント準備エラー:', error);
     }
-    pdf.setFont('NotoSansJP', 'normal');
+    // フォールバック: Helvetica（日本語非対応だが最低限動作する）
+    pdf.setFont('Helvetica', 'normal');
+    return false;
   };
 
   const renderPdfPages = async (chartCanvas: HTMLCanvasElement, pdf: jsPDF) => {
-    await preparePdfFonts(pdf);
+    const hasJapaneseFont = await preparePdfFonts(pdf);
 
     const marginMm = 8;
     const headerHeightMm = 14;
@@ -180,7 +200,11 @@ export const ExportDialog = ({
     const contentWidthMm = A4_WIDTH_MM - marginMm * 2;
 
     const setFont = (style: 'normal' | 'bold', sizeMm: number) => {
-      pdf.setFont('NotoSansJP', style);
+      if (hasJapaneseFont) {
+        pdf.setFont('NotoSansJP', style);
+      } else {
+        pdf.setFont('Helvetica', style === 'bold' ? 'bold' : 'normal');
+      }
       pdf.setFontSize(mmToPt(sizeMm));
     };
 
@@ -216,7 +240,8 @@ export const ExportDialog = ({
       activeSeason,
       resolutionScale: 1,
     });
-    const chartImage = chartRenderCanvas.toDataURL('image/png');
+    // JPEG形式で軽量化（品質0.85でファイルサイズを削減）
+    const chartImage = chartRenderCanvas.toDataURL('image/jpeg', 0.85);
 
     const drawStatePointCard = (point: StatePoint, index: number, x: number, y: number) => {
       const label = getPointLabel(point, index);
@@ -385,7 +410,7 @@ export const ExportDialog = ({
     pdf.rect(marginMm, chartY, chartWidthMm, chartHeightMm, 'S');
     pdf.addImage(
       chartImage,
-      'PNG',
+      'JPEG',
       chartXOffset,
       chartY + (chartHeightMm - drawChartHeightMm) / 2,
       drawChartWidthMm,
@@ -999,18 +1024,37 @@ export const ExportDialog = ({
 
     try {
       const canvas = canvasRef.current;
+
+      // キャンバスが有効かチェック
+      if (canvas.width === 0 || canvas.height === 0) {
+        throw new Error('チャートの描画領域が無効です');
+      }
+
       const pdf = new jsPDF('portrait', 'mm', 'a4');
       await renderPdfPages(canvas, pdf);
 
       // PDFをBlobとして生成し、新しいウィンドウで開く
       const pdfBlob = pdf.output('blob');
+      if (pdfBlob.size === 0) {
+        throw new Error('PDFの生成に失敗しました');
+      }
+
       const blobUrl = URL.createObjectURL(pdfBlob);
-      window.open(blobUrl, '_blank');
+      const newWindow = window.open(blobUrl, '_blank');
+
+      // ポップアップブロック対策: 新しいウィンドウが開けなかった場合はダウンロード
+      if (!newWindow) {
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = `psychrometric-chart-${designConditions.project.name || 'export'}.pdf`;
+        link.click();
+      }
 
       onClose();
     } catch (error) {
       console.error('PDF export failed:', error);
-      alert('PDF出力に失敗しました');
+      const errorMessage = error instanceof Error ? error.message : 'PDF出力に失敗しました';
+      alert(`PDF出力エラー: ${errorMessage}`);
     } finally {
       setIsExporting(false);
       setExportType(null);
