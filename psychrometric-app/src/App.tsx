@@ -135,6 +135,8 @@ function App() {
   const [editingPointSnapshot, setEditingPointSnapshot] = useState<StatePoint | null>(null);
   const [copySourceA, setCopySourceA] = useState('');
   const [copySourceB, setCopySourceB] = useState('');
+  const headerRef = useRef<HTMLElement>(null);
+  const designConditionsRef = useRef<HTMLDivElement>(null);
 
   // Active tab for sidebar
   const [activeTab, setActiveTab] = useState<'points' | 'processes'>('points');
@@ -155,12 +157,18 @@ function App() {
 
     const updateSize = () => {
       const containerWidth = Math.max(320, Math.floor(container.clientWidth));
-      // Calculate available height: viewport height minus header, padding, and design conditions section
-      // Header (~60px) + padding (32px) + design conditions section (~200px estimated) + extra margin
-      const headerHeight = 60;
-      const paddingAndMargin = 48; // p-4 * 2 + extra margin
-      const designConditionsHeight = 200;
-      const availableHeight = window.innerHeight - headerHeight - paddingAndMargin - designConditionsHeight;
+      const headerHeight = headerRef.current?.offsetHeight ?? 60;
+      const designConditionsHeight = designConditionsRef.current?.offsetHeight ?? 200;
+      const mainPadding = 32; // main p-4 top + bottom
+      const chartContainerPadding = 32; // chart container p-4 top + bottom
+      const sectionGap = 16; // mt-4 between chart and design conditions
+      const availableHeight =
+        window.innerHeight -
+        headerHeight -
+        mainPadding -
+        chartContainerPadding -
+        sectionGap -
+        designConditionsHeight;
 
       // Calculate chart dimensions
       // Default aspect ratio is 0.65 (height/width), but limit height to fit viewport
@@ -186,6 +194,9 @@ function App() {
 
     const observer = new ResizeObserver(() => updateSize());
     observer.observe(container);
+    if (designConditionsRef.current) {
+      observer.observe(designConditionsRef.current);
+    }
     // Also listen for window resize to handle fullscreen changes
     window.addEventListener('resize', updateSize);
     return () => {
@@ -726,7 +737,7 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ヘッダー */}
-      <header className="bg-white border-b border-gray-200 px-4 py-3">
+      <header ref={headerRef} className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="max-w-full mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-lg sm:text-xl font-bold text-gray-900">
@@ -1361,7 +1372,7 @@ function App() {
           </div>
 
           {/* 設計条件表示 */}
-          <div className="bg-white rounded-lg shadow p-4 mt-4">
+          <div ref={designConditionsRef} className="bg-white rounded-lg shadow p-4 mt-4">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold text-gray-900">設計条件</h2>
               <button
