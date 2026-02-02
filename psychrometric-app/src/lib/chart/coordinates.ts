@@ -179,9 +179,9 @@ export function createDefaultChartConfig(
       width,
       height,
       marginTop: 20,
-      marginRight: 24,
-      marginBottom: 36,
-      marginLeft: 42,
+      marginRight: 28,
+      marginBottom: 44,
+      marginLeft: 56,
     },
     range: {
       tempMin: -5,
