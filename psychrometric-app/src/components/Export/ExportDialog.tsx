@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { X, FileImage, FileText, Loader2 } from 'lucide-react';
-import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage } from 'pdf-lib';
-import fontkit from '@pdf-lib/fontkit';
+import { jsPDF } from 'jspdf';
 import { DesignConditions } from '@/types/designConditions';
 import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
@@ -17,29 +16,35 @@ interface ExportDialogProps {
   activeSeason: 'summer' | 'winter' | 'both';
 }
 
-const NOTO_SANS_JP_FONT_PATH = '/fonts/NotoSansJP-Regular.ttf';
-let notoSansJpFontDataPromise: Promise<Uint8Array | null> | null = null;
+const NOTO_SANS_JP_FONT_URL = '/fonts/NotoSansJP-Regular.ttf';
+let notoSansJpFontDataPromise: Promise<string | null> | null = null;
 
-const loadNotoSansJpFontData = async (): Promise<Uint8Array | null> => {
+const loadNotoSansJpFontData = async (): Promise<string | null> => {
   if (!notoSansJpFontDataPromise) {
-    notoSansJpFontDataPromise = fetch(NOTO_SANS_JP_FONT_PATH)
+    notoSansJpFontDataPromise = fetch(NOTO_SANS_JP_FONT_URL)
       .then((response) => {
         if (!response.ok) {
-          console.warn('フォントの取得に失敗しました。標準フォントを使用します。');
+          console.warn('フォントの取得に失敗しました。');
           return null;
         }
         return response.arrayBuffer();
       })
       .then((buffer) => {
         if (!buffer || buffer.byteLength < 10000) {
-          console.warn('フォントデータが無効です。標準フォントを使用します。');
+          console.warn('フォントデータが無効です。');
           return null;
         }
-        return new Uint8Array(buffer);
+        const bytes = new Uint8Array(buffer);
+        const chunkSize = 0x8000;
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+        }
+        return btoa(binary);
       })
       .catch((error) => {
         console.warn('フォント読み込みエラー:', error);
-        notoSansJpFontDataPromise = null;
+        notoSansJpFontDataPromise = null; // 次回再試行できるようにリセット
         return null;
       });
   }
@@ -163,88 +168,28 @@ export const ExportDialog = ({
     return stream1Point.airflow + stream2Point.airflow;
   };
 
-  const renderPdfPages = async (chartCanvas: HTMLCanvasElement) => {
-    const pdfDoc = await PDFDocument.create();
-    pdfDoc.registerFontkit(fontkit);
-
-    let bodyFont: PDFFont | undefined;
-    let boldFont: PDFFont | undefined;
-    const fontData = await loadNotoSansJpFontData();
-    if (fontData) {
-      try {
-        bodyFont = await pdfDoc.embedFont(fontData);
-        boldFont = bodyFont;
-      } catch (error) {
-        console.warn('フォント埋め込みエラー:', error);
-        bodyFont = undefined;
-        boldFont = undefined;
+  const preparePdfFonts = async (pdf: jsPDF): Promise<boolean> => {
+    try {
+      if (!pdf.existsFileInVFS('NotoSansJP-Regular.ttf')) {
+        const fontData = await loadNotoSansJpFontData();
+        if (fontData) {
+          pdf.addFileToVFS('NotoSansJP-Regular.ttf', fontData);
+          pdf.addFont('NotoSansJP-Regular.ttf', 'NotoSansJP', 'normal');
+          pdf.addFont('NotoSansJP-Regular.ttf', 'NotoSansJP', 'bold');
+          pdf.setFont('NotoSansJP', 'normal');
+          return true;
+        }
+      } else {
+        pdf.setFont('NotoSansJP', 'normal');
+        return true;
       }
+    } catch (error) {
+      console.warn('フォント準備エラー:', error);
     }
+    return false;
+  };
 
-    if (!bodyFont || !boldFont) {
-      bodyFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    }
-
-    const resolvedBodyFont = bodyFont;
-    const resolvedBoldFont = boldFont;
-
-    const rgbFrom255 = (r: number, g: number, b: number) => rgb(r / 255, g / 255, b / 255);
-    const drawText = (
-      page: PDFPage,
-      text: string,
-      xMm: number,
-      yMm: number,
-      sizeMm: number,
-      {
-        font = resolvedBodyFont,
-        color = rgbFrom255(17, 24, 39),
-        align = 'left',
-      }: { font?: PDFFont; color?: ReturnType<typeof rgb>; align?: 'left' | 'center' } = {}
-    ) => {
-      const sizePt = mmToPt(sizeMm);
-      const textWidth = font.widthOfTextAtSize(text, sizePt);
-      let x = mmToPt(xMm);
-      if (align === 'center') {
-        x -= textWidth / 2;
-      }
-      const y = page.getHeight() - mmToPt(yMm) - sizePt;
-      page.drawText(text, {
-        x,
-        y,
-        size: sizePt,
-        font,
-        color,
-      });
-    };
-
-    const drawRect = (
-      page: PDFPage,
-      xMm: number,
-      yMm: number,
-      widthMm: number,
-      heightMm: number,
-      {
-        color,
-        borderColor,
-        borderWidthMm = 0.2,
-      }: { color?: ReturnType<typeof rgb>; borderColor?: ReturnType<typeof rgb>; borderWidthMm?: number } = {}
-    ) => {
-      const x = mmToPt(xMm);
-      const y = page.getHeight() - mmToPt(yMm) - mmToPt(heightMm);
-      page.drawRectangle({
-        x,
-        y,
-        width: mmToPt(widthMm),
-        height: mmToPt(heightMm),
-        color,
-        borderColor,
-        borderWidth: borderColor ? mmToPt(borderWidthMm) : undefined,
-      });
-    };
-
-    const formatAirflow = (airflow?: number) =>
-      typeof airflow === 'number' ? `${airflow.toFixed(0)} m³/h` : '-';
+  const renderPdfPages = (chartCanvas: HTMLCanvasElement, pdf: jsPDF, hasJapaneseFont: boolean) => {
 
     const marginMm = 8;
     const headerHeightMm = 14;
@@ -253,6 +198,24 @@ export const ExportDialog = ({
     const bottomSectionStartMm = chartTopMm + chartHeightMm + 6;
     const contentWidthMm = A4_WIDTH_MM - marginMm * 2;
 
+    const setFont = (style: 'normal' | 'bold', sizeMm: number) => {
+      if (hasJapaneseFont) {
+        pdf.setFont('NotoSansJP', style);
+      } else {
+        pdf.setFont('Helvetica', style === 'bold' ? 'bold' : 'normal');
+      }
+      pdf.setFontSize(mmToPt(sizeMm));
+    };
+
+    const drawPageBackground = () => {
+      pdf.setFillColor(255, 255, 255);
+      pdf.rect(0, 0, A4_WIDTH_MM, A4_HEIGHT_MM, 'F');
+    };
+
+    const formatAirflow = (airflow?: number) =>
+      typeof airflow === 'number' ? `${airflow.toFixed(0)} m³/h` : '-';
+
+    // チャート画像を準備
     const chartWidthMm = contentWidthMm;
     const chartAspectRatio = chartCanvas.width / chartCanvas.height;
     let drawChartWidthMm = chartWidthMm;
@@ -276,52 +239,35 @@ export const ExportDialog = ({
       activeSeason,
       resolutionScale: 1,
     });
-    const chartImageDataUrl = chartRenderCanvas.toDataURL('image/png', 1.0);
-    const chartImageBytes = await fetch(chartImageDataUrl).then((response) => response.arrayBuffer());
-    const chartImage = await pdfDoc.embedPng(chartImageBytes);
+    // JPEG形式で軽量化（品質0.85でファイルサイズを削減）
+    const chartImage = chartRenderCanvas.toDataURL('image/jpeg', 0.85);
 
-    const createPage = () =>
-      pdfDoc.addPage([mmToPt(A4_WIDTH_MM), mmToPt(A4_HEIGHT_MM)]);
-
-    const drawPageBackground = (page: PDFPage) => {
-      drawRect(page, 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM, { color: rgbFrom255(255, 255, 255) });
-    };
-
-    const drawStatePointCard = (
-      page: PDFPage,
-      point: StatePoint,
-      index: number,
-      x: number,
-      y: number
-    ) => {
+    const drawStatePointCard = (point: StatePoint, index: number, x: number, y: number) => {
       const label = getPointLabel(point, index);
       const seasonColor =
         point.season === 'summer' ? [59, 130, 246] :
         point.season === 'winter' ? [239, 68, 68] : [139, 92, 246];
-      const seasonRgb = rgbFrom255(seasonColor[0], seasonColor[1], seasonColor[2]);
 
-      drawRect(page, x, y, 6, 3.5, { color: seasonRgb });
+      pdf.setFillColor(seasonColor[0], seasonColor[1], seasonColor[2]);
+      pdf.roundedRect(x, y, 6, 3.5, 0.5, 0.5, 'F');
 
-      drawText(page, label, x + 3, y + 2.3, 1.9, {
-        font: resolvedBoldFont,
-        color: rgbFrom255(255, 255, 255),
-        align: 'center',
-      });
+      pdf.setTextColor(255, 255, 255);
+      setFont('bold', 1.9);
+      pdf.text(label, x + 3, y + 2.3, { align: 'center', baseline: 'middle' });
 
-      drawText(page, point.name, x + 7, y + 2.2, 2.1, { font: resolvedBoldFont });
+      pdf.setTextColor(17, 24, 39);
+      setFont('bold', 2.1);
+      pdf.text(point.name, x + 7, y + 2.2);
 
+      pdf.setTextColor(107, 114, 128);
+      setFont('normal', 1.6);
       const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}% | 絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg'`;
       const propTextLine2 = `エンタルピー: ${formatNumber(point.enthalpy)} kJ/kg' | 風量: ${formatAirflow(point.airflow)} | 季節: ${seasonLabel(point.season)}`;
-      drawText(page, propTextLine1, x + 7, y + 4.8, 1.6, { color: rgbFrom255(107, 114, 128) });
-      drawText(page, propTextLine2, x + 7, y + 7, 1.6, { color: rgbFrom255(107, 114, 128) });
+      pdf.text(propTextLine1, x + 7, y + 4.8);
+      pdf.text(propTextLine2, x + 7, y + 7);
     };
 
-    const drawProcessCard = (
-      page: PDFPage,
-      process: Process,
-      x: number,
-      y: number
-    ) => {
+    const drawProcessCard = (process: Process, x: number, y: number) => {
       const fromPoint = filteredStatePoints.find((p) => p.id === process.fromPointId);
       const toPoint = filteredStatePoints.find((p) => p.id === process.toPointId);
       const detailLines: string[] = [
@@ -362,136 +308,120 @@ export const ExportDialog = ({
       const seasonColor =
         process.season === 'summer' ? [59, 130, 246] :
         process.season === 'winter' ? [239, 68, 68] : [139, 92, 246];
-      const seasonRgb = rgbFrom255(seasonColor[0], seasonColor[1], seasonColor[2]);
 
-      drawRect(page, x, y, 1, processCardHeight - 1, { color: seasonRgb });
+      pdf.setFillColor(seasonColor[0], seasonColor[1], seasonColor[2]);
+      pdf.rect(x, y, 1, processCardHeight - 1, 'F');
 
-      drawText(page, process.name, x + 2.5, y + 2.4, 2.1, { font: resolvedBoldFont });
+      pdf.setTextColor(17, 24, 39);
+      setFont('bold', 2.1);
+      pdf.text(process.name, x + 2.5, y + 2.4);
 
       const fromLabel = getPointLabelById(process.fromPointId);
       const toLabel = getPointLabelById(process.toPointId);
-      drawText(page, `${fromLabel} → ${toLabel}`, x + 2.5, y + 4.4, 1.7, {
-        color: rgbFrom255(107, 114, 128),
-      });
+      pdf.setTextColor(107, 114, 128);
+      setFont('normal', 1.7);
+      pdf.text(`${fromLabel} → ${toLabel}`, x + 2.5, y + 4.4);
 
+      setFont('normal', 1.6);
       detailLines.forEach((line, lineIndex) => {
-        drawText(page, line, x + 2.5, y + 6.4 + lineIndex * processLineHeight, 1.6, {
-          color: rgbFrom255(107, 114, 128),
-        });
+        pdf.text(line, x + 2.5, y + 6.4 + lineIndex * processLineHeight);
       });
 
       return processCardHeight;
     };
 
-    const page = createPage();
-    drawPageBackground(page);
+    drawPageBackground();
 
     const headerY = marginMm;
-    drawText(page, designConditions.project.name || '空気線図', marginMm, headerY + 4, 4.5, {
-      font: resolvedBoldFont,
-    });
+    pdf.setTextColor(17, 24, 39);
+    setFont('bold', 4.5);
+    pdf.text(designConditions.project.name || '空気線図', marginMm, headerY + 4);
 
     const projectInfo = [
       designConditions.project.location,
       designConditions.project.date,
       designConditions.project.designer,
     ].filter(Boolean).join(' | ');
-    drawText(page, projectInfo || '-', marginMm, headerY + 7.5, 2.2, {
-      color: rgbFrom255(107, 114, 128),
-    });
+    setFont('normal', 2.2);
+    pdf.setTextColor(107, 114, 128);
+    pdf.text(projectInfo || '-', marginMm, headerY + 7.5);
 
     const conditionsX = marginMm + contentWidthMm * 0.45;
     const conditionsWidth = contentWidthMm * 0.55;
-    drawText(page, '設計条件', conditionsX, headerY + 2, 2.2, {
-      font: resolvedBoldFont,
-      color: rgbFrom255(55, 65, 81),
-    });
+    setFont('bold', 2.2);
+    pdf.setTextColor(55, 65, 81);
+    pdf.text('設計条件', conditionsX, headerY + 2);
 
     const col1X = conditionsX;
     const col2X = conditionsX + conditionsWidth / 3;
     const col3X = conditionsX + (conditionsWidth / 3) * 2;
     const condRowHeight = 2.2;
 
-    drawText(page, '外気条件', col1X, headerY + 4.5, 1.7, {
-      font: resolvedBoldFont,
-      color: rgbFrom255(55, 65, 81),
-    });
-    drawText(
-      page,
+    setFont('bold', 1.7);
+    pdf.text('外気条件', col1X, headerY + 4.5);
+    setFont('normal', 1.6);
+    pdf.setTextColor(75, 85, 99);
+    pdf.text(
       `夏: ${formatNumber(designConditions.outdoor.summer.dryBulbTemp)}°C / ${formatNumber(designConditions.outdoor.summer.relativeHumidity, 0)}%`,
       col1X,
-      headerY + 4.5 + condRowHeight,
-      1.6,
-      { color: rgbFrom255(75, 85, 99) }
+      headerY + 4.5 + condRowHeight
     );
-    drawText(
-      page,
+    pdf.text(
       `冬: ${formatNumber(designConditions.outdoor.winter.dryBulbTemp)}°C / ${formatNumber(designConditions.outdoor.winter.relativeHumidity, 0)}%`,
       col1X,
-      headerY + 4.5 + condRowHeight * 2,
-      1.6,
-      { color: rgbFrom255(75, 85, 99) }
+      headerY + 4.5 + condRowHeight * 2
     );
 
-    drawText(page, '室内条件', col2X, headerY + 4.5, 1.7, {
-      font: resolvedBoldFont,
-      color: rgbFrom255(55, 65, 81),
-    });
-    drawText(
-      page,
+    pdf.setTextColor(55, 65, 81);
+    setFont('bold', 1.7);
+    pdf.text('室内条件', col2X, headerY + 4.5);
+    setFont('normal', 1.6);
+    pdf.setTextColor(75, 85, 99);
+    pdf.text(
       `夏: ${formatNumber(designConditions.indoor.summer.dryBulbTemp)}°C / ${formatNumber(designConditions.indoor.summer.relativeHumidity, 0)}%`,
       col2X,
-      headerY + 4.5 + condRowHeight,
-      1.6,
-      { color: rgbFrom255(75, 85, 99) }
+      headerY + 4.5 + condRowHeight
     );
-    drawText(
-      page,
+    pdf.text(
       `冬: ${formatNumber(designConditions.indoor.winter.dryBulbTemp)}°C / ${formatNumber(designConditions.indoor.winter.relativeHumidity, 0)}%`,
       col2X,
-      headerY + 4.5 + condRowHeight * 2,
-      1.6,
-      { color: rgbFrom255(75, 85, 99) }
+      headerY + 4.5 + condRowHeight * 2
     );
 
-    drawText(page, '風量', col3X, headerY + 4.5, 1.7, {
-      font: resolvedBoldFont,
-      color: rgbFrom255(55, 65, 81),
-    });
-    drawText(
-      page,
+    pdf.setTextColor(55, 65, 81);
+    setFont('bold', 1.7);
+    pdf.text('風量', col3X, headerY + 4.5);
+    setFont('normal', 1.6);
+    pdf.setTextColor(75, 85, 99);
+    pdf.text(
       `供給: ${formatNumber(designConditions.airflow.supplyAir, 0)} m³/h`,
       col3X,
-      headerY + 4.5 + condRowHeight,
-      1.6,
-      { color: rgbFrom255(75, 85, 99) }
+      headerY + 4.5 + condRowHeight
     );
-    drawText(
-      page,
+    pdf.text(
       `外気: ${formatNumber(designConditions.airflow.outdoorAir, 0)} m³/h`,
       col3X,
-      headerY + 4.5 + condRowHeight * 2,
-      1.6,
-      { color: rgbFrom255(75, 85, 99) }
+      headerY + 4.5 + condRowHeight * 2
     );
 
     const chartY = chartTopMm;
-    drawRect(page, marginMm, chartY, chartWidthMm, chartHeightMm, {
-      borderColor: rgbFrom255(229, 231, 235),
-      borderWidthMm: 0.3,
-    });
-    const chartDrawY = chartY + (chartHeightMm - drawChartHeightMm) / 2;
-    page.drawImage(chartImage, {
-      x: mmToPt(chartXOffset),
-      y: page.getHeight() - mmToPt(chartDrawY) - mmToPt(drawChartHeightMm),
-      width: mmToPt(drawChartWidthMm),
-      height: mmToPt(drawChartHeightMm),
-    });
+    pdf.setDrawColor(229, 231, 235);
+    pdf.rect(marginMm, chartY, chartWidthMm, chartHeightMm, 'S');
+    pdf.addImage(
+      chartImage,
+      'JPEG',
+      chartXOffset,
+      chartY + (chartHeightMm - drawChartHeightMm) / 2,
+      drawChartWidthMm,
+      drawChartHeightMm
+    );
 
     const bottomY = bottomSectionStartMm;
     const halfWidth = contentWidthMm / 2 - 2;
     let statePointY = bottomY;
-    drawText(page, '状態点', marginMm, statePointY + 2.5, 2.8, { font: resolvedBoldFont });
+    pdf.setTextColor(17, 24, 39);
+    setFont('bold', 2.8);
+    pdf.text('状態点', marginMm, statePointY + 2.5);
     statePointY += 5;
 
     const statePointCardHeight = 9;
@@ -503,7 +433,7 @@ export const ExportDialog = ({
         statePointOverflow.push(point);
         return;
       }
-      drawStatePointCard(page, point, index, marginMm, statePointY);
+      drawStatePointCard(point, index, marginMm, statePointY);
       statePointY += statePointCardHeight;
     });
 
@@ -513,7 +443,9 @@ export const ExportDialog = ({
     const processOverflow: Process[] = [];
 
     if (filteredProcesses.length > 0) {
-      drawText(page, 'プロセス', processX, processY + 2.5, 2.8, { font: resolvedBoldFont });
+      pdf.setTextColor(17, 24, 39);
+      setFont('bold', 2.8);
+      pdf.text('プロセス', processX, processY + 2.5);
       processY += 5;
     }
 
@@ -558,31 +490,27 @@ export const ExportDialog = ({
         processOverflow.push(process);
         return;
       }
-      processY += drawProcessCard(page, process, processX, processY);
+      processY += drawProcessCard(process, processX, processY);
     });
 
     if (statePointOverflow.length > 0 || processOverflow.length > 0) {
-      const page2 = createPage();
-      drawPageBackground(page2);
+      pdf.addPage();
+      drawPageBackground();
 
-      drawText(
-        page2,
-        `${designConditions.project.name || '空気線図'} - 続き`,
-        marginMm,
-        marginMm + 3,
-        3.2,
-        { font: resolvedBoldFont }
-      );
+      pdf.setTextColor(17, 24, 39);
+      setFont('bold', 3.2);
+      pdf.text(`${designConditions.project.name || '空気線図'} - 続き`, marginMm, marginMm + 3);
 
       let currentY = marginMm + 8;
 
       if (statePointOverflow.length > 0) {
-        drawText(page2, '状態点 (続き)', marginMm, currentY + 2.5, 2.8, { font: resolvedBoldFont });
+        setFont('bold', 2.8);
+        pdf.text('状態点 (続き)', marginMm, currentY + 2.5);
         currentY += 5;
 
         statePointOverflow.forEach((point) => {
           const origIndex = filteredStatePoints.findIndex((p) => p.id === point.id);
-          drawStatePointCard(page2, point, origIndex, marginMm, currentY);
+          drawStatePointCard(point, origIndex, marginMm, currentY);
           currentY += statePointCardHeight;
         });
 
@@ -590,16 +518,15 @@ export const ExportDialog = ({
       }
 
       if (processOverflow.length > 0) {
-        drawText(page2, 'プロセス (続き)', marginMm, currentY + 2.5, 2.8, { font: resolvedBoldFont });
+        setFont('bold', 2.8);
+        pdf.text('プロセス (続き)', marginMm, currentY + 2.5);
         currentY += 5;
 
         processOverflow.forEach((process) => {
-          currentY += drawProcessCard(page2, process, marginMm, currentY);
+          currentY += drawProcessCard(process, marginMm, currentY);
         });
       }
     }
-
-    return pdfDoc.save();
   };
 
   const buildA4Pages = (chartCanvas: HTMLCanvasElement): HTMLCanvasElement[] => {
@@ -1105,8 +1032,15 @@ export const ExportDialog = ({
         await document.fonts.ready;
       }
 
-      const pdfBytes = await renderPdfPages(canvas);
-      const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const pdf = new jsPDF('portrait', 'mm', 'a4');
+      const hasJapaneseFont = await preparePdfFonts(pdf);
+      if (!hasJapaneseFont) {
+        throw new Error('PDF用フォントが読み込めませんでした。public/fonts/NotoSansJP-Regular.ttf を配置してください。');
+      }
+      renderPdfPages(canvas, pdf, hasJapaneseFont);
+
+      // PDFをBlobとして生成し、新しいウィンドウで開く
+      const pdfBlob = pdf.output('blob');
       if (pdfBlob.size === 0) {
         throw new Error('PDFの生成に失敗しました');
       }
