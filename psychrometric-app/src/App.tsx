@@ -747,9 +747,9 @@ function App() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
         {/* 左サイドバー */}
-        <aside className="w-80 flex-none bg-white border-r border-gray-200 overflow-y-auto min-h-0">
+        <aside className="order-2 w-full flex-none bg-white border-b border-gray-200 overflow-y-auto min-h-0 max-h-[45dvh] sm:order-none sm:w-80 sm:border-b-0 sm:border-r sm:max-h-none">
           {/* 季節切替 */}
           <div className="p-4 border-b border-gray-200">
             <h2 className="font-semibold text-sm text-gray-700 mb-2">表示モード</h2>
@@ -1374,8 +1374,8 @@ function App() {
         </aside>
 
         {/* メインコンテンツ */}
-        <main className="flex-1 min-h-0 min-w-0 overflow-hidden p-4">
-          <div className="bg-white rounded-lg shadow h-full min-h-0 min-w-0 p-4">
+        <main className="order-1 flex-1 min-h-0 min-w-0 overflow-hidden p-3 sm:order-none sm:p-4">
+          <div className="bg-white rounded-lg shadow h-full min-h-0 min-w-0 p-3 sm:p-4">
             <div ref={chartContainerRef} className="h-full min-h-0 min-w-0">
               <PsychrometricChart
                 ref={chartRef}
