@@ -130,6 +130,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   }));
   const [isDragging, setIsDragging] = useState(false);
   const [draggedPointId, setDraggedPointId] = useState<string | null>(null);
+  const [isDragEnabled, setIsDragEnabled] = useState(false);
   const resolutionScale = useMemo(() => {
     return getDefaultResolutionScale();
   }, []);
@@ -512,6 +513,12 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     if (index < 0) return '';
     return getPointLabel(filteredStatePoints[index], index);
   }, [filteredStatePoints, getPointLabel, selectedPointId]);
+
+  useEffect(() => {
+    setIsDragEnabled(false);
+    setIsDragging(false);
+    setDraggedPointId(null);
+  }, [selectedPointId]);
   
   // チャートの描画
   useEffect(() => {
@@ -558,12 +565,13 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     // クリックされた状態点を探す
     const clickedPoint = findPointAt(point.x, point.y, statePoints, activeSeason, coordinates);
     if (clickedPoint) {
+      onPointClick?.(clickedPoint.id);
+      if (!isDragEnabled || clickedPoint.id !== selectedPointId) return;
       event.preventDefault();
       event.stopPropagation();
       event.currentTarget.setPointerCapture(event.pointerId);
       setIsDragging(true);
       setDraggedPointId(clickedPoint.id);
-      onPointClick?.(clickedPoint.id);
     }
   };
 
@@ -611,15 +619,32 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       />
       {selectedPoint && selectedPointPosition && (
         <div
-          className="pointer-events-none absolute z-10 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-lg"
+          className="pointer-events-auto absolute z-10 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-lg"
           style={{
             left: selectedPointPosition.x + 12,
             top: selectedPointPosition.y - 12,
             transform: 'translateY(-100%)',
           }}
         >
-          <div className="font-semibold text-gray-900">
-            {selectedPoint.name || selectedPointLabel}
+          <div className="flex items-center justify-between gap-3">
+            <div className="font-semibold text-gray-900">
+              {selectedPoint.name || selectedPointLabel}
+            </div>
+            <button
+              type="button"
+              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                isDragEnabled
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setIsDragEnabled((prev) => !prev);
+              }}
+            >
+              {isDragEnabled ? 'ドラッグ中' : '編集'}
+            </button>
           </div>
           <div>乾球温度: {selectedPoint.dryBulbTemp?.toFixed(1)}°C</div>
           <div>相対湿度: {selectedPoint.relativeHumidity?.toFixed(0)}%</div>
@@ -631,6 +656,9 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
             {typeof selectedPoint.airflow === 'number'
               ? `${selectedPoint.airflow.toFixed(0)} m³/h`
               : '-'}
+          </div>
+          <div className="mt-1 text-[10px] text-gray-500">
+            {isDragEnabled ? 'ポイントをドラッグして移動できます。' : '編集を押すとドラッグできます。'}
           </div>
         </div>
       )}
