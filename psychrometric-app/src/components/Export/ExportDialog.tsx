@@ -239,11 +239,11 @@ export const ExportDialog = ({
     const chartRenderWidth = Math.round((drawChartWidthMm / 25.4) * A4_DPI);
     const chartRenderHeight = Math.round((drawChartHeightMm / 25.4) * A4_DPI);
     const pxPerMm = A4_DPI / 25.4;
-    const chartRenderCanvas = {
+    const chartRenderCanvas = ({
       width: chartRenderWidth,
       height: chartRenderHeight,
       getContext: () => pdf.context2d as unknown as CanvasRenderingContext2D,
-    } as HTMLCanvasElement;
+    } as unknown) as HTMLCanvasElement;
     const renderChartToPdf = () => {
       const ctx = pdf.context2d as unknown as CanvasRenderingContext2D;
       ctx.save();
