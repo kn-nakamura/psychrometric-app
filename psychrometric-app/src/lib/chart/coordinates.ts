@@ -173,15 +173,20 @@ export function createDefaultChartConfig(
   width: number,
   height: number
 ): { dimensions: ChartDimensions; range: ChartRange } {
+  const isCompact = width < 500 || height < 420;
+  const marginTop = isCompact ? 12 : 20;
+  const marginRight = isCompact ? 40 : 56;
+  const marginBottom = isCompact ? 34 : 44;
+  const marginLeft = isCompact ? 20 : 28;
 
   return {
     dimensions: {
       width,
       height,
-      marginTop: 20,
-      marginRight: 56,
-      marginBottom: 44,
-      marginLeft: 28,
+      marginTop,
+      marginRight,
+      marginBottom,
+      marginLeft,
     },
     range: {
       tempMin: -5,

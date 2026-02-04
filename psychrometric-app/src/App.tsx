@@ -1374,8 +1374,8 @@ function App() {
         </aside>
 
         {/* メインコンテンツ */}
-        <main className="order-1 flex-1 min-h-0 min-w-0 overflow-hidden p-3 sm:order-none sm:p-4">
-          <div className="bg-white rounded-lg shadow h-full min-h-0 min-w-0 p-3 sm:p-4">
+        <main className="order-1 flex-1 min-h-0 min-w-0 overflow-hidden p-2 sm:order-none sm:p-4">
+          <div className="bg-white rounded-lg shadow h-full min-h-0 min-w-0 p-2 sm:p-4">
             <div ref={chartContainerRef} className="h-full min-h-0 min-w-0">
               <PsychrometricChart
                 ref={chartRef}
