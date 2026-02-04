@@ -20,6 +20,26 @@ export interface PsychrometricChartRef {
   getCanvas: () => HTMLCanvasElement | null;
 }
 
+declare global {
+  interface Window {
+    Plotly?: {
+      newPlot: (
+        root: HTMLElement,
+        data: unknown[],
+        layout: Record<string, unknown>,
+        config?: Record<string, unknown>
+      ) => Promise<unknown>;
+      react: (
+        root: HTMLElement,
+        data: unknown[],
+        layout: Record<string, unknown>,
+        config?: Record<string, unknown>
+      ) => Promise<unknown>;
+      purge: (root: HTMLElement) => void;
+    };
+  }
+}
+
 interface RenderPsychrometricChartOptions {
   canvas: HTMLCanvasElement;
   width: number;
@@ -101,6 +121,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   onPointMove,
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const plotContainerRef = useRef<HTMLDivElement>(null);
 
   // 親コンポーネントからcanvasにアクセスできるようにする
   useImperativeHandle(ref, () => ({
@@ -119,6 +140,332 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   const coordinates = useMemo(() => {
     return new ChartCoordinates(chartConfig.dimensions, chartConfig.range);
   }, [chartConfig]);
+
+  const filteredStatePoints = useMemo(
+    () =>
+      statePoints
+        .filter((point) => {
+          if (activeSeason === 'both') return true;
+          return point.season === activeSeason || point.season === 'both';
+        })
+        .sort((a, b) => a.order - b.order),
+    [statePoints, activeSeason]
+  );
+
+  const getPointLabel = (point: StatePoint, index: number): string => {
+    let summerCount = 0;
+    let winterCount = 0;
+    for (let i = 0; i <= index; i++) {
+      const p = filteredStatePoints[i];
+      if (p.season === 'summer') summerCount++;
+      else if (p.season === 'winter') winterCount++;
+    }
+
+    if (point.season === 'summer') {
+      return `C${summerCount}`;
+    }
+    if (point.season === 'winter') {
+      return `H${winterCount}`;
+    }
+
+    let bothSummerCount = 0;
+    let bothWinterCount = 0;
+    for (let i = 0; i <= index; i++) {
+      const p = filteredStatePoints[i];
+      if (p.season === 'summer' || p.season === 'both') bothSummerCount++;
+      if (p.season === 'winter' || p.season === 'both') bothWinterCount++;
+    }
+    if (activeSeason === 'summer') {
+      return `C${bothSummerCount}`;
+    }
+    if (activeSeason === 'winter') {
+      return `H${bothWinterCount}`;
+    }
+    return `C${bothSummerCount}/H${bothWinterCount}`;
+  };
+
+  const getProcessColor = (season: Process['season']) =>
+    season === 'summer' ? '#4dabf7' : season === 'winter' ? '#ff6b6b' : '#6b7280';
+
+  const plotData = useMemo(() => {
+    const data: Record<string, unknown>[] = [];
+    const annotations: Record<string, unknown>[] = [];
+    const { range } = chartConfig;
+
+    const addLineTrace = (
+      points: { x: number; y: number }[],
+      line: { color: string; width: number; dash?: string }
+    ) => {
+      if (points.length === 0) return;
+      data.push({
+        type: 'scatter',
+        mode: 'lines',
+        x: points.map((point) => point.x),
+        y: points.map((point) => point.y),
+        line,
+        hoverinfo: 'skip',
+        showlegend: false,
+      });
+    };
+
+    const clipPoints = (points: { x: number; y: number }[]) =>
+      points.filter(
+        (point) =>
+          point.x >= range.tempMin &&
+          point.x <= range.tempMax &&
+          point.y >= range.humidityMin &&
+          point.y <= range.humidityMax
+      );
+
+    // Relative humidity curves
+    const rhCurves = RHCurveGenerator.generateStandardSet(range.tempMin, range.tempMax);
+    rhCurves.forEach((points, rh) => {
+      const clippedPoints = clipPoints(points);
+      const lineColor = rh === 100 ? '#d96b1a' : '#f28c28';
+      const lineWidth = rh === 100 ? 2 : 1;
+      addLineTrace(clippedPoints, { color: lineColor, width: lineWidth });
+
+      if (clippedPoints.length > 0 && rh % 20 === 0) {
+        const lastPoint = clippedPoints[clippedPoints.length - 1];
+        annotations.push({
+          x: lastPoint.x,
+          y: lastPoint.y,
+          text: `${rh}%`,
+          showarrow: false,
+          font: { size: 9, color: '#d96b1a' },
+          xanchor: 'left',
+        });
+      }
+    });
+
+    // Wet bulb curves
+    const wbCurves = WetBulbCurveGenerator.generateStandardSet(range.tempMin, range.tempMax);
+    wbCurves.forEach((points) => {
+      const clippedPoints = clipPoints(points);
+      addLineTrace(clippedPoints, { color: '#dddddd', width: 0.5 });
+    });
+
+    // Enthalpy curves
+    const hCurves = EnthalpyCurveGenerator.generateStandardSet(range.tempMin, range.tempMax);
+    hCurves.forEach((points) => {
+      const clippedPoints = clipPoints(points);
+      addLineTrace(clippedPoints, { color: '#eeeeee', width: 0.5 });
+    });
+
+    // Process lines
+    processes.forEach((process) => {
+      if (activeSeason !== 'both' && process.season !== 'both' && process.season !== activeSeason) {
+        return;
+      }
+      const fromPoint = statePoints.find((p) => p.id === process.fromPointId);
+      const toPoint = statePoints.find((p) => p.id === process.toPointId);
+      if (!fromPoint || !toPoint) return;
+      if (!fromPoint.dryBulbTemp || !fromPoint.humidity) return;
+      if (!toPoint.dryBulbTemp || !toPoint.humidity) return;
+      const color = getProcessColor(process.season);
+
+      const addArrow = (from: StatePoint, to: StatePoint) => {
+        annotations.push({
+          x: to.dryBulbTemp ?? 0,
+          y: to.humidity ?? 0,
+          ax: from.dryBulbTemp ?? 0,
+          ay: from.humidity ?? 0,
+          xref: 'x',
+          yref: 'y',
+          axref: 'x',
+          ayref: 'y',
+          showarrow: true,
+          arrowhead: 2,
+          arrowsize: 1,
+          arrowwidth: 1.5,
+          arrowcolor: color,
+        });
+      };
+
+      if (process.type === 'mixing') {
+        const stream1Id = process.parameters.mixingRatios?.stream1.pointId ?? process.fromPointId;
+        const stream2Id = process.parameters.mixingRatios?.stream2.pointId;
+        const stream1Point = statePoints.find((p) => p.id === stream1Id);
+        const stream2Point = statePoints.find((p) => p.id === stream2Id);
+        if (!stream1Point || !stream2Point) return;
+        if (!stream1Point.dryBulbTemp || !stream1Point.humidity) return;
+        if (!stream2Point.dryBulbTemp || !stream2Point.humidity) return;
+
+        addLineTrace(
+          [
+            { x: stream1Point.dryBulbTemp, y: stream1Point.humidity },
+            { x: toPoint.dryBulbTemp, y: toPoint.humidity },
+          ],
+          { color, width: 3, dash: 'dash' }
+        );
+        addLineTrace(
+          [
+            { x: stream2Point.dryBulbTemp, y: stream2Point.humidity },
+            { x: toPoint.dryBulbTemp, y: toPoint.humidity },
+          ],
+          { color, width: 3, dash: 'dash' }
+        );
+        addArrow(stream1Point, toPoint);
+        addArrow(stream2Point, toPoint);
+        return;
+      }
+
+      if (process.type === 'heatExchange') {
+        const exhaustPointId = process.parameters.exhaustPointId;
+        const exhaustPoint = statePoints.find((p) => p.id === exhaustPointId);
+        if (exhaustPoint && exhaustPoint.dryBulbTemp && exhaustPoint.humidity) {
+          addLineTrace(
+            [
+              { x: exhaustPoint.dryBulbTemp, y: exhaustPoint.humidity },
+              { x: toPoint.dryBulbTemp, y: toPoint.humidity },
+            ],
+            { color, width: 2, dash: 'dot' }
+          );
+        }
+      }
+
+      addLineTrace(
+        [
+          { x: fromPoint.dryBulbTemp, y: fromPoint.humidity },
+          { x: toPoint.dryBulbTemp, y: toPoint.humidity },
+        ],
+        { color, width: 3, dash: 'dash' }
+      );
+      addArrow(fromPoint, toPoint);
+    });
+
+    // State points
+    filteredStatePoints.forEach((point, index) => {
+      if (!point.dryBulbTemp || !point.humidity) return;
+      const label = getPointLabel(point, index);
+      const defaultPointColor =
+        point.season === 'summer' ? '#4dabf7' : point.season === 'winter' ? '#ff6b6b' : '#6b7280';
+      const pointColor = point.color || defaultPointColor;
+      const isSelected = selectedPointId === point.id;
+
+      data.push({
+        type: 'scatter',
+        mode: 'markers+text',
+        x: [point.dryBulbTemp],
+        y: [point.humidity],
+        text: [label],
+        textposition: 'middle right',
+        textfont: { color: pointColor, size: 10 },
+        marker: {
+          size: isSelected ? 12 : 10,
+          color: pointColor,
+          line: {
+            color: isSelected ? '#000' : pointColor,
+            width: isSelected ? 2 : 0,
+          },
+        },
+        hoverinfo: 'skip',
+        showlegend: false,
+      });
+    });
+
+    return { data, annotations };
+  }, [chartConfig, statePoints, processes, activeSeason, filteredStatePoints, selectedPointId]);
+
+  const plotLayout = useMemo<Record<string, unknown>>(() => {
+    const { range, dimensions } = chartConfig;
+    const tickVals: number[] = [];
+    const tickText: string[] = [];
+    for (let h = 0; h <= range.humidityMax + 0.0001; h += 0.005) {
+      if (h < range.humidityMin - 0.0001) continue;
+      tickVals.push(Number(h.toFixed(3)));
+      tickText.push(`${Math.round(h * 1000)} g/kg'`);
+    }
+
+    return {
+      width,
+      height,
+      margin: {
+        l: dimensions.marginLeft,
+        r: dimensions.marginRight,
+        t: dimensions.marginTop,
+        b: dimensions.marginBottom,
+      },
+      paper_bgcolor: '#ffffff',
+      plot_bgcolor: '#ffffff',
+      xaxis: {
+        range: [range.tempMin, range.tempMax],
+        dtick: 5,
+        ticks: 'outside',
+        showgrid: true,
+        gridcolor: '#e0e0e0',
+        zeroline: false,
+        tickfont: { size: 10, color: '#666' },
+        title: { text: '乾球温度 (°C)', font: { size: 11, color: '#444' } },
+      },
+      yaxis: {
+        range: [range.humidityMin, range.humidityMax],
+        tickmode: 'array',
+        tickvals: tickVals,
+        ticktext: tickText,
+        ticks: 'outside',
+        showgrid: true,
+        gridcolor: '#e0e0e0',
+        zeroline: false,
+        tickfont: { size: 10, color: '#666' },
+        title: { text: "絶対湿度 (g/kg')", font: { size: 11, color: '#444' } },
+      },
+      showlegend: false,
+    };
+  }, [chartConfig, width, height]);
+
+  const loadPlotly = useMemo(
+    () => () =>
+      new Promise<void>((resolve, reject) => {
+        if (window.Plotly) {
+          resolve();
+          return;
+        }
+        const existingScript = document.getElementById('plotly-script');
+        if (existingScript) {
+          existingScript.addEventListener('load', () => resolve());
+          existingScript.addEventListener('error', () => reject(new Error('Plotly load failed')));
+          return;
+        }
+        const script = document.createElement('script');
+        script.id = 'plotly-script';
+        script.src = 'https://cdn.plot.ly/plotly-2.27.0.min.js';
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Plotly load failed'));
+        document.body.appendChild(script);
+      }),
+    []
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const renderPlot = async () => {
+      try {
+        await loadPlotly();
+        if (cancelled) return;
+        if (!window.Plotly || !plotContainerRef.current) return;
+        const layout = {
+          ...plotLayout,
+          annotations: plotData.annotations,
+        };
+        await window.Plotly.react(plotContainerRef.current, plotData.data, layout, {
+          displayModeBar: false,
+          responsive: true,
+        });
+      } catch (error) {
+        console.error('Plotly load/render failed:', error);
+      }
+    };
+    renderPlot();
+
+    return () => {
+      cancelled = true;
+      if (plotContainerRef.current && window.Plotly) {
+        window.Plotly.purge(plotContainerRef.current);
+      }
+    };
+  }, [loadPlotly, plotData, plotLayout]);
   
   // チャートの描画
   useEffect(() => {
@@ -196,37 +543,42 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   };
   
   return (
-    <canvas
-      ref={canvasRef}
-      width={width}
-      height={height}
-      onMouseDown={(e) => handlePointerDown(e.clientX, e.clientY)}
-      onMouseMove={(e) => handlePointerMove(e.clientX, e.clientY)}
-      onMouseUp={handlePointerUp}
-      onMouseLeave={handlePointerUp}
-      onTouchStart={(e) => {
-        if (e.touches.length === 0) return;
-        e.preventDefault();
-        const touch = e.touches[0];
-        handlePointerDown(touch.clientX, touch.clientY);
-      }}
-      onTouchMove={(e) => {
-        if (e.touches.length === 0) return;
-        e.preventDefault();
-        const touch = e.touches[0];
-        handlePointerMove(touch.clientX, touch.clientY);
-      }}
-      onTouchEnd={handlePointerUp}
-      onTouchCancel={handlePointerUp}
-      style={{
-        cursor: isDragging ? 'grabbing' : 'default',
-        border: '1px solid #ddd',
-        width: '100%',
-        height: '100%',
-        touchAction: 'none',
-        display: 'block',
-      }}
-    />
+    <div className="relative h-full w-full">
+      <div ref={plotContainerRef} className="h-full w-full" />
+      <canvas
+        ref={canvasRef}
+        width={width}
+        height={height}
+        onMouseDown={(e) => handlePointerDown(e.clientX, e.clientY)}
+        onMouseMove={(e) => handlePointerMove(e.clientX, e.clientY)}
+        onMouseUp={handlePointerUp}
+        onMouseLeave={handlePointerUp}
+        onTouchStart={(e) => {
+          if (e.touches.length === 0) return;
+          e.preventDefault();
+          const touch = e.touches[0];
+          handlePointerDown(touch.clientX, touch.clientY);
+        }}
+        onTouchMove={(e) => {
+          if (e.touches.length === 0) return;
+          e.preventDefault();
+          const touch = e.touches[0];
+          handlePointerMove(touch.clientX, touch.clientY);
+        }}
+        onTouchEnd={handlePointerUp}
+        onTouchCancel={handlePointerUp}
+        style={{
+          cursor: isDragging ? 'grabbing' : 'default',
+          width: '100%',
+          height: '100%',
+          touchAction: 'none',
+          display: 'block',
+          position: 'absolute',
+          inset: 0,
+          opacity: 0,
+        }}
+      />
+    </div>
   );
 });
 
