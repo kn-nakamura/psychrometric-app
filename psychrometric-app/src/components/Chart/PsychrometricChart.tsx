@@ -52,6 +52,25 @@ interface RenderPsychrometricChartOptions {
   resolutionScale?: number;
 }
 
+export interface ChartRenderContext {
+  clearRect: (x: number, y: number, width: number, height: number) => void;
+  fillRect: (x: number, y: number, width: number, height: number) => void;
+  beginPath: () => void;
+  moveTo: (x: number, y: number) => void;
+  lineTo: (x: number, y: number) => void;
+  stroke: () => void;
+  fill: () => void;
+  arc: (x: number, y: number, radius: number, startAngle: number, endAngle: number) => void;
+  fillText: (text: string, x: number, y: number) => void;
+  setLineDash: (segments: number[]) => void;
+  strokeStyle: string | CanvasGradient | CanvasPattern;
+  fillStyle: string | CanvasGradient | CanvasPattern;
+  lineWidth: number;
+  font: string;
+  textAlign: CanvasTextAlign;
+  textBaseline: CanvasTextBaseline;
+}
+
 const getDefaultResolutionScale = () => {
   if (typeof window === 'undefined') {
     return 1.25;
@@ -59,31 +78,17 @@ const getDefaultResolutionScale = () => {
   return 1.25 * (window.devicePixelRatio || 1);
 };
 
-export const renderPsychrometricChart = ({
-  canvas,
-  width,
-  height,
-  statePoints,
-  processes,
-  activeSeason,
-  selectedPointId,
-  resolutionScale = getDefaultResolutionScale(),
-}: RenderPsychrometricChartOptions) => {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
+export const drawPsychrometricChart = (
+  ctx: ChartRenderContext,
+  width: number,
+  height: number,
+  statePoints: StatePoint[],
+  processes: Process[],
+  activeSeason: 'summer' | 'winter' | 'both',
+  selectedPointId?: string | null
+) => {
   const chartConfig = createDynamicChartConfig(width, height, statePoints);
   const coordinates = new ChartCoordinates(chartConfig.dimensions, chartConfig.range);
-
-  const scaledWidth = Math.max(1, Math.round(width * resolutionScale));
-  const scaledHeight = Math.max(1, Math.round(height * resolutionScale));
-  if (canvas.width !== scaledWidth) {
-    canvas.width = scaledWidth;
-  }
-  if (canvas.height !== scaledHeight) {
-    canvas.height = scaledHeight;
-  }
-  ctx.setTransform(resolutionScale, 0, 0, resolutionScale, 0, 0);
 
   // クリア
   ctx.clearRect(0, 0, width, height);
@@ -109,6 +114,32 @@ export const renderPsychrometricChart = ({
 
   // 状態点を描画
   drawStatePoints(ctx, coordinates, statePoints, activeSeason, selectedPointId);
+};
+
+export const renderPsychrometricChart = ({
+  canvas,
+  width,
+  height,
+  statePoints,
+  processes,
+  activeSeason,
+  selectedPointId,
+  resolutionScale = getDefaultResolutionScale(),
+}: RenderPsychrometricChartOptions) => {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const scaledWidth = Math.max(1, Math.round(width * resolutionScale));
+  const scaledHeight = Math.max(1, Math.round(height * resolutionScale));
+  if (canvas.width !== scaledWidth) {
+    canvas.width = scaledWidth;
+  }
+  if (canvas.height !== scaledHeight) {
+    canvas.height = scaledHeight;
+  }
+  ctx.setTransform(resolutionScale, 0, 0, resolutionScale, 0, 0);
+
+  drawPsychrometricChart(ctx, width, height, statePoints, processes, activeSeason, selectedPointId);
 };
 
 export const PsychrometricChart = forwardRef<PsychrometricChartRef, PsychrometricChartProps>(({
@@ -662,7 +693,7 @@ PsychrometricChart.displayName = 'PsychrometricChart';
 // ========================================
 
 function drawGrid(
-  ctx: CanvasRenderingContext2D,
+  ctx: ChartRenderContext,
   coordinates: ChartCoordinates,
   range: ChartRange
 ) {
@@ -708,7 +739,7 @@ function drawGrid(
 }
 
 function drawRHCurves(
-  ctx: CanvasRenderingContext2D,
+  ctx: ChartRenderContext,
   coordinates: ChartCoordinates,
   range: ChartRange
 ) {
@@ -756,7 +787,7 @@ function drawRHCurves(
 }
 
 function drawWetBulbCurves(
-  ctx: CanvasRenderingContext2D,
+  ctx: ChartRenderContext,
   coordinates: ChartCoordinates,
   range: ChartRange
 ) {
@@ -791,7 +822,7 @@ function drawWetBulbCurves(
 }
 
 function drawEnthalpyCurves(
-  ctx: CanvasRenderingContext2D,
+  ctx: ChartRenderContext,
   coordinates: ChartCoordinates,
   range: ChartRange
 ) {
@@ -826,7 +857,7 @@ function drawEnthalpyCurves(
 }
 
 function drawStatePoints(
-  ctx: CanvasRenderingContext2D,
+  ctx: ChartRenderContext,
   coordinates: ChartCoordinates,
   points: StatePoint[],
   activeSeason: string,
@@ -901,7 +932,7 @@ function drawStatePoints(
 }
 
 function drawProcesses(
-  ctx: CanvasRenderingContext2D,
+  ctx: ChartRenderContext,
   coordinates: ChartCoordinates,
   processes: Process[],
   points: StatePoint[],
@@ -1013,7 +1044,7 @@ function drawProcesses(
 }
 
 function drawArrow(
-  ctx: CanvasRenderingContext2D,
+  ctx: ChartRenderContext,
   x1: number,
   y1: number,
   x2: number,
