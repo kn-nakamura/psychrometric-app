@@ -619,33 +619,31 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       />
       {selectedPoint && selectedPointPosition && (
         <div
-          className="pointer-events-auto absolute z-10 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-lg"
+          className="pointer-events-auto absolute z-20 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-lg"
           style={{
             left: selectedPointPosition.x + 12,
             top: selectedPointPosition.y - 12,
             transform: 'translateY(-100%)',
           }}
         >
-          <div className="flex items-center justify-between gap-3">
-            <div className="font-semibold text-gray-900">
-              {selectedPoint.name || selectedPointLabel}
-            </div>
-            <button
-              type="button"
-              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                isDragEnabled
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                setIsDragEnabled((prev) => !prev);
-              }}
-            >
-              {isDragEnabled ? 'ドラッグ中' : '編集'}
-            </button>
+          <div className="font-semibold text-gray-900">
+            {selectedPoint.name || selectedPointLabel}
           </div>
+          <button
+            type="button"
+            className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+              isDragEnabled
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setIsDragEnabled((prev) => !prev);
+            }}
+          >
+            {isDragEnabled ? 'ドラッグ中' : '編集'}
+          </button>
           <div>乾球温度: {selectedPoint.dryBulbTemp?.toFixed(1)}°C</div>
           <div>相対湿度: {selectedPoint.relativeHumidity?.toFixed(0)}%</div>
           <div>絶対湿度: {selectedPoint.humidity?.toFixed(4)} kg/kg'</div>
