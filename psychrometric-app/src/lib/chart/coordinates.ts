@@ -179,7 +179,7 @@ export function createDefaultChartConfig(
       width,
       height,
       marginTop: 20,
-      marginRight: 28,
+      marginRight: 56,
       marginBottom: 44,
       marginLeft: 56,
     },

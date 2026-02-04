@@ -421,6 +421,8 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         tickmode: 'array',
         tickvals: tickVals,
         ticktext: tickText,
+        side: 'right',
+        ticklabelposition: 'outside right',
         ticks: 'outside',
         showgrid: true,
         gridcolor: '#e0e0e0',
@@ -699,9 +701,9 @@ function drawGrid(
     // ラベル - g/kg' 形式 (kg/kg' × 1000 = g/kg')
     ctx.fillStyle = '#666';
     ctx.font = '10px sans-serif';
-    ctx.textAlign = 'left';
+    ctx.textAlign = 'right';
     const gPerKg = h * 1000;
-    ctx.fillText(`${gPerKg.toFixed(0)} g/kg'`, x2 + 10, y + 4);
+    ctx.fillText(`${gPerKg.toFixed(0)} g/kg'`, x2 - 10, y + 4);
   }
 }
 
