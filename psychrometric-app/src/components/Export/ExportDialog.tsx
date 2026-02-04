@@ -236,11 +236,9 @@ export const ExportDialog = ({
       drawChartWidthMm = chartHeightMm * chartAspectRatio;
     }
     const chartXOffset = marginMm + (chartWidthMm - drawChartWidthMm) / 2;
-    const chartRenderWidth = Math.round((drawChartWidthMm / 25.4) * A4_DPI);
-    const chartRenderHeight = Math.round((drawChartHeightMm / 25.4) * A4_DPI);
     const chartSvg = renderPsychrometricChartSvg({
-      width: chartRenderWidth,
-      height: chartRenderHeight,
+      width: drawChartWidthMm,
+      height: drawChartHeightMm,
       statePoints: filteredStatePoints,
       processes: filteredProcesses,
       activeSeason,
@@ -248,6 +246,9 @@ export const ExportDialog = ({
     const chartSvgElement = new DOMParser()
       .parseFromString(chartSvg, 'image/svg+xml')
       .documentElement;
+    chartSvgElement.setAttribute('viewBox', `0 0 ${drawChartWidthMm} ${drawChartHeightMm}`);
+    chartSvgElement.setAttribute('width', `${drawChartWidthMm}`);
+    chartSvgElement.setAttribute('height', `${drawChartHeightMm}`);
 
     const drawStatePointCard = (point: StatePoint, index: number, x: number, y: number) => {
       const label = getPointLabel(point, index);
