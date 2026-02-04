@@ -533,10 +533,11 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       | null;
     if (!plotElement?.on) return;
 
-    const handleRelayout = (event: Record<string, unknown>) => {
-      if (!onPointMove || !event) return;
+    const handleRelayout = (rawEvent: unknown) => {
+      if (!onPointMove || !rawEvent) return;
+      const event = rawEvent as Record<string, unknown>;
       const nextLayout = applyRelayoutPatch(plotLayoutWithShapes, event);
-      const shapes = nextLayout.shapes as Array<Record<string, number>> | undefined;
+      const shapes = nextLayout.shapes as Array<unknown> | undefined;
       if (!shapes?.length) return;
 
       const indices = new Set<number>();
@@ -552,10 +553,23 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
 
       if (indices.size === 0) return;
 
+      const isCircleShape = (
+        shape: unknown
+      ): shape is { x0: number; x1: number; y0: number; y1: number } => {
+        if (!shape || typeof shape !== 'object') return false;
+        const candidate = shape as Record<string, unknown>;
+        return (
+          typeof candidate.x0 === 'number' &&
+          typeof candidate.x1 === 'number' &&
+          typeof candidate.y0 === 'number' &&
+          typeof candidate.y1 === 'number'
+        );
+      };
+
       indices.forEach((index) => {
         const point = draggablePoints[index];
         const shape = shapes[index];
-        if (!point || !shape) return;
+        if (!point || !isCircleShape(shape)) return;
         const { x, y } = centerFromCircleShape(shape);
         const clampedX = Math.min(Math.max(x, chartConfig.range.tempMin), chartConfig.range.tempMax);
         const clampedY = Math.min(
@@ -566,7 +580,8 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       });
     };
 
-    const handleClick = (event: { points?: Array<{ customdata?: string }> }) => {
+    const handleClick = (rawEvent: unknown) => {
+      const event = rawEvent as { points?: Array<{ customdata?: string }> } | undefined;
       const pointId = event?.points?.[0]?.customdata;
       if (pointId) {
         onPointClick?.(pointId);
