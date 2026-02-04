@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { X, FileImage, FileText, Loader2 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import 'svg2pdf.js';
 import { DesignConditions } from '@/types/designConditions';
 import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
-import { renderPsychrometricChart } from '@/components/Chart/PsychrometricChart';
+import { renderPsychrometricChart, renderPsychrometricChartSvg } from '@/components/Chart/PsychrometricChart';
 import { CoilCapacityCalculator } from '@/lib/equipment/coilCapacity';
 
 interface ExportDialogProps {
@@ -196,8 +197,11 @@ export const ExportDialog = ({
     return false;
   };
 
-  const renderPdfPages = (chartCanvas: HTMLCanvasElement, pdf: jsPDF, hasJapaneseFont: boolean) => {
-
+  const renderPdfPages = async (
+    chartCanvas: HTMLCanvasElement,
+    pdf: jsPDF,
+    hasJapaneseFont: boolean
+  ) => {
     const marginMm = 8;
     const headerHeightMm = 14;
     const chartTopMm = marginMm + headerHeightMm + 2;
@@ -234,20 +238,16 @@ export const ExportDialog = ({
     const chartXOffset = marginMm + (chartWidthMm - drawChartWidthMm) / 2;
     const chartRenderWidth = Math.round((drawChartWidthMm / 25.4) * A4_DPI);
     const chartRenderHeight = Math.round((drawChartHeightMm / 25.4) * A4_DPI);
-    const chartRenderCanvas = document.createElement('canvas');
-    chartRenderCanvas.width = chartRenderWidth;
-    chartRenderCanvas.height = chartRenderHeight;
-    renderPsychrometricChart({
-      canvas: chartRenderCanvas,
+    const chartSvg = renderPsychrometricChartSvg({
       width: chartRenderWidth,
       height: chartRenderHeight,
       statePoints: filteredStatePoints,
       processes: filteredProcesses,
       activeSeason,
-      resolutionScale: 1,
     });
-    // JPEG形式で軽量化（品質0.85でファイルサイズを削減）
-    const chartImage = chartRenderCanvas.toDataURL('image/jpeg', 0.85);
+    const chartSvgElement = new DOMParser()
+      .parseFromString(chartSvg, 'image/svg+xml')
+      .documentElement;
 
     const drawStatePointCard = (point: StatePoint, index: number, x: number, y: number) => {
       const label = getPointLabel(point, index);
@@ -414,14 +414,12 @@ export const ExportDialog = ({
     const chartY = chartTopMm;
     pdf.setDrawColor(229, 231, 235);
     pdf.rect(marginMm, chartY, chartWidthMm, chartHeightMm, 'S');
-    pdf.addImage(
-      chartImage,
-      'JPEG',
-      chartXOffset,
-      chartY + (chartHeightMm - drawChartHeightMm) / 2,
-      drawChartWidthMm,
-      drawChartHeightMm
-    );
+    await pdf.svg(chartSvgElement, {
+      x: chartXOffset,
+      y: chartY + (chartHeightMm - drawChartHeightMm) / 2,
+      width: drawChartWidthMm,
+      height: drawChartHeightMm,
+    });
 
     const bottomY = bottomSectionStartMm;
     const halfWidth = contentWidthMm / 2 - 2;
@@ -1046,7 +1044,7 @@ export const ExportDialog = ({
           'PDF用フォントが読み込めませんでした。public/fonts/NotoSansJP-Regular.ttf を配置するか、外部フォントURLへのアクセスを許可してください。'
         );
       }
-      renderPdfPages(canvas, pdf, hasJapaneseFont);
+      await renderPdfPages(canvas, pdf, hasJapaneseFont);
 
       // PDFをBlobとして生成し、新しいウィンドウで開く
       const pdfBlob = pdf.output('blob');
