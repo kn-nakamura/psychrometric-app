@@ -192,6 +192,10 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     const data: Record<string, unknown>[] = [];
     const annotations: Record<string, unknown>[] = [];
     const { range } = chartConfig;
+    const formatValue = (value: number | undefined, fractionDigits = 1) => {
+      if (typeof value !== 'number') return '-';
+      return value.toFixed(fractionDigits);
+    };
 
     const addLineTrace = (
       points: { x: number; y: number }[],
@@ -343,6 +347,17 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         point.season === 'summer' ? '#4dabf7' : point.season === 'winter' ? '#ff6b6b' : '#6b7280';
       const pointColor = point.color || defaultPointColor;
       const isSelected = selectedPointId === point.id;
+      const hoverLines = [
+        `${point.name || label}`,
+        `乾球温度: ${formatValue(point.dryBulbTemp, 1)}°C`,
+        `相対湿度: ${formatValue(point.relativeHumidity, 0)}%`,
+        `絶対湿度: ${formatValue(point.humidity, 4)} kg/kg'`,
+        `エンタルピー: ${formatValue(point.enthalpy, 1)} kJ/kg'`,
+        `露点温度: ${formatValue(point.dewPoint, 1)}°C`,
+      ];
+      if (typeof point.airflow === 'number') {
+        hoverLines.push(`風量: ${formatValue(point.airflow, 0)} m³/h`);
+      }
 
       data.push({
         type: 'scatter',
@@ -360,7 +375,8 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
             width: isSelected ? 2 : 0,
           },
         },
-        hoverinfo: 'skip',
+        hoverinfo: 'text',
+        hovertext: [hoverLines.join('<br>')],
         showlegend: false,
       });
     });
@@ -396,6 +412,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         showgrid: true,
         gridcolor: '#e0e0e0',
         zeroline: false,
+        fixedrange: true,
         tickfont: { size: 10, color: '#666' },
         title: { text: '乾球温度 (°C)', font: { size: 11, color: '#444' } },
       },
@@ -408,9 +425,12 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         showgrid: true,
         gridcolor: '#e0e0e0',
         zeroline: false,
+        fixedrange: true,
         tickfont: { size: 10, color: '#666' },
         title: { text: "絶対湿度 (g/kg')", font: { size: 11, color: '#444' } },
       },
+      dragmode: false,
+      hovermode: 'closest',
       showlegend: false,
     };
   }, [chartConfig, width, height]);
@@ -452,6 +472,8 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         };
         await window.Plotly.react(plotContainerRef.current, plotData.data, layout, {
           displayModeBar: false,
+          scrollZoom: false,
+          doubleClick: false,
           responsive: true,
         });
       } catch (error) {
@@ -467,6 +489,29 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       }
     };
   }, [loadPlotly, plotData, plotLayout]);
+
+  const selectedPoint = useMemo(() => {
+    if (!selectedPointId) return null;
+    const point = statePoints.find((item) => item.id === selectedPointId);
+    if (!point) return null;
+    if (activeSeason !== 'both' && point.season !== 'both' && point.season !== activeSeason) {
+      return null;
+    }
+    return point;
+  }, [activeSeason, selectedPointId, statePoints]);
+
+  const selectedPointPosition = useMemo(() => {
+    if (!selectedPoint || typeof selectedPoint.dryBulbTemp !== 'number') return null;
+    if (typeof selectedPoint.humidity !== 'number') return null;
+    return coordinates.toCanvas(selectedPoint.dryBulbTemp, selectedPoint.humidity);
+  }, [coordinates, selectedPoint]);
+
+  const selectedPointLabel = useMemo(() => {
+    if (!selectedPointId) return '';
+    const index = filteredStatePoints.findIndex((point) => point.id === selectedPointId);
+    if (index < 0) return '';
+    return getPointLabel(filteredStatePoints[index], index);
+  }, [filteredStatePoints, getPointLabel, selectedPointId]);
   
   // チャートの描画
   useEffect(() => {
@@ -564,6 +609,31 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         onPointerLeave={handlePointerUp}
         style={{ touchAction: isDragging ? 'none' : 'auto' }}
       />
+      {selectedPoint && selectedPointPosition && (
+        <div
+          className="pointer-events-none absolute z-10 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-lg"
+          style={{
+            left: selectedPointPosition.x + 12,
+            top: selectedPointPosition.y - 12,
+            transform: 'translateY(-100%)',
+          }}
+        >
+          <div className="font-semibold text-gray-900">
+            {selectedPoint.name || selectedPointLabel}
+          </div>
+          <div>乾球温度: {selectedPoint.dryBulbTemp?.toFixed(1)}°C</div>
+          <div>相対湿度: {selectedPoint.relativeHumidity?.toFixed(0)}%</div>
+          <div>絶対湿度: {selectedPoint.humidity?.toFixed(4)} kg/kg'</div>
+          <div>エンタルピー: {selectedPoint.enthalpy?.toFixed(1)} kJ/kg'</div>
+          <div>露点温度: {selectedPoint.dewPoint?.toFixed(1)}°C</div>
+          <div>
+            風量:{' '}
+            {typeof selectedPoint.airflow === 'number'
+              ? `${selectedPoint.airflow.toFixed(0)} m³/h`
+              : '-'}
+          </div>
+        </div>
+      )}
       <canvas
         ref={canvasRef}
         width={width}
