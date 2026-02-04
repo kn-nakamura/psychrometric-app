@@ -699,9 +699,9 @@ function drawGrid(
     // ラベル - g/kg' 形式 (kg/kg' × 1000 = g/kg')
     ctx.fillStyle = '#666';
     ctx.font = '10px sans-serif';
-    ctx.textAlign = 'right';
+    ctx.textAlign = 'left';
     const gPerKg = h * 1000;
-    ctx.fillText(`${gPerKg.toFixed(0)} g/kg'`, x1 - 10, y + 4);
+    ctx.fillText(`${gPerKg.toFixed(0)} g/kg'`, x2 + 10, y + 4);
   }
 }
 
