@@ -391,7 +391,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     for (let h = 0; h <= range.humidityMax + 0.0001; h += 0.005) {
       if (h < range.humidityMin - 0.0001) continue;
       tickVals.push(Number(h.toFixed(3)));
-      tickText.push(`${Math.round(h * 1000)} g/kg'`);
+      tickText.push(`${Math.round(h * 1000)}`);
     }
 
     return {
@@ -421,6 +421,8 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         tickmode: 'array',
         tickvals: tickVals,
         ticktext: tickText,
+        side: 'right',
+        ticklabelposition: 'outside right',
         ticks: 'outside',
         showgrid: true,
         gridcolor: '#e0e0e0',
@@ -685,7 +687,7 @@ function drawGrid(
     ctx.fillText(`${temp}°C`, x, y1 + 20);
   }
 
-  // 横線（絶対湿度）- g/kg' 形式で表示
+  // 横線（絶対湿度）- 数値のみ表示
   for (let h = 0; h <= range.humidityMax; h += 0.005) {
     const y = coordinates.humidityToY(h);
     const x1 = coordinates.tempToX(range.tempMin);
@@ -696,12 +698,12 @@ function drawGrid(
     ctx.lineTo(x2, y);
     ctx.stroke();
 
-    // ラベル - g/kg' 形式 (kg/kg' × 1000 = g/kg')
+    // ラベル - 数値のみ (kg/kg' × 1000)
     ctx.fillStyle = '#666';
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'right';
     const gPerKg = h * 1000;
-    ctx.fillText(`${gPerKg.toFixed(0)} g/kg'`, x1 - 10, y + 4);
+    ctx.fillText(`${gPerKg.toFixed(0)}`, x2 - 10, y + 4);
   }
 }
 
