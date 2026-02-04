@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useImperativeHandle, forwardRef, useMemo } from 'react';
+import type { PointerEvent } from 'react';
 import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
 import { ChartCoordinates, ChartRange, createDynamicChartConfig } from '@/lib/chart/coordinates';
@@ -496,31 +497,36 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   ]);
   
   const getCanvasPoint = (clientX: number, clientY: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
+    const container = plotContainerRef.current;
+    if (!container) return null;
+    const rect = container.getBoundingClientRect();
     return {
       x: clientX - rect.left,
       y: clientY - rect.top,
     };
   };
 
-  const handlePointerDown = (clientX: number, clientY: number) => {
-    const point = getCanvasPoint(clientX, clientY);
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    const point = getCanvasPoint(event.clientX, event.clientY);
     if (!point) return;
 
     // クリックされた状態点を探す
     const clickedPoint = findPointAt(point.x, point.y, statePoints, activeSeason, coordinates);
     if (clickedPoint) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.currentTarget.setPointerCapture(event.pointerId);
       setIsDragging(true);
       setDraggedPointId(clickedPoint.id);
       onPointClick?.(clickedPoint.id);
     }
   };
 
-  const handlePointerMove = (clientX: number, clientY: number) => {
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
     if (!isDragging || !draggedPointId) return;
-    const point = getCanvasPoint(clientX, clientY);
+    event.preventDefault();
+    event.stopPropagation();
+    const point = getCanvasPoint(event.clientX, event.clientY);
     if (!point) return;
 
     // 座標変換
@@ -537,45 +543,40 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     }
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    if (isDragging) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
     setIsDragging(false);
     setDraggedPointId(null);
   };
   
   return (
     <div className="relative h-full w-full">
-      <div ref={plotContainerRef} className="h-full w-full" />
+      <div
+        ref={plotContainerRef}
+        className="h-full w-full"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+        style={{ touchAction: isDragging ? 'none' : 'auto' }}
+      />
       <canvas
         ref={canvasRef}
         width={width}
         height={height}
-        onMouseDown={(e) => handlePointerDown(e.clientX, e.clientY)}
-        onMouseMove={(e) => handlePointerMove(e.clientX, e.clientY)}
-        onMouseUp={handlePointerUp}
-        onMouseLeave={handlePointerUp}
-        onTouchStart={(e) => {
-          if (e.touches.length === 0) return;
-          e.preventDefault();
-          const touch = e.touches[0];
-          handlePointerDown(touch.clientX, touch.clientY);
-        }}
-        onTouchMove={(e) => {
-          if (e.touches.length === 0) return;
-          e.preventDefault();
-          const touch = e.touches[0];
-          handlePointerMove(touch.clientX, touch.clientY);
-        }}
-        onTouchEnd={handlePointerUp}
-        onTouchCancel={handlePointerUp}
         style={{
           cursor: isDragging ? 'grabbing' : 'default',
           width: '100%',
           height: '100%',
-          touchAction: 'none',
           display: 'block',
           position: 'absolute',
           inset: 0,
           opacity: 0,
+          pointerEvents: 'none',
         }}
       />
     </div>
