@@ -653,7 +653,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       <div
         ref={plotContainerRef}
         className="h-full w-full"
-        style={{ touchAction: 'auto' }}
+        style={{ touchAction: 'none' }}
       />
       {selectedPoint && selectedPointPosition && (
         <div
