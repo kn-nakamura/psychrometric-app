@@ -4,7 +4,11 @@ import { jsPDF } from 'jspdf';
 import { DesignConditions } from '@/types/designConditions';
 import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
-import { renderPsychrometricChart } from '@/components/Chart/PsychrometricChart';
+import {
+  ChartRenderContext,
+  drawPsychrometricChart,
+  renderPsychrometricChart,
+} from '@/components/Chart/PsychrometricChart';
 import { CoilCapacityCalculator } from '@/lib/equipment/coilCapacity';
 
 interface ExportDialogProps {
@@ -21,6 +25,166 @@ const NOTO_SANS_JP_FONT_URLS = [
   'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts/hinted/ttf/NotoSansJP/NotoSansJP-Regular.ttf',
 ];
 let notoSansJpFontDataPromise: Promise<string | null> | null = null;
+
+type RgbColor = { r: number; g: number; b: number };
+
+const parseColor = (color: string | CanvasGradient | CanvasPattern): RgbColor => {
+  if (typeof color !== 'string') {
+    return { r: 0, g: 0, b: 0 };
+  }
+  const normalized = color.trim().toLowerCase();
+  if (normalized.startsWith('#')) {
+    const hex = normalized.slice(1);
+    const fullHex =
+      hex.length === 3
+        ? hex.split('').map((value) => value + value).join('')
+        : hex.padEnd(6, '0');
+    const parsed = parseInt(fullHex, 16);
+    return {
+      r: (parsed >> 16) & 255,
+      g: (parsed >> 8) & 255,
+      b: parsed & 255,
+    };
+  }
+  if (normalized.startsWith('rgb')) {
+    const matches = normalized.match(/\d+/g);
+    if (matches && matches.length >= 3) {
+      return {
+        r: Number(matches[0]),
+        g: Number(matches[1]),
+        b: Number(matches[2]),
+      };
+    }
+  }
+  return { r: 0, g: 0, b: 0 };
+};
+
+class PdfRenderContext implements ChartRenderContext {
+  strokeStyle: string | CanvasGradient | CanvasPattern = '#000';
+  fillStyle: string | CanvasGradient | CanvasPattern = '#000';
+  lineWidth = 1;
+  font = '10px sans-serif';
+  textAlign: CanvasTextAlign = 'left';
+  textBaseline: CanvasTextBaseline = 'alphabetic';
+  private currentPoint: { x: number; y: number } | null = null;
+  private segments: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+  private circle: { x: number; y: number; r: number } | null = null;
+  private lineDash: number[] = [];
+
+  constructor(
+    private pdf: jsPDF,
+    private offsetX: number,
+    private offsetY: number,
+    private baseFontName: string,
+    private scale: number,
+    private textScale: number
+  ) {}
+
+  clearRect = () => {
+    // No-op: PDF is vector and full background is handled by fillRect.
+  };
+
+  fillRect = (x: number, y: number, width: number, height: number) => {
+    const { r, g, b } = parseColor(this.fillStyle);
+    this.pdf.setFillColor(r, g, b);
+    this.pdf.rect(
+      this.offsetX + x * this.scale,
+      this.offsetY + y * this.scale,
+      width * this.scale,
+      height * this.scale,
+      'F'
+    );
+  };
+
+  beginPath = () => {
+    this.currentPoint = null;
+    this.segments = [];
+    this.circle = null;
+  };
+
+  moveTo = (x: number, y: number) => {
+    this.currentPoint = { x, y };
+  };
+
+  lineTo = (x: number, y: number) => {
+    if (this.currentPoint) {
+      this.segments.push({
+        x1: this.currentPoint.x,
+        y1: this.currentPoint.y,
+        x2: x,
+        y2: y,
+      });
+      this.currentPoint = { x, y };
+    }
+  };
+
+  stroke = () => {
+    const { r, g, b } = parseColor(this.strokeStyle);
+    this.pdf.setDrawColor(r, g, b);
+    this.pdf.setLineWidth(this.lineWidth * this.scale);
+    if (typeof this.pdf.setLineDashPattern === 'function') {
+      this.pdf.setLineDashPattern(this.lineDash, 0);
+    }
+    if (this.circle) {
+      this.pdf.circle(
+        this.offsetX + this.circle.x * this.scale,
+        this.offsetY + this.circle.y * this.scale,
+        this.circle.r * this.scale,
+        'S'
+      );
+      return;
+    }
+    this.segments.forEach((segment) => {
+      this.pdf.line(
+        this.offsetX + segment.x1 * this.scale,
+        this.offsetY + segment.y1 * this.scale,
+        this.offsetX + segment.x2 * this.scale,
+        this.offsetY + segment.y2 * this.scale
+      );
+    });
+  };
+
+  fill = () => {
+    const { r, g, b } = parseColor(this.fillStyle);
+    this.pdf.setFillColor(r, g, b);
+    if (this.circle) {
+      this.pdf.circle(
+        this.offsetX + this.circle.x * this.scale,
+        this.offsetY + this.circle.y * this.scale,
+        this.circle.r * this.scale,
+        'F'
+      );
+    }
+  };
+
+  arc = (x: number, y: number, radius: number, startAngle: number, endAngle: number) => {
+    const fullCircle = Math.abs(endAngle - startAngle) >= Math.PI * 2 - 0.01;
+    if (fullCircle) {
+      this.circle = { x, y, r: radius };
+    }
+  };
+
+  fillText = (text: string, x: number, y: number) => {
+    const sizeMatch = this.font.match(/(\d+(?:\.\d+)?)px/);
+    const sizePx = sizeMatch ? Number(sizeMatch[1]) : 10;
+    const sizePt = sizePx * 0.75 * this.scale * this.textScale;
+    const isBold = this.font.includes('bold');
+    this.pdf.setFont(this.baseFontName, isBold ? 'bold' : 'normal');
+    this.pdf.setFontSize(sizePt);
+    const { r, g, b } = parseColor(this.fillStyle);
+    this.pdf.setTextColor(r, g, b);
+    const align = this.textAlign === 'center' ? 'center' : this.textAlign === 'right' ? 'right' : 'left';
+    const baseline = this.textBaseline === 'middle' ? 'middle' : this.textBaseline === 'bottom' ? 'bottom' : 'top';
+    this.pdf.text(text, this.offsetX + x * this.scale, this.offsetY + y * this.scale, {
+      align,
+      baseline,
+    });
+  };
+
+  setLineDash = (segments: number[]) => {
+    this.lineDash = segments;
+  };
+}
 
 const loadNotoSansJpFontData = async (): Promise<string | null> => {
   if (!notoSansJpFontDataPromise) {
@@ -196,8 +360,11 @@ export const ExportDialog = ({
     return false;
   };
 
-  const renderPdfPages = (chartCanvas: HTMLCanvasElement, pdf: jsPDF, hasJapaneseFont: boolean) => {
-
+  const renderPdfPages = async (
+    chartCanvas: HTMLCanvasElement,
+    pdf: jsPDF,
+    hasJapaneseFont: boolean
+  ) => {
     const marginMm = 8;
     const headerHeightMm = 14;
     const chartTopMm = marginMm + headerHeightMm + 2;
@@ -232,22 +399,11 @@ export const ExportDialog = ({
       drawChartWidthMm = chartHeightMm * chartAspectRatio;
     }
     const chartXOffset = marginMm + (chartWidthMm - drawChartWidthMm) / 2;
-    const chartRenderWidth = Math.round((drawChartWidthMm / 25.4) * A4_DPI);
-    const chartRenderHeight = Math.round((drawChartHeightMm / 25.4) * A4_DPI);
-    const chartRenderCanvas = document.createElement('canvas');
-    chartRenderCanvas.width = chartRenderWidth;
-    chartRenderCanvas.height = chartRenderHeight;
-    renderPsychrometricChart({
-      canvas: chartRenderCanvas,
-      width: chartRenderWidth,
-      height: chartRenderHeight,
-      statePoints: filteredStatePoints,
-      processes: filteredProcesses,
-      activeSeason,
-      resolutionScale: 1,
-    });
-    // JPEG形式で軽量化（品質0.85でファイルサイズを削減）
-    const chartImage = chartRenderCanvas.toDataURL('image/jpeg', 0.85);
+    const chartFontName = hasJapaneseFont ? 'NotoSansJP' : 'Helvetica';
+    const chartRenderWidthPx = Math.round((drawChartWidthMm / 25.4) * A4_DPI);
+    const chartRenderHeightPx = Math.round((drawChartHeightMm / 25.4) * A4_DPI);
+    const chartScale = drawChartWidthMm / chartRenderWidthPx;
+    const chartTextScale = 1.4;
 
     const drawStatePointCard = (point: StatePoint, index: number, x: number, y: number) => {
       const label = getPointLabel(point, index);
@@ -414,13 +570,22 @@ export const ExportDialog = ({
     const chartY = chartTopMm;
     pdf.setDrawColor(229, 231, 235);
     pdf.rect(marginMm, chartY, chartWidthMm, chartHeightMm, 'S');
-    pdf.addImage(
-      chartImage,
-      'JPEG',
+    const chartYOffset = chartY + (chartHeightMm - drawChartHeightMm) / 2;
+    const chartContext = new PdfRenderContext(
+      pdf,
       chartXOffset,
-      chartY + (chartHeightMm - drawChartHeightMm) / 2,
-      drawChartWidthMm,
-      drawChartHeightMm
+      chartYOffset,
+      chartFontName,
+      chartScale,
+      chartTextScale
+    );
+    drawPsychrometricChart(
+      chartContext,
+      chartRenderWidthPx,
+      chartRenderHeightPx,
+      filteredStatePoints,
+      filteredProcesses,
+      activeSeason
     );
 
     const bottomY = bottomSectionStartMm;
@@ -1046,7 +1211,7 @@ export const ExportDialog = ({
           'PDF用フォントが読み込めませんでした。public/fonts/NotoSansJP-Regular.ttf を配置するか、外部フォントURLへのアクセスを許可してください。'
         );
       }
-      renderPdfPages(canvas, pdf, hasJapaneseFont);
+      await renderPdfPages(canvas, pdf, hasJapaneseFont);
 
       // PDFをBlobとして生成し、新しいウィンドウで開く
       const pdfBlob = pdf.output('blob');
