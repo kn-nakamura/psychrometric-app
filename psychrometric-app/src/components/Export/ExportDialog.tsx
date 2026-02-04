@@ -196,7 +196,11 @@ export const ExportDialog = ({
     return false;
   };
 
-  const renderPdfPages = (chartCanvas: HTMLCanvasElement, pdf: jsPDF, hasJapaneseFont: boolean) => {
+  const renderPdfPages = (
+    chartCanvas: HTMLCanvasElement,
+    pdf: jsPDF,
+    hasJapaneseFont: boolean
+  ) => {
 
     const marginMm = 8;
     const headerHeightMm = 14;
@@ -234,20 +238,31 @@ export const ExportDialog = ({
     const chartXOffset = marginMm + (chartWidthMm - drawChartWidthMm) / 2;
     const chartRenderWidth = Math.round((drawChartWidthMm / 25.4) * A4_DPI);
     const chartRenderHeight = Math.round((drawChartHeightMm / 25.4) * A4_DPI);
-    const chartRenderCanvas = document.createElement('canvas');
-    chartRenderCanvas.width = chartRenderWidth;
-    chartRenderCanvas.height = chartRenderHeight;
-    renderPsychrometricChart({
-      canvas: chartRenderCanvas,
+    const pxPerMm = A4_DPI / 25.4;
+    const chartRenderCanvas = {
       width: chartRenderWidth,
       height: chartRenderHeight,
-      statePoints: filteredStatePoints,
-      processes: filteredProcesses,
-      activeSeason,
-      resolutionScale: 1,
-    });
-    // JPEG形式で軽量化（品質0.85でファイルサイズを削減）
-    const chartImage = chartRenderCanvas.toDataURL('image/jpeg', 0.85);
+      getContext: () => pdf.context2d as unknown as CanvasRenderingContext2D,
+    } as HTMLCanvasElement;
+    const renderChartToPdf = () => {
+      const ctx = pdf.context2d as unknown as CanvasRenderingContext2D;
+      ctx.save();
+      ctx.translate(
+        chartXOffset,
+        chartY + (chartHeightMm - drawChartHeightMm) / 2
+      );
+      ctx.scale(1 / pxPerMm, 1 / pxPerMm);
+      renderPsychrometricChart({
+        canvas: chartRenderCanvas,
+        width: chartRenderWidth,
+        height: chartRenderHeight,
+        statePoints: filteredStatePoints,
+        processes: filteredProcesses,
+        activeSeason,
+        resolutionScale: 1,
+      });
+      ctx.restore();
+    };
 
     const drawStatePointCard = (point: StatePoint, index: number, x: number, y: number) => {
       const label = getPointLabel(point, index);
@@ -414,14 +429,7 @@ export const ExportDialog = ({
     const chartY = chartTopMm;
     pdf.setDrawColor(229, 231, 235);
     pdf.rect(marginMm, chartY, chartWidthMm, chartHeightMm, 'S');
-    pdf.addImage(
-      chartImage,
-      'JPEG',
-      chartXOffset,
-      chartY + (chartHeightMm - drawChartHeightMm) / 2,
-      drawChartWidthMm,
-      drawChartHeightMm
-    );
+    renderChartToPdf();
 
     const bottomY = bottomSectionStartMm;
     const halfWidth = contentWidthMm / 2 - 2;
