@@ -629,21 +629,6 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
           <div className="font-semibold text-gray-900">
             {selectedPoint.name || selectedPointLabel}
           </div>
-          <button
-            type="button"
-            className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-              isDragEnabled
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              setIsDragEnabled((prev) => !prev);
-            }}
-          >
-            {isDragEnabled ? 'ドラッグ中' : '編集'}
-          </button>
           <div>乾球温度: {selectedPoint.dryBulbTemp?.toFixed(1)}°C</div>
           <div>相対湿度: {selectedPoint.relativeHumidity?.toFixed(0)}%</div>
           <div>絶対湿度: {selectedPoint.humidity?.toFixed(4)} kg/kg'</div>
@@ -655,10 +640,29 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
               ? `${selectedPoint.airflow.toFixed(0)} m³/h`
               : '-'}
           </div>
-          <div className="mt-1 text-[10px] text-gray-500">
-            {isDragEnabled ? 'ポイントをドラッグして移動できます。' : '編集を押すとドラッグできます。'}
-          </div>
         </div>
+      )}
+      {selectedPoint && selectedPointPosition && (
+        <button
+          type="button"
+          className={`pointer-events-auto absolute z-20 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold shadow ${
+            isDragEnabled
+              ? 'bg-blue-600 text-white hover:bg-blue-700'
+              : 'bg-white text-gray-800 hover:bg-gray-100'
+          }`}
+          style={{
+            left: selectedPointPosition.x,
+            top: selectedPointPosition.y + 18,
+            transform: 'translateX(-50%)',
+          }}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setIsDragEnabled((prev) => !prev);
+          }}
+        >
+          {isDragEnabled ? 'ドラッグ中' : '編集'}
+        </button>
       )}
       <canvas
         ref={canvasRef}
