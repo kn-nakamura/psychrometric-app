@@ -1,10 +1,11 @@
-import { useRef, useEffect, useState, useImperativeHandle, forwardRef, useMemo } from 'react';
-import type { PointerEvent } from 'react';
+import { useRef, useEffect, useImperativeHandle, forwardRef, useMemo } from 'react';
 import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
 import { ChartCoordinates, ChartRange, createDynamicChartConfig } from '@/lib/chart/coordinates';
 import { RHCurveGenerator } from '@/lib/chart/rhCurves';
 import { WetBulbCurveGenerator, EnthalpyCurveGenerator } from '@/lib/chart/curves';
+import { applyRelayoutPatch } from '@/lib/applyRelayoutPatch';
+import { centerFromCircleShape, pointShape } from '@/lib/plotlyShapes';
 
 interface PsychrometricChartProps {
   width?: number;
@@ -128,8 +129,6 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   useImperativeHandle(ref, () => ({
     getCanvas: () => canvasRef.current,
   }));
-  const [isDragging, setIsDragging] = useState(false);
-  const [draggedPointId, setDraggedPointId] = useState<string | null>(null);
   const resolutionScale = useMemo(() => {
     return getDefaultResolutionScale();
   }, []);
@@ -364,6 +363,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         mode: 'markers+text',
         x: [point.dryBulbTemp],
         y: [point.humidity],
+        customdata: [point.id],
         text: [label],
         textposition: 'middle right',
         textfont: { color: pointColor, size: 10 },
@@ -383,6 +383,29 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
 
     return { data, annotations };
   }, [chartConfig, statePoints, processes, activeSeason, filteredStatePoints, selectedPointId]);
+
+  const draggablePoints = useMemo(
+    () =>
+      filteredStatePoints.filter(
+        (point) => typeof point.dryBulbTemp === 'number' && typeof point.humidity === 'number'
+      ),
+    [filteredStatePoints]
+  );
+
+  const plotShapes = useMemo(() => {
+    const { range } = chartConfig;
+    const radiusX = Math.max(0.1, (range.tempMax - range.tempMin) * 0.01);
+    const radiusY = Math.max(0.0003, (range.humidityMax - range.humidityMin) * 0.02);
+    return draggablePoints.map((point) => {
+      const defaultPointColor =
+        point.season === 'summer' ? '#4dabf7' : point.season === 'winter' ? '#ff6b6b' : '#6b7280';
+      const pointColor = point.color || defaultPointColor;
+      return pointShape(point.dryBulbTemp!, point.humidity!, radiusX, radiusY, {
+        lineColor: pointColor,
+        fillColor: 'rgba(0,0,0,0.05)',
+      });
+    });
+  }, [chartConfig, draggablePoints]);
 
   const plotLayout = useMemo<Record<string, unknown>>(() => {
     const { range, dimensions } = chartConfig;
@@ -437,6 +460,15 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     };
   }, [chartConfig, width, height]);
 
+  const plotLayoutWithShapes = useMemo(
+    () => ({
+      ...plotLayout,
+      annotations: plotData.annotations,
+      shapes: plotShapes,
+    }),
+    [plotLayout, plotData.annotations, plotShapes]
+  );
+
   const loadPlotly = useMemo(
     () => () =>
       new Promise<void>((resolve, reject) => {
@@ -468,15 +500,15 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         await loadPlotly();
         if (cancelled) return;
         if (!window.Plotly || !plotContainerRef.current) return;
-        const layout = {
-          ...plotLayout,
-          annotations: plotData.annotations,
-        };
-        await window.Plotly.react(plotContainerRef.current, plotData.data, layout, {
+        await window.Plotly.react(plotContainerRef.current, plotData.data, plotLayoutWithShapes, {
           displayModeBar: false,
           scrollZoom: false,
           doubleClick: false,
           responsive: true,
+          editable: true,
+          edits: {
+            shapePosition: true,
+          },
         });
       } catch (error) {
         console.error('Plotly load/render failed:', error);
@@ -490,7 +522,65 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         window.Plotly.purge(plotContainerRef.current);
       }
     };
-  }, [loadPlotly, plotData, plotLayout]);
+  }, [loadPlotly, plotData, plotLayoutWithShapes]);
+
+  useEffect(() => {
+    const plotElement = plotContainerRef.current as
+      | (HTMLDivElement & {
+          on?: (event: string, handler: (event: unknown) => void) => void;
+          removeListener?: (event: string, handler: (event: unknown) => void) => void;
+        })
+      | null;
+    if (!plotElement?.on) return;
+
+    const handleRelayout = (event: Record<string, unknown>) => {
+      if (!onPointMove || !event) return;
+      const nextLayout = applyRelayoutPatch(plotLayoutWithShapes, event);
+      const shapes = nextLayout.shapes as Array<Record<string, number>> | undefined;
+      if (!shapes?.length) return;
+
+      const indices = new Set<number>();
+      Object.keys(event).forEach((key) => {
+        const match = /^shapes\[(\d+)\]\.(x0|x1|y0|y1)$/.exec(key);
+        if (match) {
+          indices.add(Number(match[1]));
+        }
+      });
+      if (indices.size === 0 && Array.isArray(event.shapes)) {
+        shapes.forEach((_, index) => indices.add(index));
+      }
+
+      if (indices.size === 0) return;
+
+      indices.forEach((index) => {
+        const point = draggablePoints[index];
+        const shape = shapes[index];
+        if (!point || !shape) return;
+        const { x, y } = centerFromCircleShape(shape);
+        const clampedX = Math.min(Math.max(x, chartConfig.range.tempMin), chartConfig.range.tempMax);
+        const clampedY = Math.min(
+          Math.max(y, chartConfig.range.humidityMin),
+          chartConfig.range.humidityMax
+        );
+        onPointMove(point.id, clampedX, clampedY);
+      });
+    };
+
+    const handleClick = (event: { points?: Array<{ customdata?: string }> }) => {
+      const pointId = event?.points?.[0]?.customdata;
+      if (pointId) {
+        onPointClick?.(pointId);
+      }
+    };
+
+    plotElement.on('plotly_relayout', handleRelayout);
+    plotElement.on('plotly_click', handleClick);
+
+    return () => {
+      plotElement.removeListener?.('plotly_relayout', handleRelayout);
+      plotElement.removeListener?.('plotly_click', handleClick);
+    };
+  }, [chartConfig.range, draggablePoints, onPointClick, onPointMove, plotLayoutWithShapes]);
 
   const selectedPoint = useMemo(() => {
     if (!selectedPointId) return null;
@@ -543,73 +633,12 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     resolutionScale,
   ]);
   
-  const getCanvasPoint = (clientX: number, clientY: number) => {
-    const container = plotContainerRef.current;
-    if (!container) return null;
-    const rect = container.getBoundingClientRect();
-    return {
-      x: clientX - rect.left,
-      y: clientY - rect.top,
-    };
-  };
-
-  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    const point = getCanvasPoint(event.clientX, event.clientY);
-    if (!point) return;
-
-    // クリックされた状態点を探す
-    const clickedPoint = findPointAt(point.x, point.y, statePoints, activeSeason, coordinates);
-    if (clickedPoint) {
-      event.preventDefault();
-      event.stopPropagation();
-      event.currentTarget.setPointerCapture(event.pointerId);
-      setIsDragging(true);
-      setDraggedPointId(clickedPoint.id);
-      onPointClick?.(clickedPoint.id);
-    }
-  };
-
-  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (!isDragging || !draggedPointId) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const point = getCanvasPoint(event.clientX, event.clientY);
-    if (!point) return;
-
-    // 座標変換
-    const { temp, humidity } = coordinates.fromCanvas(point.x, point.y);
-
-    // 範囲チェック
-    if (
-      temp >= chartConfig.range.tempMin &&
-      temp <= chartConfig.range.tempMax &&
-      humidity >= chartConfig.range.humidityMin &&
-      humidity <= chartConfig.range.humidityMax
-    ) {
-      onPointMove?.(draggedPointId, temp, humidity);
-    }
-  };
-
-  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
-    if (isDragging) {
-      event.preventDefault();
-      event.stopPropagation();
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    setIsDragging(false);
-    setDraggedPointId(null);
-  };
-  
   return (
     <div className="relative h-full w-full">
       <div
         ref={plotContainerRef}
         className="h-full w-full"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
-        style={{ touchAction: isDragging ? 'none' : 'auto' }}
+        style={{ touchAction: 'auto' }}
       />
       {selectedPoint && selectedPointPosition && (
         <div
@@ -641,7 +670,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         width={width}
         height={height}
         style={{
-          cursor: isDragging ? 'grabbing' : 'default',
+          cursor: 'default',
           width: '100%',
           height: '100%',
           display: 'block',
@@ -1039,31 +1068,4 @@ function drawArrow(
     endY - headLength * Math.sin(angle + Math.PI / 6)
   );
   ctx.stroke();
-}
-
-function findPointAt(
-  x: number,
-  y: number,
-  points: StatePoint[],
-  activeSeason: string,
-  coordinates: ChartCoordinates
-): StatePoint | null {
-  const threshold = 10; // px
-  
-  for (const point of points) {
-    if (activeSeason !== 'both' && point.season !== 'both' && point.season !== activeSeason) {
-      continue;
-    }
-    
-    if (!point.dryBulbTemp || !point.humidity) continue;
-    
-    const { x: px, y: py } = coordinates.toCanvas(point.dryBulbTemp, point.humidity);
-    const distance = Math.sqrt(Math.pow(x - px, 2) + Math.pow(y - py, 2));
-    
-    if (distance <= threshold) {
-      return point;
-    }
-  }
-  
-  return null;
 }
