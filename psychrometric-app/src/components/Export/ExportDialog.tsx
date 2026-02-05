@@ -755,12 +755,12 @@ export const ExportDialog = ({
 
     // プロジェクト名
     ctx1.fillStyle = '#111827';
-    ctx1.font = `bold ${mmToPx(4.5)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
+    ctx1.font = `bold ${mmToPx(5.0)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
     ctx1.textAlign = 'left';
     ctx1.fillText(designConditions.project.name || '空気線図', marginPx, headerY + mmToPx(4));
 
     // プロジェクト情報（サブタイトル）
-    ctx1.font = `${mmToPx(2.2)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
+    ctx1.font = `${mmToPx(2.5)}px "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
     ctx1.fillStyle = '#6b7280';
     const projectInfo = [
       designConditions.project.location,
@@ -772,23 +772,23 @@ export const ExportDialog = ({
     // 設計条件（右側）
     const conditionsX = marginPx + contentWidthPx * 0.45;
     const conditionsWidth = contentWidthPx * 0.55;
-    ctx1.font = `bold ${mmToPx(2.2)}px "Noto Sans JP", sans-serif`;
+    ctx1.font = `bold ${mmToPx(2.5)}px "Noto Sans JP", sans-serif`;
     ctx1.fillStyle = '#374151';
     ctx1.textAlign = 'left';
     ctx1.fillText('設計条件', conditionsX, headerY + mmToPx(2));
 
-    ctx1.font = `${mmToPx(1.8)}px sans-serif`;
+    ctx1.font = `${mmToPx(2.0)}px sans-serif`;
     ctx1.fillStyle = '#4b5563';
 
     const col1X = conditionsX;
     const col2X = conditionsX + conditionsWidth / 3;
     const col3X = conditionsX + (conditionsWidth / 3) * 2;
-    const condRowHeight = mmToPx(2.2);
+    const condRowHeight = mmToPx(2.5);
 
     // 外気条件
-    ctx1.font = `bold ${mmToPx(1.7)}px sans-serif`;
+    ctx1.font = `bold ${mmToPx(1.9)}px sans-serif`;
     ctx1.fillText('外気条件', col1X, headerY + mmToPx(4.5));
-    ctx1.font = `${mmToPx(1.6)}px sans-serif`;
+    ctx1.font = `${mmToPx(1.8)}px sans-serif`;
     ctx1.fillText(
       `夏: ${formatNumber(designConditions.outdoor.summer.dryBulbTemp)}°C / ${formatNumber(designConditions.outdoor.summer.relativeHumidity, 0)}%`,
       col1X,
@@ -801,9 +801,9 @@ export const ExportDialog = ({
     );
 
     // 室内条件
-    ctx1.font = `bold ${mmToPx(1.7)}px sans-serif`;
+    ctx1.font = `bold ${mmToPx(1.9)}px sans-serif`;
     ctx1.fillText('室内条件', col2X, headerY + mmToPx(4.5));
-    ctx1.font = `${mmToPx(1.6)}px sans-serif`;
+    ctx1.font = `${mmToPx(1.8)}px sans-serif`;
     ctx1.fillText(
       `夏: ${formatNumber(designConditions.indoor.summer.dryBulbTemp)}°C / ${formatNumber(designConditions.indoor.summer.relativeHumidity, 0)}%`,
       col2X,
@@ -816,9 +816,9 @@ export const ExportDialog = ({
     );
 
     // 風量
-    ctx1.font = `bold ${mmToPx(1.7)}px sans-serif`;
+    ctx1.font = `bold ${mmToPx(1.9)}px sans-serif`;
     ctx1.fillText('風量', col3X, headerY + mmToPx(4.5));
-    ctx1.font = `${mmToPx(1.6)}px sans-serif`;
+    ctx1.font = `${mmToPx(1.8)}px sans-serif`;
     ctx1.fillText(
       `供給: ${formatNumber(designConditions.airflow.supplyAir, 0)} m³/h`,
       col3X,
@@ -878,13 +878,13 @@ export const ExportDialog = ({
     // ========================================
     let statePointY = bottomY;
     ctx1.fillStyle = '#111827';
-    ctx1.font = `bold ${mmToPx(2.8)}px "Noto Sans JP", sans-serif`;
+    ctx1.font = `bold ${mmToPx(3.1)}px "Noto Sans JP", sans-serif`;
     ctx1.textAlign = 'left';
     ctx1.fillText('状態点', marginPx, statePointY + mmToPx(2.5));
     statePointY += mmToPx(5);
 
     // 状態点テーブルヘッダー
-    const statePointCardHeight = mmToPx(9);
+    const statePointCardHeight = mmToPx(10);
     const statePointMaxY = pageHeightPx - marginPx;
     const statePointOverflow: StatePoint[] = [];
 
@@ -906,18 +906,18 @@ export const ExportDialog = ({
       ctx1.fill();
 
       ctx1.fillStyle = '#ffffff';
-      ctx1.font = `bold ${mmToPx(1.9)}px sans-serif`;
+      ctx1.font = `bold ${mmToPx(2.1)}px sans-serif`;
       ctx1.textAlign = 'center';
       ctx1.fillText(label, marginPx + mmToPx(3), statePointY + mmToPx(2.3));
       ctx1.textAlign = 'left';
 
       // 名前と物性値
       ctx1.fillStyle = '#111827';
-      ctx1.font = `bold ${mmToPx(2.1)}px "Noto Sans JP", sans-serif`;
+      ctx1.font = `bold ${mmToPx(2.4)}px "Noto Sans JP", sans-serif`;
       ctx1.fillText(point.name, marginPx + mmToPx(7), statePointY + mmToPx(2.2));
 
       ctx1.fillStyle = '#6b7280';
-      ctx1.font = `${mmToPx(1.6)}px sans-serif`;
+      ctx1.font = `${mmToPx(1.8)}px sans-serif`;
       const airflowText =
         typeof point.airflow === 'number' ? `${point.airflow.toFixed(0)} m³/h` : '-';
       const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}% | 絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg'`;
@@ -936,12 +936,12 @@ export const ExportDialog = ({
     ctx1.fillStyle = '#111827';
     ctx1.textAlign = 'left';
     if (filteredProcesses.length > 0) {
-      ctx1.font = `bold ${mmToPx(2.8)}px "Noto Sans JP", sans-serif`;
+      ctx1.font = `bold ${mmToPx(3.1)}px "Noto Sans JP", sans-serif`;
       ctx1.fillText('プロセス', processX, processY + mmToPx(2.5));
       processY += mmToPx(5);
     }
 
-    const processLineHeight = mmToPx(2.4);
+    const processLineHeight = mmToPx(2.7);
     const processHeaderHeight = mmToPx(5);
     const processMaxY = pageHeightPx - marginPx;
     const processOverflow: Process[] = [];
@@ -999,16 +999,16 @@ export const ExportDialog = ({
 
       // プロセス名
       ctx1.fillStyle = '#111827';
-      ctx1.font = `bold ${mmToPx(2.1)}px "Noto Sans JP", sans-serif`;
+      ctx1.font = `bold ${mmToPx(2.4)}px "Noto Sans JP", sans-serif`;
       ctx1.fillText(process.name, processX + mmToPx(2.5), processY + mmToPx(2.4));
 
       // 遷移ラベル
       ctx1.fillStyle = '#6b7280';
-      ctx1.font = `${mmToPx(1.7)}px sans-serif`;
+      ctx1.font = `${mmToPx(2.0)}px sans-serif`;
       ctx1.fillText(`${fromLabel} → ${toLabel}`, processX + mmToPx(2.5), processY + mmToPx(4.4));
 
       // 詳細情報
-      ctx1.font = `${mmToPx(1.6)}px sans-serif`;
+      ctx1.font = `${mmToPx(1.8)}px sans-serif`;
       detailLines.forEach((line, lineIndex) => {
         ctx1.fillText(
           line,
@@ -1038,7 +1038,7 @@ export const ExportDialog = ({
 
       // ヘッダー
       ctx2.fillStyle = '#111827';
-      ctx2.font = `bold ${mmToPx(3.2)}px "Noto Sans JP", sans-serif`;
+      ctx2.font = `bold ${mmToPx(3.5)}px "Noto Sans JP", sans-serif`;
       ctx2.textAlign = 'left';
       ctx2.fillText(`${designConditions.project.name || '空気線図'} - 続き`, marginPx, marginPx + mmToPx(3));
 
@@ -1047,7 +1047,7 @@ export const ExportDialog = ({
       // 残りの状態点
       if (statePointOverflow.length > 0) {
         ctx2.fillStyle = '#111827';
-        ctx2.font = `bold ${mmToPx(2.8)}px "Noto Sans JP", sans-serif`;
+        ctx2.font = `bold ${mmToPx(3.1)}px "Noto Sans JP", sans-serif`;
         ctx2.fillText('状態点 (続き)', marginPx, currentY + mmToPx(2.5));
         currentY += mmToPx(5);
 
@@ -1064,17 +1064,17 @@ export const ExportDialog = ({
           ctx2.fill();
 
           ctx2.fillStyle = '#ffffff';
-          ctx2.font = `bold ${mmToPx(1.9)}px sans-serif`;
+          ctx2.font = `bold ${mmToPx(2.1)}px sans-serif`;
           ctx2.textAlign = 'center';
           ctx2.fillText(label, marginPx + mmToPx(3), currentY + mmToPx(2.3));
           ctx2.textAlign = 'left';
 
           ctx2.fillStyle = '#111827';
-          ctx2.font = `bold ${mmToPx(2.1)}px "Noto Sans JP", sans-serif`;
+          ctx2.font = `bold ${mmToPx(2.4)}px "Noto Sans JP", sans-serif`;
           ctx2.fillText(point.name, marginPx + mmToPx(7), currentY + mmToPx(2.2));
 
           ctx2.fillStyle = '#6b7280';
-          ctx2.font = `${mmToPx(1.6)}px sans-serif`;
+          ctx2.font = `${mmToPx(1.8)}px sans-serif`;
           const airflowText =
             typeof point.airflow === 'number' ? `${point.airflow.toFixed(0)} m³/h` : '-';
           const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}% | 絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg'`;
@@ -1091,7 +1091,7 @@ export const ExportDialog = ({
       // 残りのプロセス
       if (processOverflow.length > 0) {
         ctx2.fillStyle = '#111827';
-        ctx2.font = `bold ${mmToPx(2.8)}px "Noto Sans JP", sans-serif`;
+        ctx2.font = `bold ${mmToPx(3.1)}px "Noto Sans JP", sans-serif`;
         ctx2.fillText('プロセス (続き)', marginPx, currentY + mmToPx(2.5));
         currentY += mmToPx(5);
 
@@ -1141,14 +1141,14 @@ export const ExportDialog = ({
           ctx2.fillRect(marginPx, currentY, mmToPx(1), processCardHeight - mmToPx(1));
 
           ctx2.fillStyle = '#111827';
-          ctx2.font = `bold ${mmToPx(2.1)}px "Noto Sans JP", sans-serif`;
+          ctx2.font = `bold ${mmToPx(2.4)}px "Noto Sans JP", sans-serif`;
           ctx2.fillText(process.name, marginPx + mmToPx(2.5), currentY + mmToPx(2.4));
 
           ctx2.fillStyle = '#6b7280';
-          ctx2.font = `${mmToPx(1.7)}px sans-serif`;
+          ctx2.font = `${mmToPx(2.0)}px sans-serif`;
           ctx2.fillText(`${fromLabel} → ${toLabel}`, marginPx + mmToPx(2.5), currentY + mmToPx(4.4));
 
-          ctx2.font = `${mmToPx(1.6)}px sans-serif`;
+          ctx2.font = `${mmToPx(1.8)}px sans-serif`;
           detailLines.forEach((line, lineIndex) => {
             ctx2.fillText(
               line,
