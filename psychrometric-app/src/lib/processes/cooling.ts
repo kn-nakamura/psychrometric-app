@@ -116,35 +116,103 @@ export class CoolingProcess {
     );
     const massFlow = airflow * density;
     const totalEnthalpyDiff = (coolingCapacity * 3600) / massFlow;
-    const targetEnthalpy = fromPoint.enthalpy! - totalEnthalpyDiff;
-
     const maxTemp = fromPoint.dryBulbTemp ?? 50;
-    let low = Math.max(-30, maxTemp - 80);
-    let high = maxTemp;
 
-    const enthalpyAt = (temp: number) =>
-      StatePointConverter.fromDryBulbAndRH(temp, outletRH, effectivePressure, resolved).enthalpy!;
+    const findTempForEnthalpyAtRH = (targetEnthalpy: number, tempHigh: number) => {
+      let low = Math.max(-30, tempHigh - 80);
+      let high = tempHigh;
 
-    const lowEnthalpy = enthalpyAt(low);
-    const highEnthalpy = enthalpyAt(high);
+      const enthalpyAt = (temp: number) =>
+        StatePointConverter.fromDryBulbAndRH(temp, outletRH, effectivePressure, resolved).enthalpy!;
 
-    if (targetEnthalpy >= highEnthalpy) {
-      low = high;
-    } else if (targetEnthalpy <= lowEnthalpy) {
-      high = low;
-    } else {
-      for (let i = 0; i < 40; i += 1) {
-        const mid = (low + high) / 2;
-        const midEnthalpy = enthalpyAt(mid);
-        if (midEnthalpy > targetEnthalpy) {
-          high = mid;
-        } else {
-          low = mid;
+      const lowEnthalpy = enthalpyAt(low);
+      const highEnthalpy = enthalpyAt(high);
+
+      if (targetEnthalpy >= highEnthalpy) {
+        low = high;
+      } else if (targetEnthalpy <= lowEnthalpy) {
+        high = low;
+      } else {
+        for (let i = 0; i < 40; i += 1) {
+          const mid = (low + high) / 2;
+          const midEnthalpy = enthalpyAt(mid);
+          if (midEnthalpy > targetEnthalpy) {
+            high = mid;
+          } else {
+            low = mid;
+          }
         }
       }
+
+      return (low + high) / 2;
+    };
+
+    const findTempForRHAtHumidity = (targetRH: number, tempHigh: number) => {
+      const humidity = fromPoint.humidity!;
+      let low = Math.max(-30, tempHigh - 80);
+      let high = tempHigh;
+
+      const rhAt = (temp: number) =>
+        StatePointConverter.fromDryBulbAndHumidity(temp, humidity, effectivePressure, resolved)
+          .relativeHumidity!;
+
+      const highRH = rhAt(high);
+      if (targetRH <= highRH) {
+        return high;
+      }
+
+      const lowRH = rhAt(low);
+      if (targetRH >= lowRH) {
+        return low;
+      }
+
+      for (let i = 0; i < 40; i += 1) {
+        const mid = (low + high) / 2;
+        const midRH = rhAt(mid);
+        if (midRH > targetRH) {
+          low = mid;
+        } else {
+          high = mid;
+        }
+      }
+
+      return (low + high) / 2;
+    };
+
+    const tempAtOutletRH = findTempForRHAtHumidity(outletRH, maxTemp);
+    const pointAtOutletRH = StatePointConverter.fromDryBulbAndHumidity(
+      tempAtOutletRH,
+      fromPoint.humidity!,
+      effectivePressure,
+      resolved
+    );
+    const requiredEnthalpyDiff = Math.max(0, fromPoint.enthalpy! - pointAtOutletRH.enthalpy!);
+
+    if (totalEnthalpyDiff <= requiredEnthalpyDiff) {
+      const temperatureDiff = (coolingCapacity * 3600) / (resolved.cpAir * massFlow);
+      const toTemp = fromPoint.dryBulbTemp! - temperatureDiff;
+      const toPoint = StatePointConverter.fromDryBulbAndHumidity(
+        toTemp,
+        fromPoint.humidity!,
+        effectivePressure,
+        resolved
+      );
+
+      const results: ProcessResults = {
+        sensibleHeat: coolingCapacity,
+        latentHeat: 0,
+        totalHeat: coolingCapacity,
+        enthalpyDiff: -totalEnthalpyDiff,
+        humidityDiff: 0,
+        temperatureDiff: -temperatureDiff,
+      };
+
+      return { toPoint, results };
     }
 
-    const toTemp = (low + high) / 2;
+    const remainingEnthalpyDiff = totalEnthalpyDiff - requiredEnthalpyDiff;
+    const targetEnthalpy = pointAtOutletRH.enthalpy! - remainingEnthalpyDiff;
+    const toTemp = findTempForEnthalpyAtRH(targetEnthalpy, tempAtOutletRH);
     const toPoint = StatePointConverter.fromDryBulbAndRH(
       toTemp,
       outletRH,
