@@ -31,6 +31,16 @@ interface RenderPsychrometricChartOptions {
   resolutionScale?: number;
 }
 
+interface RenderPsychrometricChartContextOptions {
+  ctx: CanvasRenderingContext2D;
+  width: number;
+  height: number;
+  statePoints: StatePoint[];
+  processes: Process[];
+  activeSeason: 'summer' | 'winter' | 'both';
+  selectedPointId?: string | null;
+}
+
 const getDefaultResolutionScale = () => {
   if (typeof window === 'undefined') {
     return 1.25;
@@ -38,31 +48,17 @@ const getDefaultResolutionScale = () => {
   return 1.25 * (window.devicePixelRatio || 1);
 };
 
-export const renderPsychrometricChart = ({
-  canvas,
+const drawPsychrometricChart = ({
+  ctx,
   width,
   height,
   statePoints,
   processes,
   activeSeason,
   selectedPointId,
-  resolutionScale = getDefaultResolutionScale(),
-}: RenderPsychrometricChartOptions) => {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
+}: RenderPsychrometricChartContextOptions) => {
   const chartConfig = createDynamicChartConfig(width, height, statePoints);
   const coordinates = new ChartCoordinates(chartConfig.dimensions, chartConfig.range);
-
-  const scaledWidth = Math.max(1, Math.round(width * resolutionScale));
-  const scaledHeight = Math.max(1, Math.round(height * resolutionScale));
-  if (canvas.width !== scaledWidth) {
-    canvas.width = scaledWidth;
-  }
-  if (canvas.height !== scaledHeight) {
-    canvas.height = scaledHeight;
-  }
-  ctx.setTransform(resolutionScale, 0, 0, resolutionScale, 0, 0);
 
   // クリア
   ctx.clearRect(0, 0, width, height);
@@ -88,6 +84,60 @@ export const renderPsychrometricChart = ({
 
   // 状態点を描画
   drawStatePoints(ctx, coordinates, statePoints, activeSeason, selectedPointId);
+};
+
+export const renderPsychrometricChart = ({
+  canvas,
+  width,
+  height,
+  statePoints,
+  processes,
+  activeSeason,
+  selectedPointId,
+  resolutionScale = getDefaultResolutionScale(),
+}: RenderPsychrometricChartOptions) => {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const scaledWidth = Math.max(1, Math.round(width * resolutionScale));
+  const scaledHeight = Math.max(1, Math.round(height * resolutionScale));
+  if (canvas.width !== scaledWidth) {
+    canvas.width = scaledWidth;
+  }
+  if (canvas.height !== scaledHeight) {
+    canvas.height = scaledHeight;
+  }
+  ctx.setTransform(resolutionScale, 0, 0, resolutionScale, 0, 0);
+
+  drawPsychrometricChart({
+    ctx,
+    width,
+    height,
+    statePoints,
+    processes,
+    activeSeason,
+    selectedPointId,
+  });
+};
+
+export const renderPsychrometricChartToContext = ({
+  ctx,
+  width,
+  height,
+  statePoints,
+  processes,
+  activeSeason,
+  selectedPointId,
+}: RenderPsychrometricChartContextOptions) => {
+  drawPsychrometricChart({
+    ctx,
+    width,
+    height,
+    statePoints,
+    processes,
+    activeSeason,
+    selectedPointId,
+  });
 };
 
 export const PsychrometricChart = forwardRef<PsychrometricChartRef, PsychrometricChartProps>(({

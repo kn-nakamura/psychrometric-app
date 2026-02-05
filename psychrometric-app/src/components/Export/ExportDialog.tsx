@@ -4,7 +4,7 @@ import { jsPDF } from 'jspdf';
 import { DesignConditions } from '@/types/designConditions';
 import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
-import { renderPsychrometricChart } from '@/components/Chart/PsychrometricChart';
+import { renderPsychrometricChart, renderPsychrometricChartToContext } from '@/components/Chart/PsychrometricChart';
 import { CoilCapacityCalculator } from '@/lib/equipment/coilCapacity';
 
 interface ExportDialogProps {
@@ -234,20 +234,8 @@ export const ExportDialog = ({
     const chartXOffset = marginMm + (chartWidthMm - drawChartWidthMm) / 2;
     const chartRenderWidth = Math.round((drawChartWidthMm / 25.4) * A4_DPI);
     const chartRenderHeight = Math.round((drawChartHeightMm / 25.4) * A4_DPI);
-    const chartRenderCanvas = document.createElement('canvas');
-    chartRenderCanvas.width = chartRenderWidth;
-    chartRenderCanvas.height = chartRenderHeight;
-    renderPsychrometricChart({
-      canvas: chartRenderCanvas,
-      width: chartRenderWidth,
-      height: chartRenderHeight,
-      statePoints: filteredStatePoints,
-      processes: filteredProcesses,
-      activeSeason,
-      resolutionScale: 1,
-    });
-    // JPEG形式で軽量化（品質0.85でファイルサイズを削減）
-    const chartImage = chartRenderCanvas.toDataURL('image/jpeg', 0.85);
+    const chartScaleX = drawChartWidthMm / chartRenderWidth;
+    const chartScaleY = drawChartHeightMm / chartRenderHeight;
 
     const drawStatePointCard = (point: StatePoint, index: number, x: number, y: number) => {
       const label = getPointLabel(point, index);
@@ -414,14 +402,19 @@ export const ExportDialog = ({
     const chartY = chartTopMm;
     pdf.setDrawColor(229, 231, 235);
     pdf.rect(marginMm, chartY, chartWidthMm, chartHeightMm, 'S');
-    pdf.addImage(
-      chartImage,
-      'JPEG',
-      chartXOffset,
-      chartY + (chartHeightMm - drawChartHeightMm) / 2,
-      drawChartWidthMm,
-      drawChartHeightMm
-    );
+    const chartContext = (pdf as unknown as { context2d: CanvasRenderingContext2D }).context2d;
+    chartContext.save();
+    chartContext.translate(chartXOffset, chartY + (chartHeightMm - drawChartHeightMm) / 2);
+    chartContext.scale(chartScaleX, chartScaleY);
+    renderPsychrometricChartToContext({
+      ctx: chartContext,
+      width: chartRenderWidth,
+      height: chartRenderHeight,
+      statePoints: filteredStatePoints,
+      processes: filteredProcesses,
+      activeSeason,
+    });
+    chartContext.restore();
 
     const bottomY = bottomSectionStartMm;
     const halfWidth = contentWidthMm / 2 - 2;
