@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useImperativeHandle, forwardRef, useMemo } from 'react';
+import { useRef, useEffect, useState, useImperativeHandle, forwardRef, useMemo, useCallback } from 'react';
 import type { PointerEvent } from 'react';
 import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
@@ -228,6 +228,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     const data: Record<string, unknown>[] = [];
     const annotations: Record<string, unknown>[] = [];
     const pointTraceIndices = new Map<string, number>();
+    const pointTraceIds = new Map<number, string>();
     const { range } = chartConfig;
     const formatValue = (value: number | undefined, fractionDigits = 1) => {
       if (typeof value !== 'number') return '-';
@@ -397,6 +398,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       }
 
       pointTraceIndices.set(point.id, data.length);
+      pointTraceIds.set(data.length, point.id);
       data.push({
         type: 'scatter',
         mode: 'markers+text',
@@ -419,7 +421,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       });
     });
 
-    return { data, annotations, pointTraceIndices };
+    return { data, annotations, pointTraceIndices, pointTraceIds };
   }, [chartConfig, statePoints, processes, activeSeason, filteredStatePoints, selectedPointId]);
 
   const plotLayout = useMemo<Record<string, unknown>>(() => {
@@ -530,7 +532,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     };
   }, [loadPlotly, plotData, plotLayout]);
 
-  const showPlotlyHover = (pointId: string) => {
+  const showPlotlyHover = useCallback((pointId: string) => {
     if (!window.Plotly || !plotContainerRef.current) return;
     const traceIndex = plotData.pointTraceIndices.get(pointId);
     if (typeof traceIndex !== 'number') return;
@@ -548,7 +550,30 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       [{ curveNumber: traceIndex, pointNumber: 0 }],
       'closest'
     );
-  };
+  }, [plotData.pointTraceIndices]);
+
+  useEffect(() => {
+    const container = plotContainerRef.current as (HTMLElement & {
+      on?: (event: string, handler: (event: { points?: Array<{ curveNumber: number }> }) => void) => void;
+      removeListener?: (
+        event: string,
+        handler: (event: { points?: Array<{ curveNumber: number }> }) => void
+      ) => void;
+    }) | null;
+    if (!container?.on) return;
+    const handlePlotlyClick = (event: { points?: Array<{ curveNumber: number }> }) => {
+      const curveNumber = event.points?.[0]?.curveNumber;
+      if (typeof curveNumber !== 'number') return;
+      const pointId = plotData.pointTraceIds.get(curveNumber);
+      if (!pointId) return;
+      onPointClick?.(pointId);
+      showPlotlyHover(pointId);
+    };
+    container.on('plotly_click', handlePlotlyClick);
+    return () => {
+      container.removeListener?.('plotly_click', handlePlotlyClick);
+    };
+  }, [onPointClick, plotData.pointTraceIds, showPlotlyHover]);
   
   // チャートの描画
   useEffect(() => {
@@ -595,8 +620,6 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     // クリックされた状態点を探す
     const clickedPoint = findPointAt(point.x, point.y, statePoints, activeSeason, coordinates);
     if (clickedPoint) {
-      event.preventDefault();
-      event.stopPropagation();
       event.currentTarget.setPointerCapture(event.pointerId);
       didDragRef.current = false;
       setIsDragging(true);
