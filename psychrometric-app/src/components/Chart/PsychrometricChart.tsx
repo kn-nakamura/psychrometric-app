@@ -706,7 +706,7 @@ function drawGrid(
   const tickFontSize = 8;
   const axisTitleFontSize = 8;
   const rightAxisLabelOffset = 10;
-  const rightAxisTitleOffset = 26;
+  const rightAxisTitleOffset = 40;
 
   // 縦線（温度）
   for (let temp = Math.ceil(range.tempMin / 5) * 5; temp <= range.tempMax; temp += 5) {
@@ -758,7 +758,7 @@ function drawGrid(
   if (ctx.save && ctx.restore && ctx.translate && ctx.rotate) {
     ctx.save();
     ctx.translate(yAxisX, yAxisY);
-    ctx.rotate(-Math.PI / 2);
+    ctx.rotate(Math.PI / 2);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText("絶対湿度 (g/kg')", 0, 0);
