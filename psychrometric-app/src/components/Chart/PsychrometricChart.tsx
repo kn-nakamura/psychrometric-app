@@ -226,6 +226,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   const plotData = useMemo(() => {
     const data: Record<string, unknown>[] = [];
     const annotations: Record<string, unknown>[] = [];
+    const pointTraceIndices = new Map<string, number>();
     const { range } = chartConfig;
     const formatValue = (value: number | undefined, fractionDigits = 1) => {
       if (typeof value !== 'number') return '-';
@@ -394,6 +395,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         hoverLines.push(`風量: ${formatValue(point.airflow, 0)} m³/h`);
       }
 
+      pointTraceIndices.set(point.id, data.length);
       data.push({
         type: 'scatter',
         mode: 'markers+text',
@@ -416,7 +418,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       });
     });
 
-    return { data, annotations };
+    return { data, annotations, pointTraceIndices };
   }, [chartConfig, statePoints, processes, activeSeason, filteredStatePoints, selectedPointId]);
 
   const plotLayout = useMemo<Record<string, unknown>>(() => {
@@ -527,28 +529,25 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     };
   }, [loadPlotly, plotData, plotLayout]);
 
-  const selectedPoint = useMemo(() => {
-    if (!selectedPointId) return null;
-    const point = statePoints.find((item) => item.id === selectedPointId);
-    if (!point) return null;
-    if (activeSeason !== 'both' && point.season !== 'both' && point.season !== activeSeason) {
-      return null;
-    }
-    return point;
-  }, [activeSeason, selectedPointId, statePoints]);
-
-  const selectedPointPosition = useMemo(() => {
-    if (!selectedPoint || typeof selectedPoint.dryBulbTemp !== 'number') return null;
-    if (typeof selectedPoint.humidity !== 'number') return null;
-    return coordinates.toCanvas(selectedPoint.dryBulbTemp, selectedPoint.humidity);
-  }, [coordinates, selectedPoint]);
-
-  const selectedPointLabel = useMemo(() => {
-    if (!selectedPointId) return '';
-    const index = filteredStatePoints.findIndex((point) => point.id === selectedPointId);
-    if (index < 0) return '';
-    return getPointLabel(filteredStatePoints[index], index);
-  }, [filteredStatePoints, getPointLabel, selectedPointId]);
+  const showPlotlyHover = (pointId: string) => {
+    if (!window.Plotly || !plotContainerRef.current) return;
+    const traceIndex = plotData.pointTraceIndices.get(pointId);
+    if (typeof traceIndex !== 'number') return;
+    const plotlyWithFx = window.Plotly as typeof window.Plotly & {
+      Fx?: {
+        hover: (
+          root: HTMLElement,
+          points: Array<{ curveNumber: number; pointNumber: number }>,
+          mode?: string
+        ) => void;
+      };
+    };
+    plotlyWithFx.Fx?.hover(
+      plotContainerRef.current,
+      [{ curveNumber: traceIndex, pointNumber: 0 }],
+      'closest'
+    );
+  };
   
   // チャートの描画
   useEffect(() => {
@@ -601,6 +600,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       setIsDragging(true);
       setDraggedPointId(clickedPoint.id);
       onPointClick?.(clickedPoint.id);
+      showPlotlyHover(clickedPoint.id);
     }
   };
 
@@ -646,31 +646,6 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         onPointerLeave={handlePointerUp}
         style={{ touchAction: isDragging ? 'none' : 'auto' }}
       />
-      {selectedPoint && selectedPointPosition && (
-        <div
-          className="pointer-events-none absolute z-10 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-lg"
-          style={{
-            left: selectedPointPosition.x + 12,
-            top: selectedPointPosition.y - 12,
-            transform: 'translateY(-100%)',
-          }}
-        >
-          <div className="font-semibold text-gray-900">
-            {selectedPoint.name || selectedPointLabel}
-          </div>
-          <div>乾球温度: {selectedPoint.dryBulbTemp?.toFixed(1)}°C</div>
-          <div>相対湿度: {selectedPoint.relativeHumidity?.toFixed(0)}%</div>
-          <div>絶対湿度: {selectedPoint.humidity?.toFixed(4)} kg/kg'</div>
-          <div>エンタルピー: {selectedPoint.enthalpy?.toFixed(1)} kJ/kg'</div>
-          <div>露点温度: {selectedPoint.dewPoint?.toFixed(1)}°C</div>
-          <div>
-            風量:{' '}
-            {typeof selectedPoint.airflow === 'number'
-              ? `${selectedPoint.airflow.toFixed(0)} m³/h`
-              : '-'}
-          </div>
-        </div>
-      )}
       <canvas
         ref={canvasRef}
         width={width}
