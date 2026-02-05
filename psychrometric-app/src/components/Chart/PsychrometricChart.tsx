@@ -158,6 +158,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const plotContainerRef = useRef<HTMLDivElement>(null);
+  const didDragRef = useRef(false);
 
   // 親コンポーネントからcanvasにアクセスできるようにする
   useImperativeHandle(ref, () => ({
@@ -597,10 +598,9 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       event.preventDefault();
       event.stopPropagation();
       event.currentTarget.setPointerCapture(event.pointerId);
+      didDragRef.current = false;
       setIsDragging(true);
       setDraggedPointId(clickedPoint.id);
-      onPointClick?.(clickedPoint.id);
-      showPlotlyHover(clickedPoint.id);
     }
   };
 
@@ -611,6 +611,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     const point = getCanvasPoint(event.clientX, event.clientY);
     if (!point) return;
 
+    didDragRef.current = true;
     // 座標変換
     const { temp, humidity } = coordinates.fromCanvas(point.x, point.y);
 
@@ -630,6 +631,10 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       event.preventDefault();
       event.stopPropagation();
       event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (draggedPointId && !didDragRef.current) {
+      onPointClick?.(draggedPointId);
+      showPlotlyHover(draggedPointId);
     }
     setIsDragging(false);
     setDraggedPointId(null);
