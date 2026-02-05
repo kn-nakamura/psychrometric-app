@@ -11,6 +11,7 @@ interface PsychrometricChartProps {
   statePoints: StatePoint[];
   processes: Process[];
   activeSeason: 'summer' | 'winter' | 'both';
+  range?: ChartRange;
   selectedPointId?: string | null;
   draggablePointId?: string | null;
   onPointClick?: (pointId: string) => void;
@@ -31,6 +32,7 @@ interface RenderPsychrometricChartOptions {
   activeSeason: 'summer' | 'winter' | 'both';
   selectedPointId?: string | null;
   resolutionScale?: number;
+  range?: ChartRange;
 }
 
 interface RenderPsychrometricChartContextOptions {
@@ -41,6 +43,7 @@ interface RenderPsychrometricChartContextOptions {
   processes: Process[];
   activeSeason: 'summer' | 'winter' | 'both';
   selectedPointId?: string | null;
+  range?: ChartRange;
 }
 
 const getDefaultResolutionScale = () => {
@@ -58,9 +61,11 @@ const drawPsychrometricChart = ({
   processes,
   activeSeason,
   selectedPointId,
+  range,
 }: RenderPsychrometricChartContextOptions) => {
   const chartConfig = createDynamicChartConfig(width, height, statePoints);
-  const coordinates = new ChartCoordinates(chartConfig.dimensions, chartConfig.range);
+  const chartRange = range ?? chartConfig.range;
+  const coordinates = new ChartCoordinates(chartConfig.dimensions, chartRange);
 
   // クリア
   ctx.clearRect(0, 0, width, height);
@@ -70,16 +75,16 @@ const drawPsychrometricChart = ({
   ctx.fillRect(0, 0, width, height);
 
   // グリッド線を描画
-  drawGrid(ctx, coordinates, chartConfig.range);
+  drawGrid(ctx, coordinates, chartRange);
 
   // 相対湿度曲線を描画
-  drawRHCurves(ctx, coordinates, chartConfig.range);
+  drawRHCurves(ctx, coordinates, chartRange);
 
   // 湿球温度線を描画（薄く）
-  drawWetBulbCurves(ctx, coordinates, chartConfig.range);
+  drawWetBulbCurves(ctx, coordinates, chartRange);
 
   // エンタルピー線を描画（薄く）
-  drawEnthalpyCurves(ctx, coordinates, chartConfig.range);
+  drawEnthalpyCurves(ctx, coordinates, chartRange);
 
   // プロセス線を描画
   drawProcesses(ctx, coordinates, processes, statePoints, activeSeason);
@@ -97,6 +102,7 @@ export const renderPsychrometricChart = ({
   activeSeason,
   selectedPointId,
   resolutionScale = getDefaultResolutionScale(),
+  range,
 }: RenderPsychrometricChartOptions) => {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -119,6 +125,7 @@ export const renderPsychrometricChart = ({
     processes,
     activeSeason,
     selectedPointId,
+    range,
   });
 };
 
@@ -130,6 +137,7 @@ export const renderPsychrometricChartToContext = ({
   processes,
   activeSeason,
   selectedPointId,
+  range,
 }: RenderPsychrometricChartContextOptions) => {
   drawPsychrometricChart({
     ctx,
@@ -139,6 +147,7 @@ export const renderPsychrometricChartToContext = ({
     processes,
     activeSeason,
     selectedPointId,
+    range,
   });
 };
 
@@ -148,6 +157,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   statePoints,
   processes,
   activeSeason,
+  range,
   selectedPointId,
   draggablePointId,
   onPointClick,
@@ -174,8 +184,12 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
 
   // 座標変換の設定 - 状態点に基づいて動的に範囲を調整
   const chartConfig = useMemo(() => {
-    return createDynamicChartConfig(width, height, statePoints);
-  }, [width, height, statePoints]);
+    const config = createDynamicChartConfig(width, height, statePoints);
+    return {
+      ...config,
+      range: range ?? config.range,
+    };
+  }, [width, height, range, statePoints]);
   const coordinates = useMemo(() => {
     return new ChartCoordinates(chartConfig.dimensions, chartConfig.range);
   }, [chartConfig]);
@@ -194,6 +208,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       activeSeason,
       selectedPointId,
       resolutionScale,
+      range: chartConfig.range,
     });
 
   }, [
