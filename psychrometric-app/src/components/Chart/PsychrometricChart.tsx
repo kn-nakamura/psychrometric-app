@@ -13,7 +13,7 @@ interface PsychrometricChartProps {
   processes: Process[];
   activeSeason: 'summer' | 'winter' | 'both';
   selectedPointId?: string | null;
-  onPointClick?: (pointId: string) => void;
+  onPointClick?: (pointId: string | null) => void;
   onPointMove?: (pointId: string, temp: number, humidity: number) => void;
 }
 
@@ -601,7 +601,10 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       setIsDragging(true);
       setDraggedPointId(clickedPoint.id);
       onPointClick?.(clickedPoint.id);
+      return;
     }
+
+    onPointClick?.(null);
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
@@ -648,14 +651,14 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       />
       {selectedPoint && selectedPointPosition && (
         <div
-          className="pointer-events-none absolute z-10 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-lg"
+          className="pointer-events-none absolute z-10 rounded-md border border-blue-600 bg-blue-500/95 px-3 py-2 text-xs text-white shadow-lg"
           style={{
             left: selectedPointPosition.x + 12,
             top: selectedPointPosition.y - 12,
             transform: 'translateY(-100%)',
           }}
         >
-          <div className="font-semibold text-gray-900">
+          <div className="font-semibold text-white">
             {selectedPoint.name || selectedPointLabel}
           </div>
           <div>乾球温度: {selectedPoint.dryBulbTemp?.toFixed(1)}°C</div>
