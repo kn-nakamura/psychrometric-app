@@ -159,6 +159,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const plotContainerRef = useRef<HTMLDivElement>(null);
   const didDragRef = useRef(false);
+  const allowHoverRef = useRef(false);
 
   // 親コンポーネントからcanvasにアクセスできるようにする
   useImperativeHandle(ref, () => ({
@@ -473,8 +474,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       },
       dragmode: 'pan',
       clickmode: 'event+select',
-      hovermode: false,
-      hoverdistance: -1,
+      hovermode: 'closest',
       showlegend: false,
     };
   }, [chartConfig, width, height]);
@@ -556,22 +556,39 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         ) => void;
       };
     };
+    allowHoverRef.current = true;
     plotlyWithFx.Fx?.hover(
       plotContainerRef.current,
       [{ curveNumber: traceIndex, pointNumber: 0 }],
       'closest'
     );
+    window.setTimeout(() => {
+      allowHoverRef.current = false;
+    }, 0);
   }, [plotData.pointTraceIndices]);
 
   useEffect(() => {
     const container = plotContainerRef.current as (HTMLElement & {
-      on?: (event: string, handler: (event: { points?: Array<{ curveNumber: number }> }) => void) => void;
+      on?: (
+        event: string,
+        handler: (event: { points?: Array<{ curveNumber: number }> }) => void
+      ) => void;
       removeListener?: (
         event: string,
         handler: (event: { points?: Array<{ curveNumber: number }> }) => void
       ) => void;
     }) | null;
     if (!container?.on) return;
+    const plotlyWithFx = window.Plotly as typeof window.Plotly & {
+      Fx?: {
+        unhover: (root: HTMLElement) => void;
+      };
+    };
+    const handlePlotlyHover = () => {
+      if (!allowHoverRef.current && plotContainerRef.current) {
+        plotlyWithFx.Fx?.unhover(plotContainerRef.current);
+      }
+    };
     const handlePlotlyClick = (event: { points?: Array<{ curveNumber: number }> }) => {
       const curveNumber = event.points?.[0]?.curveNumber;
       if (typeof curveNumber !== 'number') return;
@@ -581,8 +598,10 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       showPlotlyHover(pointId);
     };
     container.on('plotly_click', handlePlotlyClick);
+    container.on('plotly_hover', handlePlotlyHover);
     return () => {
       container.removeListener?.('plotly_click', handlePlotlyClick);
+      container.removeListener?.('plotly_hover', handlePlotlyHover);
     };
   }, [onPointClick, plotData.pointTraceIds, showPlotlyHover]);
   
