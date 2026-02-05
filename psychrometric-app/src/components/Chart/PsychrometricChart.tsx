@@ -291,14 +291,21 @@ function drawGrid(
   coordinates: ChartCoordinates,
   range: ChartRange
 ) {
+  const tickFont = '10px "Noto Sans JP", sans-serif';
+  const labelColor = '#666';
+  const plotLeft = coordinates.tempToX(range.tempMin);
+  const plotRight = coordinates.tempToX(range.tempMax);
+  const plotTop = coordinates.humidityToY(range.humidityMax);
+  const plotBottom = coordinates.humidityToY(range.humidityMin);
+
   ctx.strokeStyle = '#e0e0e0';
   ctx.lineWidth = 1;
 
   // 縦線（温度）
   for (let temp = Math.ceil(range.tempMin / 5) * 5; temp <= range.tempMax; temp += 5) {
     const x = coordinates.tempToX(temp);
-    const y1 = coordinates.humidityToY(range.humidityMin);
-    const y2 = coordinates.humidityToY(range.humidityMax);
+    const y1 = plotBottom;
+    const y2 = plotTop;
 
     ctx.beginPath();
     ctx.moveTo(x, y1);
@@ -306,30 +313,47 @@ function drawGrid(
     ctx.stroke();
 
     // ラベル
-    ctx.fillStyle = '#666';
-    ctx.font = '10px sans-serif';
+    ctx.fillStyle = labelColor;
+    ctx.font = tickFont;
     ctx.textAlign = 'center';
-    ctx.fillText(`${temp}°C`, x, y1 + 20);
+    ctx.textBaseline = 'top';
+    ctx.fillText(`${temp}`, x, y1 + 20);
   }
 
   // 横線（絶対湿度）- g/kg' 形式で表示
   for (let h = 0; h <= range.humidityMax; h += 0.005) {
     const y = coordinates.humidityToY(h);
-    const x1 = coordinates.tempToX(range.tempMin);
-    const x2 = coordinates.tempToX(range.tempMax);
+    const x1 = plotLeft;
+    const x2 = plotRight;
 
     ctx.beginPath();
     ctx.moveTo(x1, y);
     ctx.lineTo(x2, y);
     ctx.stroke();
 
-    // ラベル - g/kg' 形式 (kg/kg' × 1000 = g/kg')
-    ctx.fillStyle = '#666';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'right';
+    // ラベル - g/kg' 形式 (kg/kg' × 1000 = g/kg')、右軸に表示
+    ctx.fillStyle = labelColor;
+    ctx.font = tickFont;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
     const gPerKg = h * 1000;
-    ctx.fillText(`${gPerKg.toFixed(0)} g/kg'`, x1 - 10, y + 4);
+    ctx.fillText(`${gPerKg.toFixed(0)}`, x2 + 10, y);
   }
+
+  // 軸タイトル
+  ctx.fillStyle = labelColor;
+  ctx.font = tickFont;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText('温度[℃]', (plotLeft + plotRight) / 2, plotBottom + 38);
+
+  ctx.save();
+  ctx.translate(plotRight + 42, (plotTop + plotBottom) / 2);
+  ctx.rotate(Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('絶対湿度[g/kg’]', 0, 0);
+  ctx.restore();
 }
 
 function drawRHCurves(
