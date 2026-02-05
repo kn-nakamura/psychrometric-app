@@ -12,6 +12,7 @@ interface PsychrometricChartProps {
   processes: Process[];
   activeSeason: 'summer' | 'winter' | 'both';
   selectedPointId?: string | null;
+  draggablePointId?: string | null;
   onPointClick?: (pointId: string) => void;
   onPointMove?: (pointId: string, temp: number, humidity: number) => void;
 }
@@ -147,6 +148,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   processes,
   activeSeason,
   selectedPointId,
+  draggablePointId,
   onPointClick,
   onPointMove,
 }, ref) => {
@@ -161,6 +163,12 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   const resolutionScale = useMemo(() => {
     return getDefaultResolutionScale();
   }, []);
+  useEffect(() => {
+    if (draggablePointId !== draggedPointId) {
+      setIsDragging(false);
+      setDraggedPointId(null);
+    }
+  }, [draggablePointId, draggedPointId]);
 
   // 座標変換の設定 - 状態点に基づいて動的に範囲を調整
   const chartConfig = useMemo(() => {
@@ -215,9 +223,11 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     // クリックされた状態点を探す
     const clickedPoint = findPointAt(point.x, point.y, statePoints, activeSeason, coordinates);
     if (clickedPoint) {
-      setIsDragging(true);
-      setDraggedPointId(clickedPoint.id);
       onPointClick?.(clickedPoint.id);
+      if (draggablePointId === clickedPoint.id) {
+        setIsDragging(true);
+        setDraggedPointId(clickedPoint.id);
+      }
     }
   };
 
@@ -269,7 +279,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       onTouchEnd={handlePointerUp}
       onTouchCancel={handlePointerUp}
       style={{
-        cursor: isDragging ? 'grabbing' : 'default',
+        cursor: isDragging ? 'grabbing' : draggablePointId ? 'grab' : 'default',
         border: '1px solid #ddd',
         width: '100%',
         height: '100%',
