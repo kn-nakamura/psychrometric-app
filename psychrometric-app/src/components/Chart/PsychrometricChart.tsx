@@ -158,6 +158,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const plotContainerRef = useRef<HTMLDivElement>(null);
+  const interactionLayerRef = useRef<HTMLDivElement>(null);
   const didDragRef = useRef(false);
   const [activeTooltipId, setActiveTooltipId] = useState<string | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
@@ -544,29 +545,6 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     setActiveTooltipId(pointId);
   }, [coordinates, statePoints]);
 
-  useEffect(() => {
-    const container = plotContainerRef.current as (HTMLElement & {
-      on?: (event: string, handler: (event: { points?: Array<{ curveNumber: number }> }) => void) => void;
-      removeListener?: (
-        event: string,
-        handler: (event: { points?: Array<{ curveNumber: number }> }) => void
-      ) => void;
-    }) | null;
-    if (!container?.on) return;
-    const handlePlotlyClick = (event: { points?: Array<{ curveNumber: number }> }) => {
-      const curveNumber = event.points?.[0]?.curveNumber;
-      if (typeof curveNumber !== 'number') return;
-      const pointId = plotData.pointTraceIds.get(curveNumber);
-      if (!pointId) return;
-      onPointClick?.(pointId);
-      showTooltip(pointId);
-    };
-    container.on('plotly_click', handlePlotlyClick);
-    return () => {
-      container.removeListener?.('plotly_click', handlePlotlyClick);
-    };
-  }, [onPointClick, plotData.pointTraceIds, showTooltip]);
-  
   // チャートの描画
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -596,9 +574,9 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   ]);
   
   const getCanvasPoint = (clientX: number, clientY: number) => {
-    const container = plotContainerRef.current;
-    if (!container) return null;
-    const rect = container.getBoundingClientRect();
+    const layer = interactionLayerRef.current;
+    if (!layer) return null;
+    const rect = layer.getBoundingClientRect();
     return {
       x: clientX - rect.left,
       y: clientY - rect.top,
@@ -664,6 +642,10 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       <div
         ref={plotContainerRef}
         className="h-full w-full"
+      />
+      <div
+        ref={interactionLayerRef}
+        className="absolute inset-0 z-10"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
