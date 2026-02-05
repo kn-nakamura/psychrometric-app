@@ -252,13 +252,6 @@ const loadNotoSansJpFontData = async (): Promise<string | null> => {
   return notoSansJpFontDataPromise;
 };
 
-const isMobileDevice = () => {
-  if (typeof navigator === 'undefined') {
-    return false;
-  }
-  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-};
-
 export const ExportDialog = ({
   onClose,
   canvasRef,
@@ -378,9 +371,6 @@ export const ExportDialog = ({
 
   const preparePdfFonts = async (pdf: jsPDF): Promise<boolean> => {
     try {
-      if (isMobileDevice()) {
-        return false;
-      }
       if (!pdf.existsFileInVFS('NotoSansJP-Regular.ttf')) {
         const fontData = await loadNotoSansJpFontData();
         if (fontData) {
@@ -1230,8 +1220,8 @@ export const ExportDialog = ({
       const pdf = new jsPDF('portrait', 'mm', 'a4');
       const hasJapaneseFont = await preparePdfFonts(pdf);
       if (!hasJapaneseFont) {
-        throw new Error(
-          'PDF用フォントが読み込めませんでした。public/fonts/NotoSansJP-Regular.ttf を配置するか、外部フォントURLへのアクセスを許可してください。'
+        console.warn(
+          'PDF用フォントが読み込めなかったため、内蔵フォントでPDFを生成します。'
         );
       }
       await renderPdfPages(pdf, hasJapaneseFont);
