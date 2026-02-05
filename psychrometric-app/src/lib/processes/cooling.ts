@@ -179,6 +179,37 @@ export class CoolingProcess {
       return (low + high) / 2;
     };
 
+    const currentRH =
+      fromPoint.relativeHumidity ??
+      StatePointConverter.fromDryBulbAndHumidity(
+        fromPoint.dryBulbTemp!,
+        fromPoint.humidity!,
+        effectivePressure,
+        resolved
+      ).relativeHumidity!;
+
+    if (outletRH <= currentRH) {
+      const toEnthalpy = fromPoint.enthalpy! - totalEnthalpyDiff;
+      const toPoint = StatePointConverter.fromEnthalpyAndHumidity(
+        toEnthalpy,
+        fromPoint.humidity!,
+        effectivePressure,
+        resolved
+      );
+      const temperatureDiff = fromPoint.dryBulbTemp! - toPoint.dryBulbTemp!;
+
+      const results: ProcessResults = {
+        sensibleHeat: coolingCapacity,
+        latentHeat: 0,
+        totalHeat: coolingCapacity,
+        enthalpyDiff: -totalEnthalpyDiff,
+        humidityDiff: 0,
+        temperatureDiff: -temperatureDiff,
+      };
+
+      return { toPoint, results };
+    }
+
     const tempAtOutletRH = findTempForRHAtHumidity(outletRH, maxTemp);
     const pointAtOutletRH = StatePointConverter.fromDryBulbAndHumidity(
       tempAtOutletRH,
@@ -189,14 +220,14 @@ export class CoolingProcess {
     const requiredEnthalpyDiff = Math.max(0, fromPoint.enthalpy! - pointAtOutletRH.enthalpy!);
 
     if (totalEnthalpyDiff <= requiredEnthalpyDiff) {
-      const temperatureDiff = (coolingCapacity * 3600) / (resolved.cpAir * massFlow);
-      const toTemp = fromPoint.dryBulbTemp! - temperatureDiff;
-      const toPoint = StatePointConverter.fromDryBulbAndHumidity(
-        toTemp,
+      const toEnthalpy = fromPoint.enthalpy! - totalEnthalpyDiff;
+      const toPoint = StatePointConverter.fromEnthalpyAndHumidity(
+        toEnthalpy,
         fromPoint.humidity!,
         effectivePressure,
         resolved
       );
+      const temperatureDiff = fromPoint.dryBulbTemp! - toPoint.dryBulbTemp!;
 
       const results: ProcessResults = {
         sensibleHeat: coolingCapacity,
@@ -219,6 +250,28 @@ export class CoolingProcess {
       effectivePressure,
       resolved
     );
+
+    if (toPoint.dryBulbTemp! > fromPoint.dryBulbTemp!) {
+      const toEnthalpy = fromPoint.enthalpy! - totalEnthalpyDiff;
+      const fallbackPoint = StatePointConverter.fromEnthalpyAndHumidity(
+        toEnthalpy,
+        fromPoint.humidity!,
+        effectivePressure,
+        resolved
+      );
+      const fallbackTempDiff = fromPoint.dryBulbTemp! - fallbackPoint.dryBulbTemp!;
+
+      const results: ProcessResults = {
+        sensibleHeat: coolingCapacity,
+        latentHeat: 0,
+        totalHeat: coolingCapacity,
+        enthalpyDiff: -totalEnthalpyDiff,
+        humidityDiff: 0,
+        temperatureDiff: -fallbackTempDiff,
+      };
+
+      return { toPoint: fallbackPoint, results };
+    }
 
     const enthalpyDiff = fromPoint.enthalpy! - toPoint.enthalpy!;
     const temperatureDiff = fromPoint.dryBulbTemp! - toTemp;
