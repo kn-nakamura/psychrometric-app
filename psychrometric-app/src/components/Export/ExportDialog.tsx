@@ -437,7 +437,7 @@ export const ExportDialog = ({
 
       pdf.setTextColor(255, 255, 255);
       setFont('bold', 2.4);
-      pdf.text(label, x + 3, y + 2.3, { align: 'center', baseline: 'middle' });
+      pdf.text(label, x + 3, y + 1.75, { align: 'center', baseline: 'middle' });
 
       pdf.setTextColor(17, 24, 39);
       setFont('bold', 2.8);
@@ -445,10 +445,12 @@ export const ExportDialog = ({
 
       pdf.setTextColor(107, 114, 128);
       setFont('normal', 2.1);
-      const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}% | 絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg'`;
-      const propTextLine2 = `エンタルピー: ${formatNumber(point.enthalpy)} kJ/kg' | 風量: ${formatAirflow(point.airflow)} | 季節: ${seasonLabel(point.season)}`;
+      const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}%`;
+      const propTextLine2 = `絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg' | エンタルピー: ${formatNumber(point.enthalpy)} kJ/kg'`;
+      const propTextLine3 = `風量: ${formatAirflow(point.airflow)}`;
       pdf.text(propTextLine1, x + 7, y + 5.4);
       pdf.text(propTextLine2, x + 7, y + 8.2);
+      pdf.text(propTextLine3, x + 7, y + 11.0);
     };
 
     const drawProcessCard = (process: Process, x: number, y: number) => {
@@ -617,7 +619,7 @@ export const ExportDialog = ({
     pdf.text('状態点', marginMm, statePointY + 2.5);
     statePointY += 5;
 
-    const statePointCardHeight = 14;
+    const statePointCardHeight = 16;
     const statePointMaxY = A4_HEIGHT_MM - marginMm;
     const statePointOverflow: StatePoint[] = [];
 
@@ -884,7 +886,7 @@ export const ExportDialog = ({
     statePointY += mmToPx(5);
 
     // 状態点テーブルヘッダー
-    const statePointCardHeight = mmToPx(12);
+    const statePointCardHeight = mmToPx(16);
     const statePointMaxY = pageHeightPx - marginPx;
     const statePointOverflow: StatePoint[] = [];
 
@@ -908,8 +910,10 @@ export const ExportDialog = ({
       ctx1.fillStyle = '#ffffff';
       ctx1.font = `bold ${mmToPx(2.1)}px sans-serif`;
       ctx1.textAlign = 'center';
-      ctx1.fillText(label, marginPx + mmToPx(3), statePointY + mmToPx(2.3));
+      ctx1.textBaseline = 'middle';
+      ctx1.fillText(label, marginPx + mmToPx(3), statePointY + mmToPx(1.75));
       ctx1.textAlign = 'left';
+      ctx1.textBaseline = 'alphabetic';
 
       // 名前と物性値
       ctx1.fillStyle = '#111827';
@@ -920,10 +924,12 @@ export const ExportDialog = ({
       ctx1.font = `${mmToPx(1.8)}px sans-serif`;
       const airflowText =
         typeof point.airflow === 'number' ? `${point.airflow.toFixed(0)} m³/h` : '-';
-      const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}% | 絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg'`;
-      const propTextLine2 = `エンタルピー: ${formatNumber(point.enthalpy)} kJ/kg' | 風量: ${airflowText} | 季節: ${seasonLabel(point.season)}`;
+      const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}%`;
+      const propTextLine2 = `絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg' | エンタルピー: ${formatNumber(point.enthalpy)} kJ/kg'`;
+      const propTextLine3 = `風量: ${airflowText}`;
       ctx1.fillText(propTextLine1, marginPx + mmToPx(7), statePointY + mmToPx(5.4));
       ctx1.fillText(propTextLine2, marginPx + mmToPx(7), statePointY + mmToPx(8.2));
+      ctx1.fillText(propTextLine3, marginPx + mmToPx(7), statePointY + mmToPx(11.0));
 
       statePointY += statePointCardHeight;
     });
@@ -1066,8 +1072,10 @@ export const ExportDialog = ({
           ctx2.fillStyle = '#ffffff';
           ctx2.font = `bold ${mmToPx(2.1)}px sans-serif`;
           ctx2.textAlign = 'center';
-          ctx2.fillText(label, marginPx + mmToPx(3), currentY + mmToPx(2.3));
+          ctx2.textBaseline = 'middle';
+          ctx2.fillText(label, marginPx + mmToPx(3), currentY + mmToPx(1.75));
           ctx2.textAlign = 'left';
+          ctx2.textBaseline = 'alphabetic';
 
           ctx2.fillStyle = '#111827';
           ctx2.font = `bold ${mmToPx(2.4)}px "Noto Sans JP", sans-serif`;
@@ -1077,10 +1085,12 @@ export const ExportDialog = ({
           ctx2.font = `${mmToPx(1.8)}px sans-serif`;
           const airflowText =
             typeof point.airflow === 'number' ? `${point.airflow.toFixed(0)} m³/h` : '-';
-          const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}% | 絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg'`;
-          const propTextLine2 = `エンタルピー: ${formatNumber(point.enthalpy)} kJ/kg' | 風量: ${airflowText} | 季節: ${seasonLabel(point.season)}`;
+          const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}%`;
+          const propTextLine2 = `絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg' | エンタルピー: ${formatNumber(point.enthalpy)} kJ/kg'`;
+          const propTextLine3 = `風量: ${airflowText}`;
           ctx2.fillText(propTextLine1, marginPx + mmToPx(7), currentY + mmToPx(5.4));
           ctx2.fillText(propTextLine2, marginPx + mmToPx(7), currentY + mmToPx(8.2));
+          ctx2.fillText(propTextLine3, marginPx + mmToPx(7), currentY + mmToPx(11.0));
 
           currentY += statePointCardHeight;
         });
