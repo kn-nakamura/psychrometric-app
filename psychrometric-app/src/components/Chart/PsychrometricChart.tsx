@@ -291,8 +291,8 @@ function drawGrid(
   coordinates: ChartCoordinates,
   range: ChartRange
 ) {
-  const tickFont = '10px "NotoSansJP-Regular", "Noto Sans JP", sans-serif';
-  const axisLabelFont = 'bold 11px "NotoSansJP-Regular", "Noto Sans JP", sans-serif';
+  const tickFont = '10px "NotoSansJP", "NotoSansJP-Regular", "Noto Sans JP", sans-serif';
+  const axisLabelFont = 'bold 11px "NotoSansJP", "NotoSansJP-Regular", "Noto Sans JP", sans-serif';
   const x1 = coordinates.tempToX(range.tempMin);
   const x2 = coordinates.tempToX(range.tempMax);
   const y1 = coordinates.humidityToY(range.humidityMin);
