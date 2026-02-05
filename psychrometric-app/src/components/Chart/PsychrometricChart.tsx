@@ -159,6 +159,8 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const plotContainerRef = useRef<HTMLDivElement>(null);
   const didDragRef = useRef(false);
+  const [activeTooltipId, setActiveTooltipId] = useState<string | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
 
   // 親コンポーネントからcanvasにアクセスできるようにする
   useImperativeHandle(ref, () => ({
@@ -229,6 +231,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     const annotations: Record<string, unknown>[] = [];
     const pointTraceIndices = new Map<string, number>();
     const pointTraceIds = new Map<number, string>();
+    const pointHoverLines = new Map<string, string[]>();
     const { range } = chartConfig;
     const formatValue = (value: number | undefined, fractionDigits = 1) => {
       if (typeof value !== 'number') return '-';
@@ -399,6 +402,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
 
       pointTraceIndices.set(point.id, data.length);
       pointTraceIds.set(data.length, point.id);
+      pointHoverLines.set(point.id, hoverLines);
       data.push({
         type: 'scatter',
         mode: 'markers+text',
@@ -415,13 +419,12 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
             width: isSelected ? 2 : 0,
           },
         },
-        hoverinfo: 'text',
-        hovertext: [hoverLines.join('<br>')],
+        hoverinfo: 'skip',
         showlegend: false,
       });
     });
 
-    return { data, annotations, pointTraceIndices, pointTraceIds };
+    return { data, annotations, pointTraceIndices, pointTraceIds, pointHoverLines };
   }, [chartConfig, statePoints, processes, activeSeason, filteredStatePoints, selectedPointId]);
 
   const plotLayout = useMemo<Record<string, unknown>>(() => {
@@ -472,7 +475,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         title: { text: "絶対湿度 (g/kg')", font: { size: 10, color: '#444' } },
       },
       dragmode: false,
-      hovermode: 'closest',
+      hovermode: false,
       showlegend: false,
     };
   }, [chartConfig, width, height]);
@@ -532,25 +535,13 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     };
   }, [loadPlotly, plotData, plotLayout]);
 
-  const showPlotlyHover = useCallback((pointId: string) => {
-    if (!window.Plotly || !plotContainerRef.current) return;
-    const traceIndex = plotData.pointTraceIndices.get(pointId);
-    if (typeof traceIndex !== 'number') return;
-    const plotlyWithFx = window.Plotly as typeof window.Plotly & {
-      Fx?: {
-        hover: (
-          root: HTMLElement,
-          points: Array<{ curveNumber: number; pointNumber: number }>,
-          mode?: string
-        ) => void;
-      };
-    };
-    plotlyWithFx.Fx?.hover(
-      plotContainerRef.current,
-      [{ curveNumber: traceIndex, pointNumber: 0 }],
-      'closest'
-    );
-  }, [plotData.pointTraceIndices]);
+  const showTooltip = useCallback((pointId: string) => {
+    const point = statePoints.find((candidate) => candidate.id === pointId);
+    if (!point || !point.dryBulbTemp || !point.humidity) return;
+    const { x, y } = coordinates.toCanvas(point.dryBulbTemp, point.humidity);
+    setTooltipPosition({ x, y });
+    setActiveTooltipId(pointId);
+  }, [coordinates, statePoints]);
 
   useEffect(() => {
     const container = plotContainerRef.current as (HTMLElement & {
@@ -567,13 +558,13 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       const pointId = plotData.pointTraceIds.get(curveNumber);
       if (!pointId) return;
       onPointClick?.(pointId);
-      showPlotlyHover(pointId);
+      showTooltip(pointId);
     };
     container.on('plotly_click', handlePlotlyClick);
     return () => {
       container.removeListener?.('plotly_click', handlePlotlyClick);
     };
-  }, [onPointClick, plotData.pointTraceIds, showPlotlyHover]);
+  }, [onPointClick, plotData.pointTraceIds, showTooltip]);
   
   // チャートの描画
   useEffect(() => {
@@ -624,6 +615,10 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       didDragRef.current = false;
       setIsDragging(true);
       setDraggedPointId(clickedPoint.id);
+      showTooltip(clickedPoint.id);
+    } else {
+      setActiveTooltipId(null);
+      setTooltipPosition(null);
     }
   };
 
@@ -657,7 +652,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     }
     if (draggedPointId && !didDragRef.current) {
       onPointClick?.(draggedPointId);
-      showPlotlyHover(draggedPointId);
+      showTooltip(draggedPointId);
     }
     setIsDragging(false);
     setDraggedPointId(null);
@@ -674,6 +669,25 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         onPointerLeave={handlePointerUp}
         style={{ touchAction: isDragging ? 'none' : 'auto' }}
       />
+      {activeTooltipId && tooltipPosition ? (
+        <div
+          className="pointer-events-none absolute z-10 rounded border border-gray-200 bg-white/95 px-2 py-1 text-xs text-gray-800 shadow"
+          style={{
+            left: tooltipPosition.x + 12,
+            top: tooltipPosition.y - 12,
+            transform: 'translateY(-100%)',
+          }}
+        >
+          <div className="font-semibold">
+            {(plotData.pointHoverLines.get(activeTooltipId) ?? [])[0]}
+          </div>
+          <div className="mt-0.5 space-y-0.5">
+            {(plotData.pointHoverLines.get(activeTooltipId) ?? []).slice(1).map((line) => (
+              <div key={line}>{line}</div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <canvas
         ref={canvasRef}
         width={width}
