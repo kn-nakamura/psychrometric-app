@@ -227,10 +227,6 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     const data: Record<string, unknown>[] = [];
     const annotations: Record<string, unknown>[] = [];
     const { range } = chartConfig;
-    const formatValue = (value: number | undefined, fractionDigits = 1) => {
-      if (typeof value !== 'number') return '-';
-      return value.toFixed(fractionDigits);
-    };
 
     const addLineTrace = (
       points: { x: number; y: number }[],
@@ -382,18 +378,6 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         point.season === 'summer' ? '#4dabf7' : point.season === 'winter' ? '#ff6b6b' : '#6b7280';
       const pointColor = point.color || defaultPointColor;
       const isSelected = selectedPointId === point.id;
-      const hoverLines = [
-        `${point.name || label}`,
-        `乾球温度: ${formatValue(point.dryBulbTemp, 1)}°C`,
-        `相対湿度: ${formatValue(point.relativeHumidity, 0)}%`,
-        `絶対湿度: ${formatValue(point.humidity, 4)} kg/kg'`,
-        `エンタルピー: ${formatValue(point.enthalpy, 1)} kJ/kg'`,
-        `露点温度: ${formatValue(point.dewPoint, 1)}°C`,
-      ];
-      if (typeof point.airflow === 'number') {
-        hoverLines.push(`風量: ${formatValue(point.airflow, 0)} m³/h`);
-      }
-
       data.push({
         type: 'scatter',
         mode: 'markers+text',
@@ -410,8 +394,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
             width: isSelected ? 2 : 0,
           },
         },
-        hoverinfo: 'text',
-        hovertext: [hoverLines.join('<br>')],
+        hoverinfo: 'skip',
         showlegend: false,
       });
     });
