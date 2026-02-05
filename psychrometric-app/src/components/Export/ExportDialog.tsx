@@ -167,7 +167,7 @@ class PdfRenderContext implements ChartRenderContext {
   fillText = (text: string, x: number, y: number) => {
     const sizeMatch = this.font.match(/(\d+(?:\.\d+)?)px/);
     const sizePx = sizeMatch ? Number(sizeMatch[1]) : 10;
-    const sizePt = sizePx * 0.75 * this.scale * this.textScale;
+    const sizePt = sizePx * 0.75 * this.textScale;
     const isBold = this.font.includes('bold');
     this.pdf.setFont(this.baseFontName, isBold ? 'bold' : 'normal');
     this.pdf.setFontSize(sizePt);
