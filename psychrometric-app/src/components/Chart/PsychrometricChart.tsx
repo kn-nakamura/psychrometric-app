@@ -452,7 +452,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         showgrid: true,
         gridcolor: '#e0e0e0',
         zeroline: false,
-        fixedrange: true,
+        fixedrange: false,
         tickfont: { size: 9, color: '#666' },
         title: { text: '乾球温度 (°C)', font: { size: 10, color: '#444' } },
       },
@@ -467,11 +467,11 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         showgrid: true,
         gridcolor: '#e0e0e0',
         zeroline: false,
-        fixedrange: true,
+        fixedrange: false,
         tickfont: { size: 9, color: '#666' },
         title: { text: "絶対湿度 (g/kg')", font: { size: 10, color: '#444' } },
       },
-      dragmode: false,
+      dragmode: 'pan',
       hovermode: 'closest',
       showlegend: false,
     };
@@ -513,9 +513,18 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
           annotations: plotData.annotations,
         };
         await window.Plotly.react(plotContainerRef.current, plotData.data, layout, {
-          displayModeBar: false,
+          displayModeBar: true,
           scrollZoom: false,
           doubleClick: false,
+          modeBarButtonsToRemove: [
+            'zoom2d',
+            'zoomIn2d',
+            'zoomOut2d',
+            'autoScale2d',
+            'resetScale2d',
+            'select2d',
+            'lasso2d',
+          ],
           responsive: true,
         });
       } catch (error) {
