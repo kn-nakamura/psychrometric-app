@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Settings, Download, FolderOpen, Edit2, Trash2, Copy, ChevronUp, ChevronDown, FilePlus } from 'lucide-react';
 import { useProjectStore } from './store/projectStore';
 import { PsychrometricChart, PsychrometricChartRef } from './components/Chart/PsychrometricChart';
@@ -8,6 +8,7 @@ import { DesignConditionsEditor } from './components/DesignConditions/DesignCond
 import { ExportDialog } from './components/Export/ExportDialog';
 import { ProjectManager } from './components/Project/ProjectManager';
 import { StatePointConverter } from './lib/psychrometric/conversions';
+import { ChartCoordinates, createDynamicChartConfig } from './lib/chart/coordinates';
 import { resolvePsychrometricConstants } from './lib/psychrometric/constants';
 import { MixingProcess } from './lib/processes/mixing';
 import { HeatExchangeProcess } from './lib/processes/heatExchange';
@@ -135,6 +136,7 @@ function App() {
   const [editingPointSnapshot, setEditingPointSnapshot] = useState<StatePoint | null>(null);
   const [copySourceA, setCopySourceA] = useState('');
   const [copySourceB, setCopySourceB] = useState('');
+  const [movePointId, setMovePointId] = useState<string | null>(null);
   // Active tab for sidebar
   const [activeTab, setActiveTab] = useState<'points' | 'processes'>('points');
   const [chartSize, setChartSize] = useState({ width: 1, height: 1 });
@@ -171,6 +173,26 @@ function App() {
       observer.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    if (movePointId && selectedPointId !== movePointId) {
+      setMovePointId(null);
+    }
+  }, [movePointId, selectedPointId]);
+
+  const selectedPoint = statePoints.find((point) => point.id === selectedPointId) ?? null;
+
+  const chartCoordinates = useMemo(() => {
+    const chartConfig = createDynamicChartConfig(chartSize.width, chartSize.height, statePoints);
+    return new ChartCoordinates(chartConfig.dimensions, chartConfig.range);
+  }, [chartSize.height, chartSize.width, statePoints]);
+
+  const selectedPointPosition = useMemo(() => {
+    if (!selectedPoint?.dryBulbTemp || !selectedPoint.humidity) {
+      return null;
+    }
+    return chartCoordinates.toCanvas(selectedPoint.dryBulbTemp, selectedPoint.humidity);
+  }, [chartCoordinates, selectedPoint]);
 
   useEffect(() => {
     if (!inputTypeAInitialized.current) {
@@ -1375,8 +1397,8 @@ function App() {
 
         {/* メインコンテンツ */}
         <main className="order-1 flex-1 min-h-0 min-w-0 overflow-hidden p-3 sm:order-none sm:p-4">
-          <div className="bg-white rounded-lg shadow h-full min-h-0 min-w-0 p-3 sm:p-4">
-            <div ref={chartContainerRef} className="h-full min-h-0 min-w-0">
+            <div className="bg-white rounded-lg shadow h-full min-h-0 min-w-0 p-3 sm:p-4">
+            <div ref={chartContainerRef} className="h-full min-h-0 min-w-0 relative">
               <PsychrometricChart
                 ref={chartRef}
                 width={chartSize.width}
@@ -1385,9 +1407,74 @@ function App() {
                 processes={processes}
                 activeSeason={activeSeason}
                 selectedPointId={selectedPointId}
+                draggablePointId={movePointId}
                 onPointClick={setSelectedPoint}
                 onPointMove={handlePointMove}
               />
+              {selectedPoint && selectedPointPosition && (
+                <div
+                  className="absolute z-10"
+                  style={{
+                    left: selectedPointPosition.x,
+                    top: selectedPointPosition.y,
+                    transform: 'translate(-50%, -120%)',
+                  }}
+                >
+                  <div className="relative rounded-lg border border-gray-200 bg-white shadow-lg px-4 py-3 text-xs text-gray-700 min-w-[220px]">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-semibold text-sm text-gray-900">{selectedPoint.name}</div>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded ${
+                          selectedPoint.season === 'summer'
+                            ? 'bg-blue-100 text-blue-700'
+                            : selectedPoint.season === 'winter'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-purple-100 text-purple-700'
+                        }`}
+                      >
+                        {selectedPoint.season === 'summer'
+                          ? '夏'
+                          : selectedPoint.season === 'winter'
+                          ? '冬'
+                          : '通年'}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+                      <div>乾球温度: {selectedPoint.dryBulbTemp?.toFixed(1) ?? '-'}°C</div>
+                      <div>湿球温度: {selectedPoint.wetBulbTemp?.toFixed(1) ?? '-'}°C</div>
+                      <div>相対湿度: {selectedPoint.relativeHumidity?.toFixed(0) ?? '-'}%</div>
+                      <div>絶対湿度: {selectedPoint.humidity?.toFixed(4) ?? '-'} kg/kg'</div>
+                      <div>エンタルピー: {selectedPoint.enthalpy?.toFixed(1) ?? '-'} kJ/kg'</div>
+                      <div>露点温度: {selectedPoint.dewPoint?.toFixed(1) ?? '-'}°C</div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <div className="text-[10px] text-gray-500">
+                        {typeof selectedPoint.airflow === 'number'
+                          ? `風量: ${selectedPoint.airflow.toFixed(0)} m³/h`
+                          : selectedPoint.airflowSource
+                          ? `風量: ${designConditions.airflow[selectedPoint.airflowSource].toFixed(0)} m³/h`
+                          : '風量: -'}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setMovePointId((prev) =>
+                            prev === selectedPoint.id ? null : selectedPoint.id
+                          )
+                        }
+                        className={`rounded px-3 py-1 text-xs font-semibold transition-colors ${
+                          movePointId === selectedPoint.id
+                            ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                            : 'bg-blue-600 text-white hover:bg-blue-700'
+                        }`}
+                      >
+                        {movePointId === selectedPoint.id ? '移動完了' : '移動'}
+                      </button>
+                    </div>
+                    <div className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1 rotate-45 border-b border-r border-gray-200 bg-white" />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </main>
