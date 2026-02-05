@@ -17,7 +17,7 @@ interface ExportDialogProps {
 }
 
 const NOTO_SANS_JP_FONT_URLS = [
-  '/fonts/NotoSansJP-Regular.ttf',
+  new URL('fonts/NotoSansJP-Regular.ttf', import.meta.env.BASE_URL).toString(),
   'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts/hinted/ttf/NotoSansJP/NotoSansJP-Regular.ttf',
 ];
 let notoSansJpFontDataPromise: Promise<string | null> | null = null;
@@ -1035,8 +1035,8 @@ export const ExportDialog = ({
       const pdf = new jsPDF('portrait', 'mm', 'a4');
       const hasJapaneseFont = await preparePdfFonts(pdf);
       if (!hasJapaneseFont) {
-        throw new Error(
-          'PDF用フォントが読み込めませんでした。public/fonts/NotoSansJP-Regular.ttf を配置するか、外部フォントURLへのアクセスを許可してください。'
+        console.warn(
+          'PDF用フォントが読み込めませんでした。日本語は既定フォントで出力されます。'
         );
       }
       renderPdfPages(canvas, pdf, hasJapaneseFont);
