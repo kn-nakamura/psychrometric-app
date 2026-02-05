@@ -4,7 +4,7 @@ import { jsPDF } from 'jspdf';
 import { DesignConditions } from '@/types/designConditions';
 import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
-import { renderPsychrometricChart } from '@/components/Chart/PsychrometricChart';
+import { renderPsychrometricChart, renderPsychrometricChartToSvg } from '@/components/Chart/PsychrometricChart';
 import { CoilCapacityCalculator } from '@/lib/equipment/coilCapacity';
 
 interface ExportDialogProps {
@@ -234,20 +234,13 @@ export const ExportDialog = ({
     const chartXOffset = marginMm + (chartWidthMm - drawChartWidthMm) / 2;
     const chartRenderWidth = Math.round((drawChartWidthMm / 25.4) * A4_DPI);
     const chartRenderHeight = Math.round((drawChartHeightMm / 25.4) * A4_DPI);
-    const chartRenderCanvas = document.createElement('canvas');
-    chartRenderCanvas.width = chartRenderWidth;
-    chartRenderCanvas.height = chartRenderHeight;
-    renderPsychrometricChart({
-      canvas: chartRenderCanvas,
+    const chartSvg = renderPsychrometricChartToSvg({
       width: chartRenderWidth,
       height: chartRenderHeight,
       statePoints: filteredStatePoints,
       processes: filteredProcesses,
       activeSeason,
-      resolutionScale: 1,
     });
-    // JPEG形式で軽量化（品質0.85でファイルサイズを削減）
-    const chartImage = chartRenderCanvas.toDataURL('image/jpeg', 0.85);
 
     const drawStatePointCard = (point: StatePoint, index: number, x: number, y: number) => {
       const label = getPointLabel(point, index);
@@ -414,9 +407,8 @@ export const ExportDialog = ({
     const chartY = chartTopMm;
     pdf.setDrawColor(229, 231, 235);
     pdf.rect(marginMm, chartY, chartWidthMm, chartHeightMm, 'S');
-    pdf.addImage(
-      chartImage,
-      'JPEG',
+    pdf.addSvgAsImage(
+      chartSvg,
       chartXOffset,
       chartY + (chartHeightMm - drawChartHeightMm) / 2,
       drawChartWidthMm,
