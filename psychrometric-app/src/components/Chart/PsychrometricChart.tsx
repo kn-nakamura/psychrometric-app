@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useImperativeHandle, forwardRef, useMemo } from 'react';
+import { useRef, useEffect, useState, useImperativeHandle, forwardRef, useMemo, useCallback } from 'react';
 import type { PointerEvent } from 'react';
 import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
@@ -158,6 +158,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const plotContainerRef = useRef<HTMLDivElement>(null);
+  const didDragRef = useRef(false);
 
   // 親コンポーネントからcanvasにアクセスできるようにする
   useImperativeHandle(ref, () => ({
@@ -226,6 +227,8 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   const plotData = useMemo(() => {
     const data: Record<string, unknown>[] = [];
     const annotations: Record<string, unknown>[] = [];
+    const pointTraceIndices = new Map<string, number>();
+    const pointTraceIds = new Map<number, string>();
     const { range } = chartConfig;
     const formatValue = (value: number | undefined, fractionDigits = 1) => {
       if (typeof value !== 'number') return '-';
@@ -394,6 +397,8 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         hoverLines.push(`風量: ${formatValue(point.airflow, 0)} m³/h`);
       }
 
+      pointTraceIndices.set(point.id, data.length);
+      pointTraceIds.set(data.length, point.id);
       data.push({
         type: 'scatter',
         mode: 'markers+text',
@@ -416,7 +421,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       });
     });
 
-    return { data, annotations };
+    return { data, annotations, pointTraceIndices, pointTraceIds };
   }, [chartConfig, statePoints, processes, activeSeason, filteredStatePoints, selectedPointId]);
 
   const plotLayout = useMemo<Record<string, unknown>>(() => {
@@ -527,28 +532,48 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     };
   }, [loadPlotly, plotData, plotLayout]);
 
-  const selectedPoint = useMemo(() => {
-    if (!selectedPointId) return null;
-    const point = statePoints.find((item) => item.id === selectedPointId);
-    if (!point) return null;
-    if (activeSeason !== 'both' && point.season !== 'both' && point.season !== activeSeason) {
-      return null;
-    }
-    return point;
-  }, [activeSeason, selectedPointId, statePoints]);
+  const showPlotlyHover = useCallback((pointId: string) => {
+    if (!window.Plotly || !plotContainerRef.current) return;
+    const traceIndex = plotData.pointTraceIndices.get(pointId);
+    if (typeof traceIndex !== 'number') return;
+    const plotlyWithFx = window.Plotly as typeof window.Plotly & {
+      Fx?: {
+        hover: (
+          root: HTMLElement,
+          points: Array<{ curveNumber: number; pointNumber: number }>,
+          mode?: string
+        ) => void;
+      };
+    };
+    plotlyWithFx.Fx?.hover(
+      plotContainerRef.current,
+      [{ curveNumber: traceIndex, pointNumber: 0 }],
+      'closest'
+    );
+  }, [plotData.pointTraceIndices]);
 
-  const selectedPointPosition = useMemo(() => {
-    if (!selectedPoint || typeof selectedPoint.dryBulbTemp !== 'number') return null;
-    if (typeof selectedPoint.humidity !== 'number') return null;
-    return coordinates.toCanvas(selectedPoint.dryBulbTemp, selectedPoint.humidity);
-  }, [coordinates, selectedPoint]);
-
-  const selectedPointLabel = useMemo(() => {
-    if (!selectedPointId) return '';
-    const index = filteredStatePoints.findIndex((point) => point.id === selectedPointId);
-    if (index < 0) return '';
-    return getPointLabel(filteredStatePoints[index], index);
-  }, [filteredStatePoints, getPointLabel, selectedPointId]);
+  useEffect(() => {
+    const container = plotContainerRef.current as (HTMLElement & {
+      on?: (event: string, handler: (event: { points?: Array<{ curveNumber: number }> }) => void) => void;
+      removeListener?: (
+        event: string,
+        handler: (event: { points?: Array<{ curveNumber: number }> }) => void
+      ) => void;
+    }) | null;
+    if (!container?.on) return;
+    const handlePlotlyClick = (event: { points?: Array<{ curveNumber: number }> }) => {
+      const curveNumber = event.points?.[0]?.curveNumber;
+      if (typeof curveNumber !== 'number') return;
+      const pointId = plotData.pointTraceIds.get(curveNumber);
+      if (!pointId) return;
+      onPointClick?.(pointId);
+      showPlotlyHover(pointId);
+    };
+    container.on('plotly_click', handlePlotlyClick);
+    return () => {
+      container.removeListener?.('plotly_click', handlePlotlyClick);
+    };
+  }, [onPointClick, plotData.pointTraceIds, showPlotlyHover]);
   
   // チャートの描画
   useEffect(() => {
@@ -595,12 +620,10 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     // クリックされた状態点を探す
     const clickedPoint = findPointAt(point.x, point.y, statePoints, activeSeason, coordinates);
     if (clickedPoint) {
-      event.preventDefault();
-      event.stopPropagation();
       event.currentTarget.setPointerCapture(event.pointerId);
+      didDragRef.current = false;
       setIsDragging(true);
       setDraggedPointId(clickedPoint.id);
-      onPointClick?.(clickedPoint.id);
     }
   };
 
@@ -611,6 +634,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     const point = getCanvasPoint(event.clientX, event.clientY);
     if (!point) return;
 
+    didDragRef.current = true;
     // 座標変換
     const { temp, humidity } = coordinates.fromCanvas(point.x, point.y);
 
@@ -631,6 +655,10 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       event.stopPropagation();
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
+    if (draggedPointId && !didDragRef.current) {
+      onPointClick?.(draggedPointId);
+      showPlotlyHover(draggedPointId);
+    }
     setIsDragging(false);
     setDraggedPointId(null);
   };
@@ -646,31 +674,6 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         onPointerLeave={handlePointerUp}
         style={{ touchAction: isDragging ? 'none' : 'auto' }}
       />
-      {selectedPoint && selectedPointPosition && (
-        <div
-          className="pointer-events-none absolute z-10 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-lg"
-          style={{
-            left: selectedPointPosition.x + 12,
-            top: selectedPointPosition.y - 12,
-            transform: 'translateY(-100%)',
-          }}
-        >
-          <div className="font-semibold text-gray-900">
-            {selectedPoint.name || selectedPointLabel}
-          </div>
-          <div>乾球温度: {selectedPoint.dryBulbTemp?.toFixed(1)}°C</div>
-          <div>相対湿度: {selectedPoint.relativeHumidity?.toFixed(0)}%</div>
-          <div>絶対湿度: {selectedPoint.humidity?.toFixed(4)} kg/kg'</div>
-          <div>エンタルピー: {selectedPoint.enthalpy?.toFixed(1)} kJ/kg'</div>
-          <div>露点温度: {selectedPoint.dewPoint?.toFixed(1)}°C</div>
-          <div>
-            風量:{' '}
-            {typeof selectedPoint.airflow === 'number'
-              ? `${selectedPoint.airflow.toFixed(0)} m³/h`
-              : '-'}
-          </div>
-        </div>
-      )}
       <canvas
         ref={canvasRef}
         width={width}
