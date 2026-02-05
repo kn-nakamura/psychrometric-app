@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Plus, Settings, Download, FolderOpen, Edit2, Trash2, Copy, ChevronUp, ChevronDown, FilePlus } from 'lucide-react';
 import { useProjectStore } from './store/projectStore';
 import { PsychrometricChart, PsychrometricChartRef } from './components/Chart/PsychrometricChart';
@@ -198,6 +198,8 @@ function App() {
   }, [movePointId, selectedPointId]);
 
   const selectedPoint = statePoints.find((point) => point.id === selectedPointId) ?? null;
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [tooltipSize, setTooltipSize] = useState<{ width: number; height: number } | null>(null);
 
   const baseChartConfig = useMemo(() => {
     return createDynamicChartConfig(chartSize.width, chartSize.height, statePoints);
@@ -214,6 +216,94 @@ function App() {
     }
     return chartCoordinates.toCanvas(selectedPoint.dryBulbTemp, selectedPoint.humidity);
   }, [chartCoordinates, selectedPoint]);
+
+  useLayoutEffect(() => {
+    if (!tooltipRef.current) return;
+    const { width, height } = tooltipRef.current.getBoundingClientRect();
+    if (!width || !height) return;
+    setTooltipSize((current) => {
+      if (current?.width === width && current?.height === height) {
+        return current;
+      }
+      return { width, height };
+    });
+  }, [
+    selectedPoint?.id,
+    selectedPointPosition?.x,
+    selectedPointPosition?.y,
+    movePointId,
+    activeSeason,
+    chartSize.width,
+    chartSize.height,
+  ]);
+
+  const tooltipLayout = useMemo(() => {
+    if (!selectedPointPosition) return null;
+    const width = tooltipSize?.width ?? 260;
+    const height = tooltipSize?.height ?? 210;
+    const margin = 12;
+    const arrowSize = 10;
+    const gap = arrowSize + 6;
+
+    const availableTop = selectedPointPosition.y - margin;
+    const availableBottom = chartSize.height - selectedPointPosition.y - margin;
+    const availableLeft = selectedPointPosition.x - margin;
+    const availableRight = chartSize.width - selectedPointPosition.x - margin;
+
+    let placement: 'top' | 'right' | 'bottom' | 'left' = 'top';
+    if (availableTop >= height + gap) {
+      placement = 'top';
+    } else if (availableRight >= width + gap) {
+      placement = 'right';
+    } else if (availableLeft >= width + gap) {
+      placement = 'left';
+    } else {
+      placement = 'bottom';
+    }
+
+    let left = selectedPointPosition.x - width / 2;
+    let top = selectedPointPosition.y - height - gap;
+    if (placement === 'bottom') {
+      top = selectedPointPosition.y + gap;
+    }
+    if (placement === 'left') {
+      left = selectedPointPosition.x - width - gap;
+      top = selectedPointPosition.y - height / 2;
+    }
+    if (placement === 'right') {
+      left = selectedPointPosition.x + gap;
+      top = selectedPointPosition.y - height / 2;
+    }
+
+    const clampedLeft = Math.min(Math.max(left, margin), chartSize.width - width - margin);
+    const clampedTop = Math.min(Math.max(top, margin), chartSize.height - height - margin);
+
+    const arrowInset = 8;
+    const arrowLeft = Math.min(
+      Math.max(selectedPointPosition.x - clampedLeft - arrowSize / 2, arrowInset),
+      width - arrowInset - arrowSize
+    );
+    const arrowTop = Math.min(
+      Math.max(selectedPointPosition.y - clampedTop - arrowSize / 2, arrowInset),
+      height - arrowInset - arrowSize
+    );
+
+    const arrowStyle: CSSProperties =
+      placement === 'top'
+        ? { left: arrowLeft, bottom: -arrowSize / 2 }
+        : placement === 'bottom'
+        ? { left: arrowLeft, top: -arrowSize / 2 }
+        : placement === 'left'
+        ? { right: -arrowSize / 2, top: arrowTop }
+        : { left: -arrowSize / 2, top: arrowTop };
+
+    return {
+      left: clampedLeft,
+      top: clampedTop,
+      placement,
+      arrowStyle,
+    };
+  }, [chartSize.height, chartSize.width, selectedPointPosition, tooltipSize]);
 
   const handleZoomStart = (clientX: number, clientY: number) => {
     if (!zoomMode) return;
@@ -1595,16 +1685,19 @@ function App() {
                   />
                 )}
               </div>
-              {selectedPoint && selectedPointPosition && (
+              {selectedPoint && selectedPointPosition && tooltipLayout && (
                 <div
                   className="absolute z-10"
                   style={{
-                    left: selectedPointPosition.x,
-                    top: selectedPointPosition.y,
-                    transform: 'translate(-50%, -120%)',
+                    left: tooltipLayout.left,
+                    top: tooltipLayout.top,
                   }}
                 >
-                  <div className="relative rounded-lg border border-gray-200 bg-white shadow-lg px-4 py-3 text-xs text-gray-700 min-w-[220px]">
+                  <div
+                    ref={tooltipRef}
+                    className="relative rounded-lg border border-gray-200 bg-white shadow-lg px-4 py-3 text-xs text-gray-700 min-w-[220px]"
+                    data-placement={tooltipLayout.placement}
+                  >
                     <div className="flex items-center justify-between gap-2">
                       <div className="font-semibold text-sm text-gray-900">{selectedPoint.name}</div>
                       <span
@@ -1692,7 +1785,10 @@ function App() {
                         </label>
                       </div>
                     )}
-                    <div className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1 rotate-45 border-b border-r border-gray-200 bg-white" />
+                    <div
+                      className="absolute h-3 w-3 rotate-45 border border-gray-200 bg-white"
+                      style={tooltipLayout.arrowStyle}
+                    />
                   </div>
                 </div>
               )}
