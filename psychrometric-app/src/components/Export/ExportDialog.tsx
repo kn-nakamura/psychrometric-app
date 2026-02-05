@@ -447,8 +447,8 @@ export const ExportDialog = ({
       setFont('normal', 2.1);
       const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}% | 絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg'`;
       const propTextLine2 = `エンタルピー: ${formatNumber(point.enthalpy)} kJ/kg' | 風量: ${formatAirflow(point.airflow)} | 季節: ${seasonLabel(point.season)}`;
-      pdf.text(propTextLine1, x + 7, y + 4.8);
-      pdf.text(propTextLine2, x + 7, y + 7);
+      pdf.text(propTextLine1, x + 7, y + 5.4);
+      pdf.text(propTextLine2, x + 7, y + 8.2);
     };
 
     const drawProcessCard = (process: Process, x: number, y: number) => {
@@ -485,7 +485,7 @@ export const ExportDialog = ({
         }
       }
 
-      const processLineHeight = 3.2;
+      const processLineHeight = 3.6;
       const processHeaderHeight = 5;
       const processCardHeight = processHeaderHeight + detailLines.length * processLineHeight + 1;
 
@@ -508,7 +508,7 @@ export const ExportDialog = ({
 
       setFont('normal', 2.1);
       detailLines.forEach((line, lineIndex) => {
-        pdf.text(line, x + 2.5, y + 6.4 + lineIndex * processLineHeight);
+        pdf.text(line, x + 2.5, y + 7.0 + lineIndex * processLineHeight);
       });
 
       return processCardHeight;
@@ -617,7 +617,7 @@ export const ExportDialog = ({
     pdf.text('状態点', marginMm, statePointY + 2.5);
     statePointY += 5;
 
-    const statePointCardHeight = 12;
+    const statePointCardHeight = 14;
     const statePointMaxY = A4_HEIGHT_MM - marginMm;
     const statePointOverflow: StatePoint[] = [];
 
@@ -676,7 +676,7 @@ export const ExportDialog = ({
         }
       }
 
-      const processLineHeight = 3.2;
+      const processLineHeight = 3.6;
       const processHeaderHeight = 5;
       const processCardHeight = processHeaderHeight + detailLines.length * processLineHeight + 1;
       if (processY + processCardHeight > processMaxY) {
@@ -884,7 +884,7 @@ export const ExportDialog = ({
     statePointY += mmToPx(5);
 
     // 状態点テーブルヘッダー
-    const statePointCardHeight = mmToPx(10);
+    const statePointCardHeight = mmToPx(12);
     const statePointMaxY = pageHeightPx - marginPx;
     const statePointOverflow: StatePoint[] = [];
 
@@ -922,8 +922,8 @@ export const ExportDialog = ({
         typeof point.airflow === 'number' ? `${point.airflow.toFixed(0)} m³/h` : '-';
       const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}% | 絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg'`;
       const propTextLine2 = `エンタルピー: ${formatNumber(point.enthalpy)} kJ/kg' | 風量: ${airflowText} | 季節: ${seasonLabel(point.season)}`;
-      ctx1.fillText(propTextLine1, marginPx + mmToPx(7), statePointY + mmToPx(4.8));
-      ctx1.fillText(propTextLine2, marginPx + mmToPx(7), statePointY + mmToPx(7));
+      ctx1.fillText(propTextLine1, marginPx + mmToPx(7), statePointY + mmToPx(5.4));
+      ctx1.fillText(propTextLine2, marginPx + mmToPx(7), statePointY + mmToPx(8.2));
 
       statePointY += statePointCardHeight;
     });
@@ -941,7 +941,7 @@ export const ExportDialog = ({
       processY += mmToPx(5);
     }
 
-    const processLineHeight = mmToPx(2.7);
+    const processLineHeight = mmToPx(3.0);
     const processHeaderHeight = mmToPx(5);
     const processMaxY = pageHeightPx - marginPx;
     const processOverflow: Process[] = [];
@@ -1013,7 +1013,7 @@ export const ExportDialog = ({
         ctx1.fillText(
           line,
           processX + mmToPx(2.5),
-          processY + mmToPx(6.4) + lineIndex * processLineHeight
+          processY + mmToPx(7.0) + lineIndex * processLineHeight
         );
       });
 
@@ -1079,8 +1079,8 @@ export const ExportDialog = ({
             typeof point.airflow === 'number' ? `${point.airflow.toFixed(0)} m³/h` : '-';
           const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}% | 絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg'`;
           const propTextLine2 = `エンタルピー: ${formatNumber(point.enthalpy)} kJ/kg' | 風量: ${airflowText} | 季節: ${seasonLabel(point.season)}`;
-          ctx2.fillText(propTextLine1, marginPx + mmToPx(7), currentY + mmToPx(4.8));
-          ctx2.fillText(propTextLine2, marginPx + mmToPx(7), currentY + mmToPx(7));
+          ctx2.fillText(propTextLine1, marginPx + mmToPx(7), currentY + mmToPx(5.4));
+          ctx2.fillText(propTextLine2, marginPx + mmToPx(7), currentY + mmToPx(8.2));
 
           currentY += statePointCardHeight;
         });
@@ -1153,7 +1153,7 @@ export const ExportDialog = ({
             ctx2.fillText(
               line,
               marginPx + mmToPx(2.5),
-              currentY + mmToPx(6.4) + lineIndex * processLineHeight
+              currentY + mmToPx(7.0) + lineIndex * processLineHeight
             );
           });
 
