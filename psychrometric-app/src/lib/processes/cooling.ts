@@ -118,7 +118,7 @@ export class CoolingProcess {
     const totalEnthalpyDiff = (coolingCapacity * 3600) / massFlow;
     const fromRH = fromPoint.relativeHumidity ?? outletRH;
 
-    let sensibleTargetPoint = fromPoint;
+    let sensibleTargetPoint: Partial<StatePoint> = fromPoint;
     let enthalpyDropToRH = 0;
     if (outletRH > fromRH) {
       sensibleTargetPoint = StatePointConverter.fromRHAndHumidity(
