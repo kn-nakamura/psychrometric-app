@@ -62,6 +62,10 @@ export interface ChartRenderContext {
   fill: () => void;
   arc: (x: number, y: number, radius: number, startAngle: number, endAngle: number) => void;
   fillText: (text: string, x: number, y: number) => void;
+  save?: () => void;
+  restore?: () => void;
+  translate?: (x: number, y: number) => void;
+  rotate?: (angle: number) => void;
   setLineDash: (segments: number[]) => void;
   strokeStyle: string | CanvasGradient | CanvasPattern;
   fillStyle: string | CanvasGradient | CanvasPattern;
@@ -268,7 +272,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
           y: lastPoint.y,
           text: `${rh}%`,
           showarrow: false,
-          font: { size: 9, color: '#d96b1a' },
+          font: { size: 8, color: '#d96b1a' },
           xanchor: 'left',
         });
       }
@@ -444,8 +448,8 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         gridcolor: '#e0e0e0',
         zeroline: false,
         fixedrange: true,
-        tickfont: { size: 10, color: '#666' },
-        title: { text: '乾球温度 (°C)', font: { size: 11, color: '#444' } },
+        tickfont: { size: 9, color: '#666' },
+        title: { text: '乾球温度 (°C)', font: { size: 10, color: '#444' } },
       },
       yaxis: {
         range: [range.humidityMin, range.humidityMax],
@@ -459,8 +463,8 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         gridcolor: '#e0e0e0',
         zeroline: false,
         fixedrange: true,
-        tickfont: { size: 10, color: '#666' },
-        title: { text: "絶対湿度 (g/kg')", font: { size: 11, color: '#444' } },
+        tickfont: { size: 9, color: '#666' },
+        title: { text: "絶対湿度 (g/kg')", font: { size: 10, color: '#444' } },
       },
       dragmode: false,
       hovermode: 'closest',
@@ -699,6 +703,10 @@ function drawGrid(
 ) {
   ctx.strokeStyle = '#e0e0e0';
   ctx.lineWidth = 1;
+  const tickFontSize = 8;
+  const axisTitleFontSize = 8;
+  const rightAxisLabelOffset = 10;
+  const rightAxisTitleOffset = 60;
 
   // 縦線（温度）
   for (let temp = Math.ceil(range.tempMin / 5) * 5; temp <= range.tempMax; temp += 5) {
@@ -713,7 +721,7 @@ function drawGrid(
 
     // ラベル
     ctx.fillStyle = '#666';
-    ctx.font = '10px sans-serif';
+    ctx.font = `${tickFontSize}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.fillText(`${temp}°C`, x, y1 + 20);
   }
@@ -731,10 +739,33 @@ function drawGrid(
 
     // ラベル - 数値のみ (kg/kg' × 1000)
     ctx.fillStyle = '#666';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'right';
+    ctx.font = `${tickFontSize}px sans-serif`;
+    ctx.textAlign = 'left';
     const gPerKg = h * 1000;
-    ctx.fillText(`${gPerKg.toFixed(0)}`, x2 - 10, y + 4);
+    ctx.fillText(`${gPerKg.toFixed(0)}`, x2 + rightAxisLabelOffset, y + 4);
+  }
+
+  // Axis titles
+  ctx.fillStyle = '#444';
+  ctx.font = `${axisTitleFontSize}px sans-serif`;
+  ctx.textAlign = 'center';
+  const xCenter = (coordinates.tempToX(range.tempMin) + coordinates.tempToX(range.tempMax)) / 2;
+  const xAxisY = coordinates.humidityToY(range.humidityMin) + 34;
+  ctx.fillText('乾球温度 (°C)', xCenter, xAxisY);
+
+  const yAxisX = coordinates.tempToX(range.tempMax) + rightAxisLabelOffset + rightAxisTitleOffset;
+  const yAxisY = (coordinates.humidityToY(range.humidityMin) + coordinates.humidityToY(range.humidityMax)) / 2;
+  if (ctx.save && ctx.restore && ctx.translate && ctx.rotate) {
+    ctx.save();
+    ctx.translate(yAxisX, yAxisY);
+    ctx.rotate(Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText("絶対湿度 (g/kg')", 0, 0);
+    ctx.restore();
+  } else {
+    ctx.textAlign = 'left';
+    ctx.fillText("絶対湿度 (g/kg')", yAxisX, yAxisY);
   }
 }
 
@@ -780,7 +811,7 @@ function drawRHCurves(
       const lastPoint = clippedPoints[clippedPoints.length - 1];
       const { x, y } = coordinates.toCanvas(lastPoint.x, lastPoint.y);
       ctx.fillStyle = saturationColor;
-      ctx.font = '9px sans-serif';
+      ctx.font = '7px sans-serif';
       ctx.fillText(`${rh}%`, x + 5, y);
     }
   });
@@ -924,7 +955,7 @@ function drawStatePoints(
 
     // ラベルを右横に表示
     ctx.fillStyle = pointColor;
-    ctx.font = 'bold 10px sans-serif';
+    ctx.font = 'bold 8px sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, x + 8, y);
@@ -991,7 +1022,7 @@ function drawProcesses(
       if (typeof stream1Point.airflow === 'number' && typeof stream2Point.airflow === 'number') {
         const totalAirflow = stream1Point.airflow + stream2Point.airflow;
         ctx.fillStyle = '#333';
-        ctx.font = '9px sans-serif';
+        ctx.font = '7px sans-serif';
         ctx.textAlign = 'left';
         ctx.fillText(`${totalAirflow.toFixed(0)} m³/h`, to.x + 10, to.y + 12);
       }

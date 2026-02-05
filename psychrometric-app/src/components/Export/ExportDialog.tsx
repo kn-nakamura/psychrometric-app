@@ -74,6 +74,8 @@ class PdfRenderContext implements ChartRenderContext {
   private segments: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
   private circle: { x: number; y: number; r: number } | null = null;
   private lineDash: number[] = [];
+  private transformStack: Array<{ x: number; y: number; rotation: number }> = [];
+  private transform = { x: 0, y: 0, rotation: 0 };
 
   constructor(
     private pdf: jsPDF,
@@ -179,14 +181,38 @@ class PdfRenderContext implements ChartRenderContext {
     this.pdf.setTextColor(r, g, b);
     const align = this.textAlign === 'center' ? 'center' : this.textAlign === 'right' ? 'right' : 'left';
     const baseline = this.textBaseline === 'middle' ? 'middle' : this.textBaseline === 'bottom' ? 'bottom' : 'top';
-    this.pdf.text(text, this.offsetX + x * this.scale, this.offsetY + y * this.scale, {
+    const transformX = x + this.transform.x;
+    const transformY = y + this.transform.y;
+    const angle = this.transform.rotation ? (this.transform.rotation * 180) / Math.PI : 0;
+    this.pdf.text(text, this.offsetX + transformX * this.scale, this.offsetY + transformY * this.scale, {
       align,
       baseline,
+      angle,
     });
   };
 
   setLineDash = (segments: number[]) => {
     this.lineDash = segments;
+  };
+
+  save = () => {
+    this.transformStack.push({ ...this.transform });
+  };
+
+  restore = () => {
+    const restored = this.transformStack.pop();
+    if (restored) {
+      this.transform = restored;
+    }
+  };
+
+  translate = (x: number, y: number) => {
+    this.transform.x += x;
+    this.transform.y += y;
+  };
+
+  rotate = (angle: number) => {
+    this.transform.rotation += angle;
   };
 }
 
@@ -224,6 +250,13 @@ const loadNotoSansJpFontData = async (): Promise<string | null> => {
       });
   }
   return notoSansJpFontDataPromise;
+};
+
+const isMobileDevice = () => {
+  if (typeof navigator === 'undefined') {
+    return false;
+  }
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 };
 
 export const ExportDialog = ({
@@ -345,6 +378,9 @@ export const ExportDialog = ({
 
   const preparePdfFonts = async (pdf: jsPDF): Promise<boolean> => {
     try {
+      if (isMobileDevice()) {
+        return false;
+      }
       if (!pdf.existsFileInVFS('NotoSansJP-Regular.ttf')) {
         const fontData = await loadNotoSansJpFontData();
         if (fontData) {
@@ -398,7 +434,7 @@ export const ExportDialog = ({
     const chartRenderWidthPx = Math.round((drawChartWidthMm / 25.4) * A4_DPI);
     const chartRenderHeightPx = Math.round((drawChartHeightMm / 25.4) * A4_DPI);
     const chartScale = drawChartWidthMm / chartRenderWidthPx;
-    const chartTextScale = 1.4;
+    const chartTextScale = 1.2;
 
     const drawStatePointCard = (point: StatePoint, index: number, x: number, y: number) => {
       const label = getPointLabel(point, index);
