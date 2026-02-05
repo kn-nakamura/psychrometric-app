@@ -1151,7 +1151,6 @@ export const ExportDialog = ({
     setExportType('png');
 
     try {
-      const canvas = canvasRef.current;
       const pages = buildA4Pages();
       const dataUrl = pages[0].toDataURL('image/png');
 
