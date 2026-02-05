@@ -293,43 +293,55 @@ function drawGrid(
 ) {
   ctx.strokeStyle = '#e0e0e0';
   ctx.lineWidth = 1;
+  const xMin = coordinates.tempToX(range.tempMin);
+  const xMax = coordinates.tempToX(range.tempMax);
+  const yMin = coordinates.humidityToY(range.humidityMin);
+  const yMax = coordinates.humidityToY(range.humidityMax);
 
   // 縦線（温度）
   for (let temp = Math.ceil(range.tempMin / 5) * 5; temp <= range.tempMax; temp += 5) {
     const x = coordinates.tempToX(temp);
-    const y1 = coordinates.humidityToY(range.humidityMin);
-    const y2 = coordinates.humidityToY(range.humidityMax);
 
     ctx.beginPath();
-    ctx.moveTo(x, y1);
-    ctx.lineTo(x, y2);
+    ctx.moveTo(x, yMin);
+    ctx.lineTo(x, yMax);
     ctx.stroke();
 
     // ラベル
     ctx.fillStyle = '#666';
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`${temp}°C`, x, y1 + 20);
+    ctx.fillText(`${temp}`, x, yMin + 20);
   }
 
-  // 横線（絶対湿度）- g/kg' 形式で表示
+  // 横線（絶対湿度）
   for (let h = 0; h <= range.humidityMax; h += 0.005) {
     const y = coordinates.humidityToY(h);
-    const x1 = coordinates.tempToX(range.tempMin);
-    const x2 = coordinates.tempToX(range.tempMax);
 
     ctx.beginPath();
-    ctx.moveTo(x1, y);
-    ctx.lineTo(x2, y);
+    ctx.moveTo(xMin, y);
+    ctx.lineTo(xMax, y);
     ctx.stroke();
 
-    // ラベル - g/kg' 形式 (kg/kg' × 1000 = g/kg')
+    // ラベル (kg/kg' × 1000 = g/kg')
     ctx.fillStyle = '#666';
     ctx.font = '10px sans-serif';
-    ctx.textAlign = 'right';
+    ctx.textAlign = 'left';
     const gPerKg = h * 1000;
-    ctx.fillText(`${gPerKg.toFixed(0)} g/kg'`, x1 - 10, y + 4);
+    ctx.fillText(`${gPerKg.toFixed(0)}`, xMax + 10, y + 4);
   }
+
+  // 軸ラベル
+  ctx.fillStyle = '#444';
+  ctx.font = '12px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('温度[℃]', (xMin + xMax) / 2, yMin + 36);
+
+  ctx.save();
+  ctx.translate(xMax + 40, (yMin + yMax) / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('絶対湿度[g/kg’]', 0, 0);
+  ctx.restore();
 }
 
 function drawRHCurves(
