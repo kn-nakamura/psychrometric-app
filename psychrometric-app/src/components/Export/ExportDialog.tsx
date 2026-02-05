@@ -196,7 +196,11 @@ export const ExportDialog = ({
     return false;
   };
 
-  const renderPdfPages = (chartCanvas: HTMLCanvasElement, pdf: jsPDF, hasJapaneseFont: boolean) => {
+  const renderPdfPages = async (
+    chartCanvas: HTMLCanvasElement,
+    pdf: jsPDF,
+    hasJapaneseFont: boolean
+  ) => {
 
     const marginMm = 8;
     const headerHeightMm = 14;
@@ -407,7 +411,7 @@ export const ExportDialog = ({
     const chartY = chartTopMm;
     pdf.setDrawColor(229, 231, 235);
     pdf.rect(marginMm, chartY, chartWidthMm, chartHeightMm, 'S');
-    pdf.addSvgAsImage(
+    await pdf.addSvgAsImage(
       chartSvg,
       chartXOffset,
       chartY + (chartHeightMm - drawChartHeightMm) / 2,
@@ -1038,7 +1042,7 @@ export const ExportDialog = ({
           'PDF用フォントが読み込めませんでした。public/fonts/NotoSansJP-Regular.ttf を配置するか、外部フォントURLへのアクセスを許可してください。'
         );
       }
-      renderPdfPages(canvas, pdf, hasJapaneseFont);
+      await renderPdfPages(canvas, pdf, hasJapaneseFont);
 
       // PDFをBlobとして生成し、新しいウィンドウで開く
       const pdfBlob = pdf.output('blob');
