@@ -246,7 +246,6 @@ function App() {
     const gap = arrowSize + 6;
 
     const availableTop = selectedPointPosition.y - margin;
-    const availableBottom = chartSize.height - selectedPointPosition.y - margin;
     const availableLeft = selectedPointPosition.x - margin;
     const availableRight = chartSize.width - selectedPointPosition.x - margin;
 
