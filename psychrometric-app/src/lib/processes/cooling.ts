@@ -116,44 +116,45 @@ export class CoolingProcess {
     );
     const massFlow = airflow * density;
     const totalEnthalpyDiff = (coolingCapacity * 3600) / massFlow;
-    const targetEnthalpy = fromPoint.enthalpy! - totalEnthalpyDiff;
+    const fromRH = fromPoint.relativeHumidity ?? outletRH;
 
-    const maxTemp = fromPoint.dryBulbTemp ?? 50;
-    let low = Math.max(-30, maxTemp - 80);
-    let high = maxTemp;
-
-    const enthalpyAt = (temp: number) =>
-      StatePointConverter.fromDryBulbAndRH(temp, outletRH, effectivePressure, resolved).enthalpy!;
-
-    const lowEnthalpy = enthalpyAt(low);
-    const highEnthalpy = enthalpyAt(high);
-
-    if (targetEnthalpy >= highEnthalpy) {
-      low = high;
-    } else if (targetEnthalpy <= lowEnthalpy) {
-      high = low;
-    } else {
-      for (let i = 0; i < 40; i += 1) {
-        const mid = (low + high) / 2;
-        const midEnthalpy = enthalpyAt(mid);
-        if (midEnthalpy > targetEnthalpy) {
-          high = mid;
-        } else {
-          low = mid;
-        }
-      }
+    let sensibleTargetPoint = fromPoint;
+    let enthalpyDropToRH = 0;
+    if (outletRH > fromRH) {
+      sensibleTargetPoint = StatePointConverter.fromRHAndHumidity(
+        outletRH,
+        fromPoint.humidity!,
+        effectivePressure,
+        resolved
+      );
+      enthalpyDropToRH = Math.max(
+        0,
+        fromPoint.enthalpy! - sensibleTargetPoint.enthalpy!
+      );
     }
 
-    const toTemp = (low + high) / 2;
-    const toPoint = StatePointConverter.fromDryBulbAndRH(
-      toTemp,
-      outletRH,
-      effectivePressure,
-      resolved
-    );
+    let toPoint: Partial<StatePoint>;
+    if (totalEnthalpyDiff <= enthalpyDropToRH + 1e-6) {
+      const targetEnthalpy = fromPoint.enthalpy! - totalEnthalpyDiff;
+      toPoint = StatePointConverter.fromEnthalpyAndHumidity(
+        targetEnthalpy,
+        fromPoint.humidity!,
+        effectivePressure,
+        resolved
+      );
+    } else {
+      const remainingEnthalpyDiff = totalEnthalpyDiff - enthalpyDropToRH;
+      const targetEnthalpy = sensibleTargetPoint.enthalpy! - remainingEnthalpyDiff;
+      toPoint = StatePointConverter.fromRHAndEnthalpy(
+        outletRH,
+        targetEnthalpy,
+        effectivePressure,
+        resolved
+      );
+    }
 
     const enthalpyDiff = fromPoint.enthalpy! - toPoint.enthalpy!;
-    const temperatureDiff = fromPoint.dryBulbTemp! - toTemp;
+    const temperatureDiff = fromPoint.dryBulbTemp! - toPoint.dryBulbTemp!;
     const humidityDiff = fromPoint.humidity! - toPoint.humidity!;
     const sensibleHeat = (massFlow * resolved.cpAir * temperatureDiff) / 3600;
     const latentHeat = (massFlow * resolved.latentHeat0c * humidityDiff) / 3600;
