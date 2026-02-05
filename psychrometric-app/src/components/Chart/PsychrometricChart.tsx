@@ -646,10 +646,10 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       <div
         ref={plotContainerRef}
         className="h-full w-full"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
+        onPointerDownCapture={handlePointerDown}
+        onPointerMoveCapture={handlePointerMove}
+        onPointerUpCapture={handlePointerUp}
+        onPointerLeaveCapture={handlePointerUp}
         style={{ touchAction: isDragging ? 'none' : 'auto' }}
       />
       {selectedPoint && selectedPointPosition && selectedPointColor && (
