@@ -473,7 +473,8 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       },
       dragmode: 'pan',
       clickmode: 'event+select',
-      hovermode: 'closest',
+      hovermode: false,
+      hoverdistance: -1,
       showlegend: false,
     };
   }, [chartConfig, width, height]);
