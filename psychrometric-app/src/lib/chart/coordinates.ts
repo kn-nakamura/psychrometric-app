@@ -29,6 +29,10 @@ export class ChartCoordinates {
     this.dimensions = dimensions;
     this.range = range;
   }
+
+  getDimensions(): ChartDimensions {
+    return this.dimensions;
+  }
   
   /**
    * プロット領域の幅を取得
@@ -179,7 +183,7 @@ export function createDefaultChartConfig(
       width,
       height,
       marginTop: 20,
-      marginRight: 28,
+      marginRight: 64,
       marginBottom: 44,
       marginLeft: 56,
     },

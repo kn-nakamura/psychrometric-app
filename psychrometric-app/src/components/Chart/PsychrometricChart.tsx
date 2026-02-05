@@ -293,10 +293,15 @@ function drawGrid(
 ) {
   ctx.strokeStyle = '#e0e0e0';
   ctx.lineWidth = 1;
+  const { width: canvasWidth, height: canvasHeight, marginBottom } = coordinates.getDimensions();
   const xMin = coordinates.tempToX(range.tempMin);
   const xMax = coordinates.tempToX(range.tempMax);
   const yMin = coordinates.humidityToY(range.humidityMin);
   const yMax = coordinates.humidityToY(range.humidityMax);
+  const rightMargin = Math.max(0, canvasWidth - xMax);
+  const tickLabelX = Math.min(canvasWidth - 6, xMax + Math.max(6, Math.min(12, rightMargin - 6)));
+  const axisTitleX = Math.min(canvasWidth - 12, xMax + Math.max(16, rightMargin / 2));
+  const axisTitleY = Math.min(canvasHeight - 8, yMin + Math.max(20, marginBottom / 2));
 
   // 縦線（温度）
   for (let temp = Math.ceil(range.tempMin / 5) * 5; temp <= range.tempMax; temp += 5) {
@@ -309,9 +314,9 @@ function drawGrid(
 
     // ラベル
     ctx.fillStyle = '#666';
-    ctx.font = '10px sans-serif';
+    ctx.font = '10px "Noto Sans JP", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`${temp}`, x, yMin + 20);
+    ctx.fillText(`${temp}`, x, Math.min(canvasHeight - 8, yMin + 20));
   }
 
   // 横線（絶対湿度）
@@ -325,20 +330,20 @@ function drawGrid(
 
     // ラベル (kg/kg' × 1000 = g/kg')
     ctx.fillStyle = '#666';
-    ctx.font = '10px sans-serif';
+    ctx.font = '10px "Noto Sans JP", sans-serif';
     ctx.textAlign = 'left';
     const gPerKg = h * 1000;
-    ctx.fillText(`${gPerKg.toFixed(0)}`, xMax + 10, y + 4);
+    ctx.fillText(`${gPerKg.toFixed(0)}`, tickLabelX, y + 4);
   }
 
   // 軸ラベル
   ctx.fillStyle = '#444';
-  ctx.font = '12px sans-serif';
+  ctx.font = '12px "Noto Sans JP", sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('温度[℃]', (xMin + xMax) / 2, yMin + 36);
+  ctx.fillText('温度[℃]', (xMin + xMax) / 2, axisTitleY);
 
   ctx.save();
-  ctx.translate(xMax + 40, (yMin + yMax) / 2);
+  ctx.translate(axisTitleX, (yMin + yMax) / 2);
   ctx.rotate(-Math.PI / 2);
   ctx.fillText('絶対湿度[g/kg’]', 0, 0);
   ctx.restore();
