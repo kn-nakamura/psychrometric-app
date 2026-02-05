@@ -86,6 +86,89 @@ export class CoolingProcess {
     
     return { toPoint, results };
   }
+
+  /**
+   * 冷却能力と出口相対湿度から出口状態を計算
+   *
+   * @param fromPoint 入口状態点
+   * @param coolingCapacity 冷却能力 [kW] (正の値)
+   * @param outletRH 出口相対湿度 [%]
+   * @param airflow 風量 [m³/h]
+   * @param pressure 大気圧 [kPa]
+   * @returns 出口状態点と計算結果
+   */
+  static calculateByCapacityAndOutletRH(
+    fromPoint: StatePoint,
+    coolingCapacity: number,
+    outletRH: number,
+    airflow: number,
+    pressure?: number,
+    constants?: Partial<PsychrometricConstants>
+  ): { toPoint: Partial<StatePoint>; results: ProcessResults } {
+    const resolved = resolvePsychrometricConstants(constants);
+    const effectivePressure = pressure ?? resolved.standardPressure;
+
+    const density = PsychrometricCalculator.airDensity(
+      fromPoint.dryBulbTemp!,
+      fromPoint.humidity!,
+      effectivePressure,
+      resolved
+    );
+    const massFlow = airflow * density;
+    const totalEnthalpyDiff = (coolingCapacity * 3600) / massFlow;
+    const targetEnthalpy = fromPoint.enthalpy! - totalEnthalpyDiff;
+
+    const maxTemp = fromPoint.dryBulbTemp ?? 50;
+    let low = Math.max(-30, maxTemp - 80);
+    let high = maxTemp;
+
+    const enthalpyAt = (temp: number) =>
+      StatePointConverter.fromDryBulbAndRH(temp, outletRH, effectivePressure, resolved).enthalpy!;
+
+    const lowEnthalpy = enthalpyAt(low);
+    const highEnthalpy = enthalpyAt(high);
+
+    if (targetEnthalpy >= highEnthalpy) {
+      low = high;
+    } else if (targetEnthalpy <= lowEnthalpy) {
+      high = low;
+    } else {
+      for (let i = 0; i < 40; i += 1) {
+        const mid = (low + high) / 2;
+        const midEnthalpy = enthalpyAt(mid);
+        if (midEnthalpy > targetEnthalpy) {
+          high = mid;
+        } else {
+          low = mid;
+        }
+      }
+    }
+
+    const toTemp = (low + high) / 2;
+    const toPoint = StatePointConverter.fromDryBulbAndRH(
+      toTemp,
+      outletRH,
+      effectivePressure,
+      resolved
+    );
+
+    const enthalpyDiff = fromPoint.enthalpy! - toPoint.enthalpy!;
+    const temperatureDiff = fromPoint.dryBulbTemp! - toTemp;
+    const humidityDiff = fromPoint.humidity! - toPoint.humidity!;
+    const sensibleHeat = (massFlow * resolved.cpAir * temperatureDiff) / 3600;
+    const latentHeat = (massFlow * resolved.latentHeat0c * humidityDiff) / 3600;
+
+    const results: ProcessResults = {
+      sensibleHeat,
+      latentHeat,
+      totalHeat: coolingCapacity,
+      enthalpyDiff: -enthalpyDiff,
+      humidityDiff: -humidityDiff,
+      temperatureDiff: -temperatureDiff,
+    };
+
+    return { toPoint, results };
+  }
   
   /**
    * 出口温度と相対湿度から冷却能力を計算

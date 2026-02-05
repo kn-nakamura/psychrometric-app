@@ -279,7 +279,7 @@ export const ExportDialog = ({
           `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${Math.abs(capacity.sensibleCapacity).toFixed(2)} kW | 潜熱: ${Math.abs(capacity.latentCapacity).toFixed(2)} kW`
         );
         detailLines.push(
-          `SHF: ${capacity.SHF.toFixed(2)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
+          `温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
         );
         detailLines.push(`比エンタルピー差: ${capacity.enthalpyDiff.toFixed(2)} kJ/kg'`);
         if (process.parameters.airflow && capacity.humidityDiff !== 0) {
@@ -466,7 +466,7 @@ export const ExportDialog = ({
           `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${Math.abs(capacity.sensibleCapacity).toFixed(2)} kW | 潜熱: ${Math.abs(capacity.latentCapacity).toFixed(2)} kW`
         );
         detailLines.push(
-          `SHF: ${capacity.SHF.toFixed(2)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
+          `温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
         );
         detailLines.push(`比エンタルピー差: ${capacity.enthalpyDiff.toFixed(2)} kJ/kg'`);
         if (process.parameters.airflow && capacity.humidityDiff !== 0) {
@@ -777,7 +777,7 @@ export const ExportDialog = ({
           `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${Math.abs(capacity.sensibleCapacity).toFixed(2)} kW | 潜熱: ${Math.abs(capacity.latentCapacity).toFixed(2)} kW`
         );
         detailLines.push(
-          `SHF: ${capacity.SHF.toFixed(2)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
+          `温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
         );
         detailLines.push(`比エンタルピー差: ${capacity.enthalpyDiff.toFixed(2)} kJ/kg'`);
         if (process.parameters.airflow && capacity.humidityDiff !== 0) {
@@ -928,7 +928,7 @@ export const ExportDialog = ({
               `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${Math.abs(capacity.sensibleCapacity).toFixed(2)} kW | 潜熱: ${Math.abs(capacity.latentCapacity).toFixed(2)} kW`
             );
             detailLines.push(
-              `SHF: ${capacity.SHF.toFixed(2)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
+              `温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
             );
             detailLines.push(`比エンタルピー差: ${capacity.enthalpyDiff.toFixed(2)} kJ/kg'`);
             if (process.parameters.airflow && capacity.humidityDiff !== 0) {

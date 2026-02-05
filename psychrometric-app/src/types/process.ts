@@ -41,9 +41,10 @@ export interface ProcessParameters {
   
   // 加熱・冷却
   capacity?: number;          // 能力 [kW]
-  SHF?: number;              // 顕熱比 [-]
   waterTempDiff?: number;     // 温度差 [℃] (default: 7)
   waterFlowRate?: number;     // 水量 [L/min]
+  outletCalculation?: 'manual' | 'auto'; // 終点の計算方法
+  coolingOutletRelativeHumidity?: number; // 冷却コイル出口相対湿度 [%]
   
   // 加湿
   humidifyingCapacity?: number; // 加湿量 [kg/h]

@@ -155,7 +155,6 @@ export const ProcessList = ({
                     <div>全熱: {Math.abs(capacity.totalCapacity).toFixed(2)} kW</div>
                     <div>顕熱: {Math.abs(capacity.sensibleCapacity).toFixed(2)} kW</div>
                     <div>潜熱: {Math.abs(capacity.latentCapacity).toFixed(2)} kW</div>
-                    <div>SHF: {capacity.SHF.toFixed(2)}</div>
                     <div>温度差: {capacity.temperatureDiff.toFixed(1)}°C</div>
                     <div>湿度差: {(capacity.humidityDiff * 1000).toFixed(2)} g/kg'</div>
                     <div>比エンタルピー差: {capacity.enthalpyDiff.toFixed(2)} kJ/kg'</div>

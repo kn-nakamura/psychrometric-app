@@ -63,14 +63,17 @@ export const ProcessDialog = ({
       setFromPointId(editingProcess.fromPointId);
       setToPointId(editingProcess.toPointId);
       setSeason(editingProcess.season);
-      setParameters(editingProcess.parameters);
+      setParameters({
+        ...editingProcess.parameters,
+        outletCalculation: editingProcess.parameters.outletCalculation ?? 'manual',
+      });
     } else {
       setName('');
       setType('cooling');
       setFromPointId(statePoints.length > 0 ? statePoints[0].id : '');
       setToPointId(statePoints.length > 1 ? statePoints[1].id : '');
       setSeason(activeSeason);
-      setParameters({ airflow: 1000 });
+      setParameters({ airflow: 1000, outletCalculation: 'manual' });
     }
   }, [editingProcess, statePoints, activeSeason, isOpen]);
 
@@ -180,12 +183,22 @@ export const ProcessDialog = ({
 
   const handleSave = () => {
     const resolvedName = name.trim() || processTypeLabels[type];
-    if (!fromPointId || (!toPointId && type !== 'mixing' && type !== 'heatExchange')) {
+    const isCoolingAuto =
+      type === 'cooling' && parameters.outletCalculation === 'auto';
+    if (!fromPointId || (!toPointId && type !== 'mixing' && type !== 'heatExchange' && !isCoolingAuto)) {
       alert('始点と終点を選択してください');
       return;
     }
-    if (type !== 'mixing' && type !== 'heatExchange' && fromPointId === toPointId) {
+    if (type !== 'mixing' && type !== 'heatExchange' && !isCoolingAuto && fromPointId === toPointId) {
       alert('始点と終点は異なる状態点を選択してください');
+      return;
+    }
+    if (isCoolingAuto && !parameters.capacity) {
+      alert('終点を自動計算するには能力欄に数値を入力してください');
+      return;
+    }
+    if (isCoolingAuto && !parameters.coolingOutletRelativeHumidity) {
+      alert('冷却コイル出口の相対湿度を入力してください');
       return;
     }
     if (type === 'mixing') {
@@ -451,18 +464,41 @@ export const ProcessDialog = ({
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 終点（出口）
               </label>
-              <select
-                value={toPointId}
-                onChange={(e) => setToPointId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">選択してください</option>
-                {filteredPoints.map((point) => (
-                  <option key={point.id} value={point.id}>
-                    {point.name} ({point.dryBulbTemp?.toFixed(1)}°C, RH{point.relativeHumidity?.toFixed(0)}%)
-                  </option>
-                ))}
-              </select>
+              {type === 'cooling' && (
+                <div className="mb-2">
+                  <select
+                    value={parameters.outletCalculation ?? 'manual'}
+                    onChange={(e) =>
+                      handleParameterChange(
+                        'outletCalculation',
+                        e.target.value as 'manual' | 'auto'
+                      )
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="manual">状態点を選択</option>
+                    <option value="auto">自動計算</option>
+                  </select>
+                </div>
+              )}
+              {type === 'cooling' && parameters.outletCalculation === 'auto' ? (
+                <div className="rounded-lg border border-dashed border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                  能力と冷却コイル出口条件から終点を自動計算します。
+                </div>
+              ) : (
+                <select
+                  value={toPointId}
+                  onChange={(e) => setToPointId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">選択してください</option>
+                  {filteredPoints.map((point) => (
+                    <option key={point.id} value={point.id}>
+                      {point.name} ({point.dryBulbTemp?.toFixed(1)}°C, RH{point.relativeHumidity?.toFixed(0)}%)
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           )}
 
@@ -507,16 +543,18 @@ export const ProcessDialog = ({
                 {type === 'cooling' && (
                   <div className="mb-3">
                     <label className="block text-sm text-gray-600 mb-1">
-                      顕熱比 SHF [-]
+                      冷却コイル出口条件（相対湿度 [%]）
                     </label>
                     <input
                       type="number"
-                      step="0.01"
-                      value={parameters.SHF || ''}
+                      value={parameters.coolingOutletRelativeHumidity || ''}
                       onChange={(e) =>
-                        handleParameterChange('SHF', parseOptionalNumber(e.target.value))
+                        handleParameterChange(
+                          'coolingOutletRelativeHumidity',
+                          parseOptionalNumber(e.target.value)
+                        )
                       }
-                      placeholder="0.0 - 1.0"
+                      placeholder="相対湿度95%"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>

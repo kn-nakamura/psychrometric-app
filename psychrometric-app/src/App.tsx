@@ -12,6 +12,7 @@ import { ChartCoordinates, ChartRange, createDynamicChartConfig } from './lib/ch
 import { resolvePsychrometricConstants } from './lib/psychrometric/constants';
 import { MixingProcess } from './lib/processes/mixing';
 import { HeatExchangeProcess } from './lib/processes/heatExchange';
+import { CoolingProcess } from './lib/processes/cooling';
 import { Process } from './types/process';
 import { DesignConditions } from './types/designConditions';
 import { StatePoint, StatePointValueKey } from './types/psychrometric';
@@ -642,6 +643,39 @@ function App() {
                 airflow: resolvedAirflow2,
               },
             },
+          },
+        };
+      }
+    }
+    if (processData.type === 'cooling' && processData.parameters.outletCalculation === 'auto') {
+      const fromPoint = statePoints.find((point) => point.id === processData.fromPointId);
+      if (fromPoint && processData.parameters.capacity && processData.parameters.coolingOutletRelativeHumidity) {
+        const pressure = defaultPressure;
+        const resolvedAirflow =
+          processData.parameters.airflow ?? resolvePointAirflow(fromPoint) ?? 1000;
+        const { toPoint } = CoolingProcess.calculateByCapacityAndOutletRH(
+          fromPoint,
+          processData.parameters.capacity,
+          processData.parameters.coolingOutletRelativeHumidity,
+          resolvedAirflow,
+          pressure,
+          calculationConstants
+        );
+        const newPointId = `point-${Date.now()}`;
+        addStatePoint({
+          id: newPointId,
+          name: `${processData.name} 冷却コイル出口`,
+          season: processData.season,
+          order: statePoints.length,
+          airflow: resolvedAirflow,
+          ...toPoint,
+        });
+        resolvedProcessData = {
+          ...processData,
+          toPointId: newPointId,
+          parameters: {
+            ...processData.parameters,
+            airflow: resolvedAirflow,
           },
         };
       }
