@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Settings, Download, FolderOpen, Edit2, Trash2, Copy, ChevronUp, ChevronDown, FilePlus } from 'lucide-react';
 import { useProjectStore } from './store/projectStore';
 import { PsychrometricChart, PsychrometricChartRef } from './components/Chart/PsychrometricChart';
@@ -137,6 +137,12 @@ function App() {
   const [copySourceA, setCopySourceA] = useState('');
   const [copySourceB, setCopySourceB] = useState('');
   const [movePointId, setMovePointId] = useState<string | null>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [tooltipPosition, setTooltipPosition] = useState<{
+    left: number;
+    top: number;
+    arrowLeft: number;
+  } | null>(null);
   // Active tab for sidebar
   const [activeTab, setActiveTab] = useState<'points' | 'processes'>('points');
   const [chartSize, setChartSize] = useState({ width: 1, height: 1 });
@@ -193,6 +199,39 @@ function App() {
     }
     return chartCoordinates.toCanvas(selectedPoint.dryBulbTemp, selectedPoint.humidity);
   }, [chartCoordinates, selectedPoint]);
+
+  useLayoutEffect(() => {
+    if (!selectedPointPosition || !tooltipRef.current || !chartContainerRef.current) {
+      setTooltipPosition(null);
+      return;
+    }
+    const tooltipRect = tooltipRef.current.getBoundingClientRect();
+    const containerRect = chartContainerRef.current.getBoundingClientRect();
+    const horizontalPadding = 8;
+    const verticalPadding = 8;
+    const pointerOffset = 12;
+    const baseLeft = selectedPointPosition.x;
+    const baseTop = selectedPointPosition.y - pointerOffset;
+    const maxLeft = containerRect.width - tooltipRect.width - horizontalPadding;
+    const maxTop = containerRect.height - tooltipRect.height - verticalPadding;
+    const clampedLeft = Math.min(
+      Math.max(baseLeft - tooltipRect.width / 2, horizontalPadding),
+      Math.max(horizontalPadding, maxLeft)
+    );
+    const clampedTop = Math.min(
+      Math.max(baseTop - tooltipRect.height, verticalPadding),
+      Math.max(verticalPadding, maxTop)
+    );
+    const arrowLeft = Math.min(
+      Math.max(baseLeft - clampedLeft, 16),
+      Math.max(16, tooltipRect.width - 16)
+    );
+    setTooltipPosition({
+      left: clampedLeft,
+      top: clampedTop,
+      arrowLeft,
+    });
+  }, [selectedPointPosition, chartSize.height, chartSize.width]);
 
   useEffect(() => {
     if (!inputTypeAInitialized.current) {
@@ -1413,12 +1452,20 @@ function App() {
               />
               {selectedPoint && selectedPointPosition && (
                 <div
+                  ref={tooltipRef}
                   className="absolute z-10"
-                  style={{
-                    left: selectedPointPosition.x,
-                    top: selectedPointPosition.y,
-                    transform: 'translate(-50%, -120%)',
-                  }}
+                  style={
+                    tooltipPosition
+                      ? {
+                          left: tooltipPosition.left,
+                          top: tooltipPosition.top,
+                        }
+                      : {
+                          left: selectedPointPosition.x,
+                          top: selectedPointPosition.y,
+                          transform: 'translate(-50%, -120%)',
+                        }
+                  }
                 >
                   <div className="relative rounded-lg border border-gray-200 bg-white shadow-lg px-4 py-3 text-xs text-gray-700 min-w-[220px]">
                     <div className="flex items-center justify-between gap-2">
@@ -1471,7 +1518,15 @@ function App() {
                         {movePointId === selectedPoint.id ? '移動完了' : '移動'}
                       </button>
                     </div>
-                    <div className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1 rotate-45 border-b border-r border-gray-200 bg-white" />
+                    <div
+                      className="absolute top-full h-3 w-3 -translate-y-1 rotate-45 border-b border-r border-gray-200 bg-white"
+                      style={{
+                        left: tooltipPosition ? tooltipPosition.arrowLeft : '50%',
+                        transform: tooltipPosition
+                          ? 'translate(-50%, -0.25rem) rotate(45deg)'
+                          : 'translate(-50%, -0.25rem) rotate(45deg)',
+                      }}
+                    />
                   </div>
                 </div>
               )}
