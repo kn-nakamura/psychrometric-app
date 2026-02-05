@@ -13,7 +13,7 @@ interface PsychrometricChartProps {
   processes: Process[];
   activeSeason: 'summer' | 'winter' | 'both';
   selectedPointId?: string | null;
-  onPointClick?: (pointId: string) => void;
+  onPointClick?: (pointId: string | null) => void;
   onPointMove?: (pointId: string, temp: number, humidity: number) => void;
 }
 
@@ -222,6 +222,8 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
 
   const getProcessColor = (season: Process['season']) =>
     season === 'summer' ? '#4dabf7' : season === 'winter' ? '#ff6b6b' : '#6b7280';
+  const getPointColor = (point: StatePoint) =>
+    point.color || (point.season === 'summer' ? '#4dabf7' : point.season === 'winter' ? '#ff6b6b' : '#6b7280');
 
   const plotData = useMemo(() => {
     const data: Record<string, unknown>[] = [];
@@ -378,9 +380,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     filteredStatePoints.forEach((point, index) => {
       if (!point.dryBulbTemp || !point.humidity) return;
       const label = getPointLabel(point, index);
-      const defaultPointColor =
-        point.season === 'summer' ? '#4dabf7' : point.season === 'winter' ? '#ff6b6b' : '#6b7280';
-      const pointColor = point.color || defaultPointColor;
+      const pointColor = getPointColor(point);
       const isSelected = selectedPointId === point.id;
       const hoverLines = [
         `${point.name || label}`,
@@ -467,7 +467,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         title: { text: "絶対湿度 (g/kg')", font: { size: 10, color: '#444' } },
       },
       dragmode: false,
-      hovermode: 'closest',
+      hovermode: false,
       showlegend: false,
     };
   }, [chartConfig, width, height]);
@@ -536,6 +536,10 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     }
     return point;
   }, [activeSeason, selectedPointId, statePoints]);
+  const selectedPointColor = useMemo(() => {
+    if (!selectedPoint) return null;
+    return getPointColor(selectedPoint);
+  }, [selectedPoint]);
 
   const selectedPointPosition = useMemo(() => {
     if (!selectedPoint || typeof selectedPoint.dryBulbTemp !== 'number') return null;
@@ -601,7 +605,9 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       setIsDragging(true);
       setDraggedPointId(clickedPoint.id);
       onPointClick?.(clickedPoint.id);
+      return;
     }
+    onPointClick?.(null);
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
@@ -646,16 +652,17 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         onPointerLeave={handlePointerUp}
         style={{ touchAction: isDragging ? 'none' : 'auto' }}
       />
-      {selectedPoint && selectedPointPosition && (
+      {selectedPoint && selectedPointPosition && selectedPointColor && (
         <div
-          className="pointer-events-none absolute z-10 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-lg"
+          className="pointer-events-none absolute z-10 rounded-md px-3 py-2 text-xs text-white shadow-lg"
           style={{
             left: selectedPointPosition.x + 12,
             top: selectedPointPosition.y - 12,
             transform: 'translateY(-100%)',
+            backgroundColor: selectedPointColor,
           }}
         >
-          <div className="font-semibold text-gray-900">
+          <div className="font-semibold text-white">
             {selectedPoint.name || selectedPointLabel}
           </div>
           <div>乾球温度: {selectedPoint.dryBulbTemp?.toFixed(1)}°C</div>
