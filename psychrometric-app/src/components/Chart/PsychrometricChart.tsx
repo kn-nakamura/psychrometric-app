@@ -48,6 +48,8 @@ const getDefaultResolutionScale = () => {
   return 1.25 * (window.devicePixelRatio || 1);
 };
 
+const chartFontFamily = '"Noto Sans JP", "NotoSansJP", sans-serif';
+
 const drawPsychrometricChart = ({
   ctx,
   width,
@@ -67,8 +69,14 @@ const drawPsychrometricChart = ({
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, width, height);
 
+  // グラフタイトル
+  drawChartTitles(ctx, chartConfig.dimensions);
+
   // グリッド線を描画
   drawGrid(ctx, coordinates, chartConfig.range);
+
+  // 軸タイトル
+  drawAxisTitles(ctx, coordinates, chartConfig.range);
 
   // 相対湿度曲線を描画
   drawRHCurves(ctx, coordinates, chartConfig.range);
@@ -291,6 +299,7 @@ function drawGrid(
   coordinates: ChartCoordinates,
   range: ChartRange
 ) {
+  const dimensions = coordinates.getDimensions();
   ctx.strokeStyle = '#e0e0e0';
   ctx.lineWidth = 1;
 
@@ -307,9 +316,9 @@ function drawGrid(
 
     // ラベル
     ctx.fillStyle = '#666';
-    ctx.font = '10px sans-serif';
+    ctx.font = `10px ${chartFontFamily}`;
     ctx.textAlign = 'center';
-    ctx.fillText(`${temp}°C`, x, y1 + 20);
+    ctx.fillText(`${temp}`, x, y1 + 18);
   }
 
   // 横線（絶対湿度）- g/kg' 形式で表示
@@ -325,11 +334,70 @@ function drawGrid(
 
     // ラベル - g/kg' 形式 (kg/kg' × 1000 = g/kg')
     ctx.fillStyle = '#666';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'right';
+    ctx.font = `10px ${chartFontFamily}`;
+    ctx.textAlign = 'left';
     const gPerKg = h * 1000;
-    ctx.fillText(`${gPerKg.toFixed(0)} g/kg'`, x1 - 10, y + 4);
+    ctx.fillText(`${gPerKg.toFixed(0)}`, x2 + 10, y + 4);
   }
+
+  // 右側のY軸ライン
+  ctx.strokeStyle = '#bdbdbd';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(dimensions.width - dimensions.marginRight, coordinates.humidityToY(range.humidityMin));
+  ctx.lineTo(dimensions.width - dimensions.marginRight, coordinates.humidityToY(range.humidityMax));
+  ctx.stroke();
+
+  // 下側のX軸ライン
+  ctx.beginPath();
+  ctx.moveTo(coordinates.tempToX(range.tempMin), coordinates.humidityToY(range.humidityMin));
+  ctx.lineTo(coordinates.tempToX(range.tempMax), coordinates.humidityToY(range.humidityMin));
+  ctx.stroke();
+}
+
+function drawAxisTitles(
+  ctx: CanvasRenderingContext2D,
+  coordinates: ChartCoordinates,
+  range: ChartRange
+) {
+  const dimensions = coordinates.getDimensions();
+  const bottomY = coordinates.humidityToY(range.humidityMin);
+  const rightX = dimensions.width - dimensions.marginRight;
+  const titleOffsetX = 40;
+  const titleOffsetY = 34;
+
+  ctx.fillStyle = '#333';
+  ctx.font = `bold 12px ${chartFontFamily}`;
+
+  // X軸タイトル
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText('温度[℃]', (coordinates.tempToX(range.tempMin) + coordinates.tempToX(range.tempMax)) / 2, bottomY + titleOffsetY);
+
+  // Y軸タイトル（右側、縦書き）
+  ctx.save();
+  ctx.translate(rightX + titleOffsetX, (coordinates.humidityToY(range.humidityMin) + coordinates.humidityToY(range.humidityMax)) / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('絶対湿度[g/kg’]', 0, 0);
+  ctx.restore();
+}
+
+function drawChartTitles(ctx: CanvasRenderingContext2D, dimensions: { width: number; marginTop: number }) {
+  const centerX = dimensions.width / 2;
+  const nameY = Math.max(8, dimensions.marginTop - 22);
+  const titleY = Math.max(22, dimensions.marginTop - 6);
+
+  ctx.fillStyle = '#222';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.font = `bold 14px ${chartFontFamily}`;
+  ctx.fillText('Psychrometric Chart', centerX, nameY);
+
+  ctx.fillStyle = '#444';
+  ctx.font = `12px ${chartFontFamily}`;
+  ctx.fillText('空気線図', centerX, titleY);
 }
 
 function drawRHCurves(
@@ -374,7 +442,7 @@ function drawRHCurves(
       const lastPoint = clippedPoints[clippedPoints.length - 1];
       const { x, y } = coordinates.toCanvas(lastPoint.x, lastPoint.y);
       ctx.fillStyle = saturationColor;
-      ctx.font = '9px sans-serif';
+      ctx.font = `9px ${chartFontFamily}`;
       ctx.fillText(`${rh}%`, x + 5, y);
     }
   });
@@ -518,7 +586,7 @@ function drawStatePoints(
 
     // ラベルを右横に表示
     ctx.fillStyle = pointColor;
-    ctx.font = 'bold 10px sans-serif';
+    ctx.font = `bold 10px ${chartFontFamily}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, x + 8, y);

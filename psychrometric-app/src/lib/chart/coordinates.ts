@@ -36,6 +36,13 @@ export class ChartCoordinates {
   get plotWidth(): number {
     return this.dimensions.width - this.dimensions.marginLeft - this.dimensions.marginRight;
   }
+
+  /**
+   * チャートの寸法を取得
+   */
+  getDimensions(): ChartDimensions {
+    return { ...this.dimensions };
+  }
   
   /**
    * プロット領域の高さを取得
@@ -178,10 +185,10 @@ export function createDefaultChartConfig(
     dimensions: {
       width,
       height,
-      marginTop: 20,
-      marginRight: 28,
-      marginBottom: 44,
-      marginLeft: 56,
+      marginTop: 30,
+      marginRight: 40,
+      marginBottom: 32,
+      marginLeft: 32,
     },
     range: {
       tempMin: -5,
