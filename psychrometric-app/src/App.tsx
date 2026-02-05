@@ -1409,6 +1409,7 @@ function App() {
                 selectedPointId={selectedPointId}
                 draggablePointId={movePointId}
                 onPointClick={setSelectedPoint}
+                onBackgroundClick={() => setSelectedPoint(null)}
                 onPointMove={handlePointMove}
               />
               {selectedPoint && selectedPointPosition && (

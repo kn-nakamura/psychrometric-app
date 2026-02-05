@@ -14,6 +14,7 @@ interface PsychrometricChartProps {
   selectedPointId?: string | null;
   draggablePointId?: string | null;
   onPointClick?: (pointId: string) => void;
+  onBackgroundClick?: () => void;
   onPointMove?: (pointId: string, temp: number, humidity: number) => void;
 }
 
@@ -150,6 +151,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   selectedPointId,
   draggablePointId,
   onPointClick,
+  onBackgroundClick,
   onPointMove,
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -228,6 +230,8 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         setIsDragging(true);
         setDraggedPointId(clickedPoint.id);
       }
+    } else {
+      onBackgroundClick?.();
     }
   };
 
