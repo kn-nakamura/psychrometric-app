@@ -364,11 +364,7 @@ export const ExportDialog = ({
     return false;
   };
 
-  const renderPdfPages = async (
-    chartCanvas: HTMLCanvasElement,
-    pdf: jsPDF,
-    hasJapaneseFont: boolean
-  ) => {
+  const renderPdfPages = async (pdf: jsPDF, hasJapaneseFont: boolean) => {
     const marginMm = 8;
     const headerHeightMm = 14;
     const chartTopMm = marginMm + headerHeightMm + 2;
@@ -395,14 +391,9 @@ export const ExportDialog = ({
 
     // チャート画像を準備
     const chartWidthMm = contentWidthMm;
-    const chartAspectRatio = chartCanvas.width / chartCanvas.height;
-    let drawChartWidthMm = chartWidthMm;
-    let drawChartHeightMm = chartWidthMm / chartAspectRatio;
-    if (drawChartHeightMm > chartHeightMm) {
-      drawChartHeightMm = chartHeightMm;
-      drawChartWidthMm = chartHeightMm * chartAspectRatio;
-    }
-    const chartXOffset = marginMm + (chartWidthMm - drawChartWidthMm) / 2;
+    const drawChartWidthMm = chartWidthMm;
+    const drawChartHeightMm = chartHeightMm;
+    const chartXOffset = marginMm;
     const chartFontName = hasJapaneseFont ? 'NotoSansJP' : 'Helvetica';
     const chartRenderWidthPx = Math.round((drawChartWidthMm / 25.4) * A4_DPI);
     const chartRenderHeightPx = Math.round((drawChartHeightMm / 25.4) * A4_DPI);
@@ -705,7 +696,7 @@ export const ExportDialog = ({
     }
   };
 
-  const buildA4Pages = (chartCanvas: HTMLCanvasElement): HTMLCanvasElement[] => {
+  const buildA4Pages = (): HTMLCanvasElement[] => {
     const pages: HTMLCanvasElement[] = [];
 
     // 設定値 (mm)
@@ -817,16 +808,9 @@ export const ExportDialog = ({
     const chartY = mmToPx(chartTopMm);
     const chartWidthPx = contentWidthPx;
     const chartHeightPx = mmToPx(chartHeightMm);
-    const chartAspectRatio = chartCanvas.width / chartCanvas.height;
-    let drawChartWidth = chartWidthPx;
-    let drawChartHeight = chartWidthPx / chartAspectRatio;
-
-    if (drawChartHeight > chartHeightPx) {
-      drawChartHeight = chartHeightPx;
-      drawChartWidth = chartHeightPx * chartAspectRatio;
-    }
-
-    const chartXOffset = marginPx + (chartWidthPx - drawChartWidth) / 2;
+    const drawChartWidth = chartWidthPx;
+    const drawChartHeight = chartHeightPx;
+    const chartXOffset = marginPx;
 
     // チャート枠
     ctx1.strokeStyle = '#e5e7eb';
@@ -1167,8 +1151,7 @@ export const ExportDialog = ({
     setExportType('png');
 
     try {
-      const canvas = canvasRef.current;
-      const pages = buildA4Pages(canvas);
+      const pages = buildA4Pages();
       const dataUrl = pages[0].toDataURL('image/png');
 
       // ダウンロードリンクを作成
@@ -1215,7 +1198,7 @@ export const ExportDialog = ({
           'PDF用フォントが読み込めませんでした。public/fonts/NotoSansJP-Regular.ttf を配置するか、外部フォントURLへのアクセスを許可してください。'
         );
       }
-      await renderPdfPages(canvas, pdf, hasJapaneseFont);
+      await renderPdfPages(pdf, hasJapaneseFont);
 
       // PDFをBlobとして生成し、新しいウィンドウで開く
       const pdfBlob = pdf.output('blob');
