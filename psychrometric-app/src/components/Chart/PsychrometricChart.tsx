@@ -706,6 +706,7 @@ function drawGrid(
   const tickFontSize = 8;
   const axisTitleFontSize = 8;
   const rightAxisLabelOffset = 10;
+  const rightAxisTitleOffset = 26;
 
   // 縦線（温度）
   for (let temp = Math.ceil(range.tempMin / 5) * 5; temp <= range.tempMax; temp += 5) {
@@ -752,7 +753,7 @@ function drawGrid(
   const xAxisY = coordinates.humidityToY(range.humidityMin) + 34;
   ctx.fillText('乾球温度 (°C)', xCenter, xAxisY);
 
-  const yAxisX = coordinates.tempToX(range.tempMax) + rightAxisLabelOffset + 6;
+  const yAxisX = coordinates.tempToX(range.tempMax) + rightAxisLabelOffset + rightAxisTitleOffset;
   const yAxisY = (coordinates.humidityToY(range.humidityMin) + coordinates.humidityToY(range.humidityMax)) / 2;
   if (ctx.save && ctx.restore && ctx.translate && ctx.rotate) {
     ctx.save();
