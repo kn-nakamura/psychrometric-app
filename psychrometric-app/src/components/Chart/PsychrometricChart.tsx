@@ -707,6 +707,7 @@ function drawGrid(
   const axisTitleFontSize = 8;
   const rightAxisLabelOffset = 10;
   const rightAxisTitleOffset = 60;
+  const tickLength = 4;
 
   // 縦線（温度）
   for (let temp = Math.ceil(range.tempMin / 5) * 5; temp <= range.tempMax; temp += 5) {
@@ -717,6 +718,12 @@ function drawGrid(
     ctx.beginPath();
     ctx.moveTo(x, y1);
     ctx.lineTo(x, y2);
+    ctx.stroke();
+
+    // X軸の目盛線
+    ctx.beginPath();
+    ctx.moveTo(x, y1);
+    ctx.lineTo(x, y1 + tickLength);
     ctx.stroke();
 
     // ラベル
@@ -737,18 +744,26 @@ function drawGrid(
     ctx.lineTo(x2, y);
     ctx.stroke();
 
+    // 右軸の目盛線
+    ctx.beginPath();
+    ctx.moveTo(x2, y);
+    ctx.lineTo(x2 + tickLength, y);
+    ctx.stroke();
+
     // ラベル - 数値のみ (kg/kg' × 1000)
     ctx.fillStyle = '#666';
     ctx.font = `${tickFontSize}px sans-serif`;
     ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
     const gPerKg = h * 1000;
-    ctx.fillText(`${gPerKg.toFixed(0)}`, x2 + rightAxisLabelOffset, y + 4);
+    ctx.fillText(`${gPerKg.toFixed(0)}`, x2 + rightAxisLabelOffset, y);
   }
 
   // Axis titles
   ctx.fillStyle = '#444';
   ctx.font = `${axisTitleFontSize}px sans-serif`;
   ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
   const xCenter = (coordinates.tempToX(range.tempMin) + coordinates.tempToX(range.tempMax)) / 2;
   const xAxisY = coordinates.humidityToY(range.humidityMin) + 34;
   ctx.fillText('乾球温度 (°C)', xCenter, xAxisY);
@@ -812,7 +827,7 @@ function drawRHCurves(
       const { x, y } = coordinates.toCanvas(lastPoint.x, lastPoint.y);
       ctx.fillStyle = saturationColor;
       ctx.font = '7px sans-serif';
-      ctx.fillText(`${rh}%`, x + 5, y);
+      ctx.fillText(`${rh}%`, x + 6, y - 6);
     }
   });
 }
