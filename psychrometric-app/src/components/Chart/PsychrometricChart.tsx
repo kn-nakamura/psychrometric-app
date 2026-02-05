@@ -62,6 +62,10 @@ export interface ChartRenderContext {
   fill: () => void;
   arc: (x: number, y: number, radius: number, startAngle: number, endAngle: number) => void;
   fillText: (text: string, x: number, y: number) => void;
+  save?: () => void;
+  restore?: () => void;
+  translate?: (x: number, y: number) => void;
+  rotate?: (angle: number) => void;
   setLineDash: (segments: number[]) => void;
   strokeStyle: string | CanvasGradient | CanvasPattern;
   fillStyle: string | CanvasGradient | CanvasPattern;
@@ -699,8 +703,8 @@ function drawGrid(
 ) {
   ctx.strokeStyle = '#e0e0e0';
   ctx.lineWidth = 1;
-  const tickFontSize = 9;
-  const axisTitleFontSize = 9;
+  const tickFontSize = 8;
+  const axisTitleFontSize = 8;
   const rightAxisLabelOffset = 10;
 
   // 縦線（温度）
@@ -748,10 +752,20 @@ function drawGrid(
   const xAxisY = coordinates.humidityToY(range.humidityMin) + 34;
   ctx.fillText('乾球温度 (°C)', xCenter, xAxisY);
 
-  ctx.textAlign = 'left';
-  const yAxisX = coordinates.tempToX(range.tempMax) + rightAxisLabelOffset;
-  const yAxisY = coordinates.humidityToY(range.humidityMax) - 8;
-  ctx.fillText("絶対湿度 (g/kg')", yAxisX, yAxisY);
+  const yAxisX = coordinates.tempToX(range.tempMax) + rightAxisLabelOffset + 6;
+  const yAxisY = (coordinates.humidityToY(range.humidityMin) + coordinates.humidityToY(range.humidityMax)) / 2;
+  if (ctx.save && ctx.restore && ctx.translate && ctx.rotate) {
+    ctx.save();
+    ctx.translate(yAxisX, yAxisY);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText("絶対湿度 (g/kg')", 0, 0);
+    ctx.restore();
+  } else {
+    ctx.textAlign = 'left';
+    ctx.fillText("絶対湿度 (g/kg')", yAxisX, yAxisY);
+  }
 }
 
 function drawRHCurves(
@@ -796,7 +810,7 @@ function drawRHCurves(
       const lastPoint = clippedPoints[clippedPoints.length - 1];
       const { x, y } = coordinates.toCanvas(lastPoint.x, lastPoint.y);
       ctx.fillStyle = saturationColor;
-      ctx.font = '8px sans-serif';
+      ctx.font = '7px sans-serif';
       ctx.fillText(`${rh}%`, x + 5, y);
     }
   });
@@ -940,7 +954,7 @@ function drawStatePoints(
 
     // ラベルを右横に表示
     ctx.fillStyle = pointColor;
-    ctx.font = 'bold 9px sans-serif';
+    ctx.font = 'bold 8px sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, x + 8, y);
@@ -1007,7 +1021,7 @@ function drawProcesses(
       if (typeof stream1Point.airflow === 'number' && typeof stream2Point.airflow === 'number') {
         const totalAirflow = stream1Point.airflow + stream2Point.airflow;
         ctx.fillStyle = '#333';
-        ctx.font = '8px sans-serif';
+        ctx.font = '7px sans-serif';
         ctx.textAlign = 'left';
         ctx.fillText(`${totalAirflow.toFixed(0)} m³/h`, to.x + 10, to.y + 12);
       }
