@@ -436,15 +436,15 @@ export const ExportDialog = ({
       pdf.roundedRect(x, y, 6, 3.5, 0.5, 0.5, 'F');
 
       pdf.setTextColor(255, 255, 255);
-      setFont('bold', 1.9);
+      setFont('bold', 2.1);
       pdf.text(label, x + 3, y + 2.3, { align: 'center', baseline: 'middle' });
 
       pdf.setTextColor(17, 24, 39);
-      setFont('bold', 2.1);
+      setFont('bold', 2.4);
       pdf.text(point.name, x + 7, y + 2.2);
 
       pdf.setTextColor(107, 114, 128);
-      setFont('normal', 1.6);
+      setFont('normal', 1.8);
       const propTextLine1 = `温度: ${formatNumber(point.dryBulbTemp)}°C | RH: ${formatNumber(point.relativeHumidity, 0)}% | 絶対湿度: ${formatNumber(point.humidity, 4)} kg/kg'`;
       const propTextLine2 = `エンタルピー: ${formatNumber(point.enthalpy)} kJ/kg' | 風量: ${formatAirflow(point.airflow)} | 季節: ${seasonLabel(point.season)}`;
       pdf.text(propTextLine1, x + 7, y + 4.8);
@@ -485,7 +485,7 @@ export const ExportDialog = ({
         }
       }
 
-      const processLineHeight = 2.4;
+      const processLineHeight = 2.7;
       const processHeaderHeight = 5;
       const processCardHeight = processHeaderHeight + detailLines.length * processLineHeight + 1;
 
@@ -497,16 +497,16 @@ export const ExportDialog = ({
       pdf.rect(x, y, 1, processCardHeight - 1, 'F');
 
       pdf.setTextColor(17, 24, 39);
-      setFont('bold', 2.1);
+      setFont('bold', 2.4);
       pdf.text(process.name, x + 2.5, y + 2.4);
 
       const fromLabel = getPointLabelById(process.fromPointId);
       const toLabel = getPointLabelById(process.toPointId);
       pdf.setTextColor(107, 114, 128);
-      setFont('normal', 1.7);
+      setFont('normal', 2.0);
       pdf.text(`${fromLabel} → ${toLabel}`, x + 2.5, y + 4.4);
 
-      setFont('normal', 1.6);
+      setFont('normal', 1.8);
       detailLines.forEach((line, lineIndex) => {
         pdf.text(line, x + 2.5, y + 6.4 + lineIndex * processLineHeight);
       });
@@ -518,7 +518,7 @@ export const ExportDialog = ({
 
     const headerY = marginMm;
     pdf.setTextColor(17, 24, 39);
-    setFont('bold', 4.5);
+    setFont('bold', 5.0);
     pdf.text(designConditions.project.name || '空気線図', marginMm, headerY + 4);
 
     const projectInfo = [
@@ -526,24 +526,24 @@ export const ExportDialog = ({
       designConditions.project.date,
       designConditions.project.designer,
     ].filter(Boolean).join(' | ');
-    setFont('normal', 2.2);
+    setFont('normal', 2.5);
     pdf.setTextColor(107, 114, 128);
     pdf.text(projectInfo || '-', marginMm, headerY + 7.5);
 
     const conditionsX = marginMm + contentWidthMm * 0.45;
     const conditionsWidth = contentWidthMm * 0.55;
-    setFont('bold', 2.2);
+    setFont('bold', 2.5);
     pdf.setTextColor(55, 65, 81);
     pdf.text('設計条件', conditionsX, headerY + 2);
 
     const col1X = conditionsX;
     const col2X = conditionsX + conditionsWidth / 3;
     const col3X = conditionsX + (conditionsWidth / 3) * 2;
-    const condRowHeight = 2.2;
+    const condRowHeight = 2.5;
 
-    setFont('bold', 1.7);
+    setFont('bold', 1.9);
     pdf.text('外気条件', col1X, headerY + 4.5);
-    setFont('normal', 1.6);
+    setFont('normal', 1.8);
     pdf.setTextColor(75, 85, 99);
     pdf.text(
       `夏: ${formatNumber(designConditions.outdoor.summer.dryBulbTemp)}°C / ${formatNumber(designConditions.outdoor.summer.relativeHumidity, 0)}%`,
@@ -557,9 +557,9 @@ export const ExportDialog = ({
     );
 
     pdf.setTextColor(55, 65, 81);
-    setFont('bold', 1.7);
+    setFont('bold', 1.9);
     pdf.text('室内条件', col2X, headerY + 4.5);
-    setFont('normal', 1.6);
+    setFont('normal', 1.8);
     pdf.setTextColor(75, 85, 99);
     pdf.text(
       `夏: ${formatNumber(designConditions.indoor.summer.dryBulbTemp)}°C / ${formatNumber(designConditions.indoor.summer.relativeHumidity, 0)}%`,
@@ -573,9 +573,9 @@ export const ExportDialog = ({
     );
 
     pdf.setTextColor(55, 65, 81);
-    setFont('bold', 1.7);
+    setFont('bold', 1.9);
     pdf.text('風量', col3X, headerY + 4.5);
-    setFont('normal', 1.6);
+    setFont('normal', 1.8);
     pdf.setTextColor(75, 85, 99);
     pdf.text(
       `供給: ${formatNumber(designConditions.airflow.supplyAir, 0)} m³/h`,
@@ -613,11 +613,11 @@ export const ExportDialog = ({
     const halfWidth = contentWidthMm / 2 - 2;
     let statePointY = bottomY;
     pdf.setTextColor(17, 24, 39);
-    setFont('bold', 2.8);
+    setFont('bold', 3.1);
     pdf.text('状態点', marginMm, statePointY + 2.5);
     statePointY += 5;
 
-    const statePointCardHeight = 9;
+    const statePointCardHeight = 10;
     const statePointMaxY = A4_HEIGHT_MM - marginMm;
     const statePointOverflow: StatePoint[] = [];
 
@@ -637,7 +637,7 @@ export const ExportDialog = ({
 
     if (filteredProcesses.length > 0) {
       pdf.setTextColor(17, 24, 39);
-      setFont('bold', 2.8);
+      setFont('bold', 3.1);
       pdf.text('プロセス', processX, processY + 2.5);
       processY += 5;
     }
@@ -676,7 +676,7 @@ export const ExportDialog = ({
         }
       }
 
-      const processLineHeight = 2.4;
+      const processLineHeight = 2.7;
       const processHeaderHeight = 5;
       const processCardHeight = processHeaderHeight + detailLines.length * processLineHeight + 1;
       if (processY + processCardHeight > processMaxY) {
@@ -691,13 +691,13 @@ export const ExportDialog = ({
       drawPageBackground();
 
       pdf.setTextColor(17, 24, 39);
-      setFont('bold', 3.2);
+      setFont('bold', 3.5);
       pdf.text(`${designConditions.project.name || '空気線図'} - 続き`, marginMm, marginMm + 3);
 
       let currentY = marginMm + 8;
 
       if (statePointOverflow.length > 0) {
-        setFont('bold', 2.8);
+        setFont('bold', 3.1);
         pdf.text('状態点 (続き)', marginMm, currentY + 2.5);
         currentY += 5;
 
@@ -711,7 +711,7 @@ export const ExportDialog = ({
       }
 
       if (processOverflow.length > 0) {
-        setFont('bold', 2.8);
+        setFont('bold', 3.1);
         pdf.text('プロセス (続き)', marginMm, currentY + 2.5);
         currentY += 5;
 
