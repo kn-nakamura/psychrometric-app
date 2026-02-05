@@ -37,6 +37,13 @@ declare global {
         config?: Record<string, unknown>
       ) => Promise<unknown>;
       purge: (root: HTMLElement) => void;
+      Fx?: {
+        hover: (
+          root: HTMLElement,
+          points: Array<{ curveNumber: number; pointNumber: number }>
+        ) => void;
+        unhover: (root: HTMLElement) => void;
+      };
     };
   }
 }
@@ -226,6 +233,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   const plotData = useMemo(() => {
     const data: Record<string, unknown>[] = [];
     const annotations: Record<string, unknown>[] = [];
+    const pointTraceIndexById = new Map<string, number>();
     const { range } = chartConfig;
     const formatValue = (value: number | undefined, fractionDigits = 1) => {
       if (typeof value !== 'number') return '-';
@@ -393,6 +401,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       if (typeof point.airflow === 'number') {
         hoverLines.push(`風量: ${formatValue(point.airflow, 0)} m³/h`);
       }
+      const traceIndex = data.length;
       data.push({
         type: 'scatter',
         mode: 'markers+text',
@@ -413,9 +422,10 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         hovertext: [hoverLines.join('<br>')],
         showlegend: false,
       });
+      pointTraceIndexById.set(point.id, traceIndex);
     });
 
-    return { data, annotations };
+    return { data, annotations, pointTraceIndexById };
   }, [chartConfig, statePoints, processes, activeSeason, filteredStatePoints, selectedPointId]);
 
   const plotLayout = useMemo<Record<string, unknown>>(() => {
@@ -526,6 +536,19 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     };
   }, [loadPlotly, plotData, plotLayout]);
 
+  useEffect(() => {
+    const container = plotContainerRef.current;
+    const plotly = window.Plotly;
+    if (!container || !plotly?.Fx) return;
+    if (!selectedPointId) {
+      plotly.Fx.unhover?.(container);
+      return;
+    }
+    const traceIndex = plotData.pointTraceIndexById.get(selectedPointId);
+    if (typeof traceIndex !== 'number') return;
+    plotly.Fx.hover(container, [{ curveNumber: traceIndex, pointNumber: 0 }]);
+  }, [plotData.pointTraceIndexById, selectedPointId]);
+
   // チャートの描画
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -577,10 +600,19 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       setIsDragging(true);
       setDraggedPointId(clickedPoint.id);
       onPointClick?.(clickedPoint.id);
+      const traceIndex = plotData.pointTraceIndexById.get(clickedPoint.id);
+      if (plotContainerRef.current && typeof traceIndex === 'number' && window.Plotly?.Fx) {
+        window.Plotly.Fx.hover(plotContainerRef.current, [
+          { curveNumber: traceIndex, pointNumber: 0 },
+        ]);
+      }
       return;
     }
 
     onPointClick?.(null);
+    if (plotContainerRef.current && window.Plotly?.Fx) {
+      window.Plotly.Fx.unhover?.(plotContainerRef.current);
+    }
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
