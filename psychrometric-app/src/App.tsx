@@ -137,6 +137,17 @@ function App() {
   const [copySourceA, setCopySourceA] = useState('');
   const [copySourceB, setCopySourceB] = useState('');
   const [movePointId, setMovePointId] = useState<string | null>(null);
+  const [moveConstraints, setMoveConstraints] = useState<
+    Record<
+      string,
+      | 'free'
+      | 'dryBulb'
+      | 'humidity'
+      | 'enthalpy'
+      | 'relativeHumidity'
+      | 'wetBulb'
+    >
+  >({});
   // Active tab for sidebar
   const [activeTab, setActiveTab] = useState<'points' | 'processes'>('points');
   const [chartSize, setChartSize] = useState({ width: 1, height: 1 });
@@ -416,12 +427,64 @@ function App() {
 
   // 状態点の移動（ドラッグ）
   const handlePointMove = (pointId: string, temp: number, humidity: number) => {
-    const stateData = StatePointConverter.fromDryBulbAndHumidity(
-      temp,
-      humidity,
-      defaultPressure,
-      calculationConstants
-    );
+    const currentPoint = statePoints.find((point) => point.id === pointId);
+    if (!currentPoint) return;
+    const constraint = moveConstraints[pointId] ?? 'free';
+
+    const stateData = (() => {
+      switch (constraint) {
+        case 'dryBulb':
+          if (currentPoint.dryBulbTemp === undefined) return null;
+          return StatePointConverter.fromDryBulbAndHumidity(
+            currentPoint.dryBulbTemp,
+            humidity,
+            defaultPressure,
+            calculationConstants
+          );
+        case 'humidity':
+          if (currentPoint.humidity === undefined) return null;
+          return StatePointConverter.fromDryBulbAndHumidity(
+            temp,
+            currentPoint.humidity,
+            defaultPressure,
+            calculationConstants
+          );
+        case 'enthalpy':
+          if (currentPoint.enthalpy === undefined) return null;
+          return StatePointConverter.fromDryBulbAndEnthalpy(
+            temp,
+            currentPoint.enthalpy,
+            defaultPressure,
+            calculationConstants
+          );
+        case 'relativeHumidity':
+          if (currentPoint.relativeHumidity === undefined) return null;
+          return StatePointConverter.fromDryBulbAndRH(
+            temp,
+            currentPoint.relativeHumidity,
+            defaultPressure,
+            calculationConstants
+          );
+        case 'wetBulb':
+          if (currentPoint.wetBulbTemp === undefined) return null;
+          return StatePointConverter.fromDryBulbAndWetBulb(
+            temp,
+            currentPoint.wetBulbTemp,
+            defaultPressure,
+            calculationConstants
+          );
+        case 'free':
+        default:
+          return StatePointConverter.fromDryBulbAndHumidity(
+            temp,
+            humidity,
+            defaultPressure,
+            calculationConstants
+          );
+      }
+    })();
+
+    if (!stateData) return;
     updateStatePoint(pointId, stateData);
   };
 
@@ -1459,9 +1522,16 @@ function App() {
                       <button
                         type="button"
                         onClick={() =>
-                          setMovePointId((prev) =>
-                            prev === selectedPoint.id ? null : selectedPoint.id
-                          )
+                          setMovePointId((prev) => {
+                            const nextId = prev === selectedPoint.id ? null : selectedPoint.id;
+                            if (nextId) {
+                              setMoveConstraints((current) => ({
+                                ...current,
+                                [nextId]: current[nextId] ?? 'free',
+                              }));
+                            }
+                            return nextId;
+                          })
                         }
                         className={`rounded px-3 py-1 text-xs font-semibold transition-colors ${
                           movePointId === selectedPoint.id
@@ -1472,6 +1542,36 @@ function App() {
                         {movePointId === selectedPoint.id ? '移動完了' : '移動'}
                       </button>
                     </div>
+                    {movePointId === selectedPoint.id && (
+                      <div className="mt-2 text-[11px] text-gray-600">
+                        <label className="flex items-center gap-2">
+                          <span className="whitespace-nowrap">移動条件</span>
+                          <select
+                            value={moveConstraints[selectedPoint.id] ?? 'free'}
+                            onChange={(event) =>
+                              setMoveConstraints((current) => ({
+                                ...current,
+                                [selectedPoint.id]: event.target.value as
+                                  | 'free'
+                                  | 'dryBulb'
+                                  | 'humidity'
+                                  | 'enthalpy'
+                                  | 'relativeHumidity'
+                                  | 'wetBulb',
+                              }))
+                            }
+                            className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 shadow-sm"
+                          >
+                            <option value="dryBulb">等乾球温度</option>
+                            <option value="humidity">等絶対湿度</option>
+                            <option value="enthalpy">等エンタルピー</option>
+                            <option value="relativeHumidity">等相対湿度</option>
+                            <option value="wetBulb">等湿球温度</option>
+                            <option value="free">任意</option>
+                          </select>
+                        </label>
+                      </div>
+                    )}
                     <div className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1 rotate-45 border-b border-r border-gray-200 bg-white" />
                   </div>
                 </div>
