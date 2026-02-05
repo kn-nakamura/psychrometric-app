@@ -1527,7 +1527,7 @@ function App() {
         <main className="order-1 flex-1 min-h-0 min-w-0 overflow-hidden p-3 sm:order-none sm:p-4">
             <div className="bg-white rounded-lg shadow h-full min-h-0 min-w-0 p-3 sm:p-4">
             <div ref={chartContainerRef} className="h-full min-h-0 min-w-0 relative">
-              <div className="absolute right-3 top-3 z-20 flex flex-wrap items-center gap-2">
+              <div className="absolute left-3 top-3 z-20 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setZoomMode((current) => !current)}
