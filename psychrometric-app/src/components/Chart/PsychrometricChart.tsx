@@ -475,7 +475,8 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         title: { text: "絶対湿度 (g/kg')", font: { size: 10, color: '#444' } },
       },
       dragmode: false,
-      hovermode: false,
+      clickmode: 'event+select',
+      hovermode: 'closest',
       showlegend: false,
     };
   }, [chartConfig, width, height]);
