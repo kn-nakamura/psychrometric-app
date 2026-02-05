@@ -20,10 +20,14 @@ interface ExportDialogProps {
   activeSeason: 'summer' | 'winter' | 'both';
 }
 
-const NOTO_SANS_JP_FONT_URLS = [
-  '/fonts/NotoSansJP-Regular.ttf',
-  'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts/hinted/ttf/NotoSansJP/NotoSansJP-Regular.ttf',
-];
+const getNotoSansJpFontUrls = () => {
+  const baseUrl = import.meta.env.BASE_URL ?? '/';
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  return [
+    `${normalizedBase}fonts/NotoSansJP-Regular.ttf`,
+    'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts/hinted/ttf/NotoSansJP/NotoSansJP-Regular.ttf',
+  ];
+};
 let notoSansJpFontDataPromise: Promise<string | null> | null = null;
 
 type RgbColor = { r: number; g: number; b: number };
@@ -189,7 +193,7 @@ class PdfRenderContext implements ChartRenderContext {
 const loadNotoSansJpFontData = async (): Promise<string | null> => {
   if (!notoSansJpFontDataPromise) {
     notoSansJpFontDataPromise = (async () => {
-      for (const url of NOTO_SANS_JP_FONT_URLS) {
+      for (const url of getNotoSansJpFontUrls()) {
         try {
           const response = await fetch(url);
           if (!response.ok) {
