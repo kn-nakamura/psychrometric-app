@@ -706,7 +706,7 @@ function drawGrid(
   const tickFontSize = 8;
   const axisTitleFontSize = 8;
   const rightAxisLabelOffset = 10;
-  const rightAxisTitleOffset = 40;
+  const rightAxisTitleOffset = 60;
 
   // 縦線（温度）
   for (let temp = Math.ceil(range.tempMin / 5) * 5; temp <= range.tempMax; temp += 5) {

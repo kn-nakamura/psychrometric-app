@@ -252,6 +252,13 @@ const loadNotoSansJpFontData = async (): Promise<string | null> => {
   return notoSansJpFontDataPromise;
 };
 
+const isMobileDevice = () => {
+  if (typeof navigator === 'undefined') {
+    return false;
+  }
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+};
+
 export const ExportDialog = ({
   onClose,
   canvasRef,
@@ -371,6 +378,9 @@ export const ExportDialog = ({
 
   const preparePdfFonts = async (pdf: jsPDF): Promise<boolean> => {
     try {
+      if (isMobileDevice()) {
+        return false;
+      }
       if (!pdf.existsFileInVFS('NotoSansJP-Regular.ttf')) {
         const fontData = await loadNotoSansJpFontData();
         if (fontData) {
