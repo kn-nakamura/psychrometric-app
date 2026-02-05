@@ -8,7 +8,7 @@ import { DesignConditionsEditor } from './components/DesignConditions/DesignCond
 import { ExportDialog } from './components/Export/ExportDialog';
 import { ProjectManager } from './components/Project/ProjectManager';
 import { StatePointConverter } from './lib/psychrometric/conversions';
-import { ChartCoordinates, createDynamicChartConfig } from './lib/chart/coordinates';
+import { ChartCoordinates, ChartRange, createDynamicChartConfig } from './lib/chart/coordinates';
 import { resolvePsychrometricConstants } from './lib/psychrometric/constants';
 import { MixingProcess } from './lib/processes/mixing';
 import { HeatExchangeProcess } from './lib/processes/heatExchange';
@@ -151,6 +151,12 @@ function App() {
   // Active tab for sidebar
   const [activeTab, setActiveTab] = useState<'points' | 'processes'>('points');
   const [chartSize, setChartSize] = useState({ width: 1, height: 1 });
+  const [zoomMode, setZoomMode] = useState(false);
+  const [zoomSelection, setZoomSelection] = useState<{
+    start: { x: number; y: number };
+    end: { x: number; y: number };
+  } | null>(null);
+  const [viewRange, setViewRange] = useState<ChartRange | null>(null);
   const inputOptionA =
     STATE_POINT_INPUT_OPTIONS.find((option) => option.key === inputTypeA) ??
     STATE_POINT_INPUT_OPTIONS[0];
@@ -193,10 +199,14 @@ function App() {
 
   const selectedPoint = statePoints.find((point) => point.id === selectedPointId) ?? null;
 
-  const chartCoordinates = useMemo(() => {
-    const chartConfig = createDynamicChartConfig(chartSize.width, chartSize.height, statePoints);
-    return new ChartCoordinates(chartConfig.dimensions, chartConfig.range);
+  const baseChartConfig = useMemo(() => {
+    return createDynamicChartConfig(chartSize.width, chartSize.height, statePoints);
   }, [chartSize.height, chartSize.width, statePoints]);
+
+  const chartCoordinates = useMemo(() => {
+    const range = viewRange ?? baseChartConfig.range;
+    return new ChartCoordinates(baseChartConfig.dimensions, range);
+  }, [baseChartConfig, viewRange]);
 
   const selectedPointPosition = useMemo(() => {
     if (!selectedPoint?.dryBulbTemp || !selectedPoint.humidity) {
@@ -204,6 +214,61 @@ function App() {
     }
     return chartCoordinates.toCanvas(selectedPoint.dryBulbTemp, selectedPoint.humidity);
   }, [chartCoordinates, selectedPoint]);
+
+  const handleZoomStart = (clientX: number, clientY: number) => {
+    if (!zoomMode) return;
+    const container = chartContainerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const start = {
+      x: clientX - rect.left,
+      y: clientY - rect.top,
+    };
+    setZoomSelection({ start, end: start });
+  };
+
+  const handleZoomMove = (clientX: number, clientY: number) => {
+    if (!zoomMode || !zoomSelection) return;
+    const container = chartContainerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const end = {
+      x: clientX - rect.left,
+      y: clientY - rect.top,
+    };
+    setZoomSelection((current) => (current ? { ...current, end } : null));
+  };
+
+  const handleZoomEnd = () => {
+    if (!zoomMode || !zoomSelection) return;
+    const { start, end } = zoomSelection;
+    const minX = Math.min(start.x, end.x);
+    const maxX = Math.max(start.x, end.x);
+    const minY = Math.min(start.y, end.y);
+    const maxY = Math.max(start.y, end.y);
+    const minSize = 8;
+    if (maxX - minX < minSize || maxY - minY < minSize) {
+      setZoomSelection(null);
+      return;
+    }
+    const first = chartCoordinates.fromCanvas(minX, minY);
+    const second = chartCoordinates.fromCanvas(maxX, maxY);
+    const nextRange = {
+      tempMin: Math.min(first.temp, second.temp),
+      tempMax: Math.max(first.temp, second.temp),
+      humidityMin: Math.min(first.humidity, second.humidity),
+      humidityMax: Math.max(first.humidity, second.humidity),
+    };
+    setViewRange(nextRange);
+    setZoomSelection(null);
+    setZoomMode(false);
+  };
+
+  const resetZoom = () => {
+    setViewRange(null);
+    setZoomSelection(null);
+    setZoomMode(false);
+  };
 
   useEffect(() => {
     if (!inputTypeAInitialized.current) {
@@ -1462,6 +1527,26 @@ function App() {
         <main className="order-1 flex-1 min-h-0 min-w-0 overflow-hidden p-3 sm:order-none sm:p-4">
             <div className="bg-white rounded-lg shadow h-full min-h-0 min-w-0 p-3 sm:p-4">
             <div ref={chartContainerRef} className="h-full min-h-0 min-w-0 relative">
+              <div className="absolute left-3 top-3 z-20 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setZoomMode((current) => !current)}
+                  className={`rounded border px-3 py-1 text-xs font-semibold transition ${
+                    zoomMode
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-blue-200 hover:text-blue-700'
+                  }`}
+                >
+                  {zoomMode ? 'ズーム選択中' : 'ズーム'}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetZoom}
+                  className="rounded border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700 transition hover:border-blue-200 hover:text-blue-700"
+                >
+                  フィット
+                </button>
+              </div>
               <PsychrometricChart
                 ref={chartRef}
                 width={chartSize.width}
@@ -1469,12 +1554,47 @@ function App() {
                 statePoints={statePoints}
                 processes={processes}
                 activeSeason={activeSeason}
+                range={viewRange ?? baseChartConfig.range}
                 selectedPointId={selectedPointId}
-                draggablePointId={movePointId}
+                draggablePointId={zoomMode ? null : movePointId}
                 onPointClick={setSelectedPoint}
                 onBackgroundClick={() => setSelectedPoint(null)}
                 onPointMove={handlePointMove}
               />
+              <div
+                className={`absolute inset-0 z-10 ${zoomMode ? 'cursor-crosshair' : ''}`}
+                style={{ pointerEvents: zoomMode ? 'auto' : 'none' }}
+                onMouseDown={(e) => handleZoomStart(e.clientX, e.clientY)}
+                onMouseMove={(e) => handleZoomMove(e.clientX, e.clientY)}
+                onMouseUp={handleZoomEnd}
+                onMouseLeave={handleZoomEnd}
+                onTouchStart={(e) => {
+                  if (e.touches.length === 0) return;
+                  e.preventDefault();
+                  const touch = e.touches[0];
+                  handleZoomStart(touch.clientX, touch.clientY);
+                }}
+                onTouchMove={(e) => {
+                  if (e.touches.length === 0) return;
+                  e.preventDefault();
+                  const touch = e.touches[0];
+                  handleZoomMove(touch.clientX, touch.clientY);
+                }}
+                onTouchEnd={handleZoomEnd}
+                onTouchCancel={handleZoomEnd}
+              >
+                {zoomSelection && (
+                  <div
+                    className="absolute border-2 border-blue-500 bg-blue-200/30"
+                    style={{
+                      left: Math.min(zoomSelection.start.x, zoomSelection.end.x),
+                      top: Math.min(zoomSelection.start.y, zoomSelection.end.y),
+                      width: Math.abs(zoomSelection.end.x - zoomSelection.start.x),
+                      height: Math.abs(zoomSelection.end.y - zoomSelection.start.y),
+                    }}
+                  />
+                )}
+              </div>
               {selectedPoint && selectedPointPosition && (
                 <div
                   className="absolute z-10"
