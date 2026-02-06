@@ -1610,8 +1610,13 @@ function App() {
                 activeSeason={activeSeason}
                 range={viewRange ?? baseChartConfig.range}
                 selectedPointId={selectedPointId}
+                selectedProcessId={selectedProcessId}
                 draggablePointId={zoomMode ? null : movePointId}
                 onPointClick={setSelectedPoint}
+                onProcessClick={(processId) => {
+                  setSelectedProcess(processId);
+                  setSelectedPoint(null);
+                }}
                 onBackgroundClick={() => setSelectedPoint(null)}
                 onPointMove={handlePointMove}
               />
