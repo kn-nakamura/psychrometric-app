@@ -582,11 +582,11 @@ export const ProcessDialog = ({
             {/* タイプ別パラメータ */}
             {(type === 'heating' || type === 'cooling') && (
               <>
-                {(type === 'heating' || (type === 'cooling' && toPointMode === 'auto')) && (
+                {((type === 'cooling' && toPointMode === 'auto') ||
+                  (type === 'heating' && toPointMode === 'auto')) && (
                   <div className="mb-3">
                     <label className="block text-sm text-gray-600 mb-1">
                       能力 [kW]
-                      {type === 'heating' && toPointMode !== 'auto' ? '（オプション）' : ''}
                     </label>
                     <input
                       type="number"
@@ -595,9 +595,7 @@ export const ProcessDialog = ({
                       onChange={(e) =>
                         handleParameterChange('capacity', parseOptionalNumber(e.target.value))
                       }
-                      placeholder={
-                        type === 'heating' && toPointMode !== 'auto' ? '自動計算' : '必須入力'
-                      }
+                      placeholder="必須入力"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
