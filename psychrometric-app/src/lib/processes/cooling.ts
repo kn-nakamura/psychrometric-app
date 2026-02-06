@@ -7,6 +7,7 @@ import { toSignedCapacity } from '../sign';
 import { splitCapacity } from '../capacity';
 import { massFlowFromAirflow } from '../airflow';
 import { enthalpy } from '../psychrometrics';
+import { PsychrometricCalculator } from '../psychrometric/properties';
 
 /**
  * 冷却・除湿プロセスの計算
@@ -56,33 +57,38 @@ export class CoolingProcess {
       effectivePressure,
       resolved
     );
-    const { sensibleKw: sensibleAtOutletRh } = splitCapacity(
-      massFlow,
-      {
-        dryBulbTemp: fromPoint.dryBulbTemp!,
-        humidity: fromPoint.humidity!,
-      },
-      {
-        dryBulbTemp: outletRHPointAtSameHumidity.dryBulbTemp!,
-        humidity: outletRHPointAtSameHumidity.humidity!,
-      }
+    const enthalpyAtOutletRh = enthalpy(
+      outletRHPointAtSameHumidity.dryBulbTemp!,
+      outletRHPointAtSameHumidity.humidity!
     );
-    const sensibleCapacityLimit = Math.abs(sensibleAtOutletRh);
+    const enthalpyDiffToOutletRh = Math.abs(enthalpyAtOutletRh - fromEnthalpy);
+    const sensibleCapacityLimit = enthalpyDiffToOutletRh * massFlow;
     const useConstantHumidityLine = coolingCapacity <= sensibleCapacityLimit;
 
-    const toPoint = useConstantHumidityLine
-      ? StatePointConverter.fromHumidityAndEnthalpy(
-          fromPoint.humidity!,
-          targetEnthalpy,
-          effectivePressure,
-          resolved
-        )
-      : StatePointConverter.fromRHAndEnthalpy(
+    const constantHumidityPoint = StatePointConverter.fromHumidityAndEnthalpy(
+      fromPoint.humidity!,
+      targetEnthalpy,
+      effectivePressure,
+      resolved
+    );
+    const constantHumidityRh = PsychrometricCalculator.relativeHumidity(
+      constantHumidityPoint.dryBulbTemp!,
+      constantHumidityPoint.humidity!,
+      effectivePressure,
+      resolved
+    );
+    const rhTolerance = 0.05;
+    const useLatentCoolingLine =
+      !useConstantHumidityLine || constantHumidityRh > outletRH + rhTolerance;
+
+    const toPoint = useLatentCoolingLine
+      ? StatePointConverter.fromRHAndEnthalpy(
           outletRH,
           targetEnthalpy,
           effectivePressure,
           resolved
-        );
+        )
+      : constantHumidityPoint;
 
     const humidityDiff = toPoint.humidity! - fromPoint.humidity!;
     const temperatureDiff = toPoint.dryBulbTemp! - fromPoint.dryBulbTemp!;
