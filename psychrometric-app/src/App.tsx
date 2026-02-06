@@ -1693,15 +1693,15 @@ function App() {
                   setEditingProcess(null);
                   setShowProcessDialog(true);
                 }}
-                disabled={statePoints.length < 2}
+                disabled={statePoints.length < 1}
                 className="w-full py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Plus className="w-4 h-4" />
                 プロセス追加
               </button>
-              {statePoints.length < 2 && (
+              {statePoints.length < 1 && (
                 <p className="text-xs text-gray-500 text-center mt-2">
-                  プロセスを追加するには状態点が2つ以上必要です
+                  プロセスを追加するには状態点が1つ以上必要です
                 </p>
               )}
 

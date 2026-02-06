@@ -148,7 +148,7 @@ export const ProcessList = ({
       <div className="text-center py-6 text-gray-500 text-sm">
         プロセスがありません。
         <br />
-        状態点を2つ以上追加してからプロセスを追加してください。
+        状態点を1つ以上追加してからプロセスを追加してください。
       </div>
     );
   }
