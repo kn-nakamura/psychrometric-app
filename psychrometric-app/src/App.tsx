@@ -10,6 +10,7 @@ import { ProjectManager } from './components/Project/ProjectManager';
 import { StatePointConverter } from './lib/psychrometric/conversions';
 import { ChartCoordinates, ChartRange, createDynamicChartConfig } from './lib/chart/coordinates';
 import { resolvePsychrometricConstants } from './lib/psychrometric/constants';
+import { PsychrometricCalculator } from './lib/psychrometric/properties';
 import { MixingProcess } from './lib/processes/mixing';
 import { HeatExchangeProcess } from './lib/processes/heatExchange';
 import { CoolingProcess } from './lib/processes/cooling';
@@ -252,6 +253,7 @@ function App() {
     end: { x: number; y: number };
   } | null>(null);
   const [viewRange, setViewRange] = useState<ChartRange | null>(null);
+  const moveErrorShownRef = useRef(false);
   const inputOptionA =
     STATE_POINT_INPUT_OPTIONS.find((option) => option.key === inputTypeA) ??
     STATE_POINT_INPUT_OPTIONS[0];
@@ -757,6 +759,32 @@ function App() {
     })();
 
     if (!stateData) return;
+    if (stateData.dryBulbTemp === undefined || stateData.humidity === undefined) return;
+
+    const chartRange = viewRange ?? baseChartConfig.range;
+    const saturationHumidity = PsychrometricCalculator.absoluteHumidity(
+      stateData.dryBulbTemp,
+      100,
+      defaultPressure,
+      calculationConstants
+    );
+    const epsilon = 1e-6;
+    const isOutsideRange =
+      stateData.dryBulbTemp < chartRange.tempMin ||
+      stateData.dryBulbTemp > chartRange.tempMax ||
+      stateData.humidity < chartRange.humidityMin ||
+      stateData.humidity > chartRange.humidityMax;
+    const isOutsideChart = isOutsideRange || stateData.humidity > saturationHumidity + epsilon;
+
+    if (isOutsideChart) {
+      if (!moveErrorShownRef.current) {
+        alert('空気線図の外です。範囲内に移動してください。');
+        moveErrorShownRef.current = true;
+      }
+      return;
+    }
+
+    moveErrorShownRef.current = false;
     updateStatePoint(pointId, stateData);
   };
 
