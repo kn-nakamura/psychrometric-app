@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Settings, Download, FolderOpen, Edit2, Trash2, Copy, ChevronUp, ChevronDown, FilePlus } from 'lucide-react';
+import { Plus, Settings, Download, FolderOpen, Edit2, Trash2, Copy, ChevronUp, ChevronDown, FilePlus, ArrowRight } from 'lucide-react';
 import { useProjectStore } from './store/projectStore';
 import { PsychrometricChart, PsychrometricChartRef } from './components/Chart/PsychrometricChart';
 import { ProcessDialog } from './components/Process/ProcessDialog';
@@ -12,6 +12,8 @@ import { ChartCoordinates, ChartRange, createDynamicChartConfig } from './lib/ch
 import { resolvePsychrometricConstants } from './lib/psychrometric/constants';
 import { MixingProcess } from './lib/processes/mixing';
 import { HeatExchangeProcess } from './lib/processes/heatExchange';
+import { CoilCapacityCalculator } from './lib/equipment/coilCapacity';
+import { inferModeFromSigned } from './lib/sign';
 import { Process } from './types/process';
 import { DesignConditions } from './types/designConditions';
 import { StatePoint, StatePointValueKey } from './types/psychrometric';
@@ -91,6 +93,18 @@ const processTypeLabels: Record<Process['type'], string> = {
   heatExchange: '全熱交換',
   fanHeating: 'ファン発熱',
   airSupply: '空調吹き出し',
+};
+
+const formatSHF = (value: number | null | undefined) =>
+  value === null || value === undefined ? '—' : value.toFixed(2);
+const formatSignedHeat = (value: number) => {
+  if (Object.is(value, -0)) {
+    return '0.00';
+  }
+  if (value > 0) {
+    return `+${value.toFixed(2)}`;
+  }
+  return value.toFixed(2);
 };
 
 const getProcessAnchorPosition = (
@@ -304,8 +318,58 @@ function App() {
 
   const selectedProcessDetails = useMemo(() => {
     if (!selectedProcess) return null;
+    const filteredPoints = statePoints.filter((point) => {
+      if (activeSeason === 'both') return true;
+      return point.season === activeSeason || point.season === 'both';
+    });
+    const sortedPoints = [...filteredPoints].sort((a, b) => a.order - b.order);
+    const getPointLabel = (point: StatePoint, index: number): string => {
+      let summerCount = 0;
+      let winterCount = 0;
+      for (let i = 0; i <= index; i++) {
+        const p = sortedPoints[i];
+        if (p.season === 'summer') summerCount++;
+        else if (p.season === 'winter') winterCount++;
+      }
+
+      if (point.season === 'summer') {
+        return `C${summerCount}`;
+      }
+      if (point.season === 'winter') {
+        return `H${winterCount}`;
+      }
+
+      let bothSummerCount = 0;
+      let bothWinterCount = 0;
+      for (let i = 0; i <= index; i++) {
+        const p = sortedPoints[i];
+        if (p.season === 'summer' || p.season === 'both') bothSummerCount++;
+        if (p.season === 'winter' || p.season === 'both') bothWinterCount++;
+      }
+      if (activeSeason === 'summer') {
+        return `C${bothSummerCount}`;
+      }
+      if (activeSeason === 'winter') {
+        return `H${bothWinterCount}`;
+      }
+      return `C${bothSummerCount}/H${bothWinterCount}`;
+    };
+    const pointLabelMap = new Map(
+      sortedPoints.map((point, index) => [point.id, getPointLabel(point, index)])
+    );
     const fromPoint = statePoints.find((point) => point.id === selectedProcess.fromPointId);
     const toPoint = statePoints.find((point) => point.id === selectedProcess.toPointId);
+    const fromPointLabel = fromPoint ? pointLabelMap.get(fromPoint.id) : undefined;
+    const toPointLabel = toPoint ? pointLabelMap.get(toPoint.id) : undefined;
+    const stream1Id =
+      selectedProcess.parameters.mixingRatios?.stream1.pointId ?? selectedProcess.fromPointId;
+    const stream2Id = selectedProcess.parameters.mixingRatios?.stream2.pointId;
+    const stream1Point = statePoints.find((point) => point.id === stream1Id);
+    const stream2Point = statePoints.find((point) => point.id === stream2Id);
+    const mixingAirflowTotal =
+      typeof stream1Point?.airflow === 'number' && typeof stream2Point?.airflow === 'number'
+        ? stream1Point.airflow + stream2Point.airflow
+        : undefined;
     const airflowDetails: string[] = [];
 
     if (typeof selectedProcess.parameters.airflow === 'number') {
@@ -328,12 +392,35 @@ function App() {
       }
     }
 
+    let capacity: ReturnType<typeof CoilCapacityCalculator.calculate> | null = null;
+    if (fromPoint && toPoint && fromPoint.enthalpy && toPoint.enthalpy) {
+      const airflow = selectedProcess.parameters.airflow || 1000;
+      try {
+        capacity = CoilCapacityCalculator.calculate(fromPoint, toPoint, airflow);
+      } catch {
+        capacity = null;
+      }
+    }
+
+    const inferredMode = capacity ? inferModeFromSigned(capacity.totalCapacity) : null;
+    const modeMismatch =
+      capacity &&
+      (selectedProcess.type === 'heating' || selectedProcess.type === 'cooling') &&
+      ((selectedProcess.type === 'heating' && inferredMode === 'cooling') ||
+        (selectedProcess.type === 'cooling' && inferredMode === 'heating'));
+
     return {
       fromLabel: fromPoint?.name ?? '-',
       toLabel: toPoint?.name ?? '-',
+      fromPointLabel,
+      toPointLabel,
+      mixingAirflowTotal,
       airflowDetails,
+      capacity,
+      inferredMode,
+      modeMismatch,
     };
-  }, [selectedProcess, statePoints]);
+  }, [activeSeason, selectedProcess, statePoints]);
 
   const handleZoomStart = (clientX: number, clientY: number) => {
     if (!zoomMode) return;
@@ -1850,9 +1937,16 @@ function App() {
                   }}
                 >
                   <div className="relative rounded-lg border border-gray-200 bg-white shadow-lg px-4 py-3 text-xs text-gray-700 min-w-[220px]">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="font-semibold text-sm text-gray-900">
-                        {selectedProcess.name}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-semibold">
+                          {selectedProcessDetails.fromPointLabel || '—'}
+                          <ArrowRight className="inline-block w-3 h-3 mx-1 -mt-px" />
+                          {selectedProcessDetails.toPointLabel || '—'}
+                        </span>
+                        <div className="font-semibold text-sm text-gray-900">
+                          {selectedProcess.name}
+                        </div>
                       </div>
                       <span className="text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-700">
                         {processTypeLabels[selectedProcess.type]}
@@ -1878,11 +1972,98 @@ function App() {
                         {selectedProcessDetails.fromLabel} → {selectedProcessDetails.toLabel}
                       </span>
                     </div>
-                    {selectedProcessDetails.airflowDetails.length > 0 && (
-                      <div className="mt-2 space-y-1 text-[11px] text-gray-600">
-                        {selectedProcessDetails.airflowDetails.map((detail) => (
-                          <div key={detail}>{detail}</div>
-                        ))}
+
+                    {selectedProcess.type === 'mixing' &&
+                      selectedProcessDetails.mixingAirflowTotal !== undefined && (
+                        <div className="mt-2 text-[11px] text-gray-600">
+                          混合後風量: {selectedProcessDetails.mixingAirflowTotal.toFixed(0)} m³/h
+                        </div>
+                      )}
+
+                    {(selectedProcessDetails.capacity ||
+                      selectedProcessDetails.airflowDetails.length > 0) && (
+                      <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-gray-600 bg-gray-50 p-2 rounded">
+                        {selectedProcessDetails.capacity && (
+                          <>
+                            <div>
+                              全熱:{' '}
+                              {formatSignedHeat(selectedProcessDetails.capacity.totalCapacity)} kW
+                            </div>
+                            <div>
+                              顕熱:{' '}
+                              {formatSignedHeat(
+                                selectedProcessDetails.capacity.sensibleCapacity
+                              )}{' '}
+                              kW
+                            </div>
+                            <div>
+                              潜熱:{' '}
+                              {formatSignedHeat(selectedProcessDetails.capacity.latentCapacity)} kW
+                            </div>
+                            <div>SHF: {formatSHF(selectedProcessDetails.capacity.SHF)}</div>
+                            <div>
+                              温度差: {selectedProcessDetails.capacity.temperatureDiff.toFixed(1)}
+                              °C
+                            </div>
+                            <div>
+                              湿度差:{' '}
+                              {(selectedProcessDetails.capacity.humidityDiff * 1000).toFixed(2)} g/kg'
+                            </div>
+                            <div>
+                              比エンタルピー差:{' '}
+                              {selectedProcessDetails.capacity.enthalpyDiff.toFixed(2)} kJ/kg'
+                            </div>
+                            {selectedProcess.parameters.airflow &&
+                              selectedProcessDetails.capacity.humidityDiff !== 0 && (
+                                <div>
+                                  {selectedProcessDetails.capacity.humidityDiff < 0
+                                    ? '除湿量'
+                                    : '加湿量'}
+                                  :{' '}
+                                  {(
+                                    Math.abs(selectedProcessDetails.capacity.humidityDiff) *
+                                    selectedProcess.parameters.airflow *
+                                    1.2
+                                  ).toFixed(2)}{' '}
+                                  L/h
+                                </div>
+                              )}
+                            {(selectedProcess.type === 'heating' ||
+                              selectedProcess.type === 'cooling') && (
+                              <>
+                                {(() => {
+                                  const waterTempDiff =
+                                    selectedProcess.parameters.waterTempDiff || 7;
+                                  const waterFlowRate =
+                                    (Math.abs(selectedProcessDetails.capacity.totalCapacity) * 60) /
+                                    (4.186 * waterTempDiff);
+                                  return (
+                                    <>
+                                      <div>水温度差: {waterTempDiff.toFixed(1)}℃</div>
+                                      <div>水量: {waterFlowRate.toFixed(2)} L/min</div>
+                                    </>
+                                  );
+                                })()}
+                              </>
+                            )}
+                            {selectedProcessDetails.modeMismatch && (
+                              <div className="col-span-2 text-amber-600">
+                                警告: 運転モードと計算結果が一致しません（結果は
+                                {selectedProcessDetails.inferredMode === 'cooling'
+                                  ? '冷却'
+                                  : '加熱'}
+                                ）。
+                              </div>
+                            )}
+                          </>
+                        )}
+                        {selectedProcessDetails.airflowDetails.length > 0 && (
+                          <div className="col-span-2 space-y-0.5">
+                            {selectedProcessDetails.airflowDetails.map((detail) => (
+                              <div key={detail}>{detail}</div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                     <div className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1 rotate-45 border-b border-r border-gray-200 bg-white" />
