@@ -243,7 +243,7 @@ export const ExportDialog = ({
     const chartScaleX = drawChartWidthMm / chartRenderWidth;
     const chartScaleY = drawChartHeightMm / chartRenderHeight;
     const pdfStyleScale = 72 / A4_DPI;
-    const pdfDashScale = pdfStyleScale * 0.7;
+    const pdfDashScale = pdfStyleScale * 0.5;
 
     const drawStatePointCard = (point: StatePoint, index: number, x: number, y: number) => {
       const label = getPointLabel(point, index);
