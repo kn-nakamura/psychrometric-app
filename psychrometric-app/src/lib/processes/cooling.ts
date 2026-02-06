@@ -50,13 +50,32 @@ export class CoolingProcess {
     const fromEnthalpy = enthalpy(fromPoint.dryBulbTemp!, fromPoint.humidity!);
     const targetEnthalpy = fromEnthalpy + totalEnthalpyDiff;
 
-    // 相対湿度条件から出口状態を算出
-    const toPoint = StatePointConverter.fromRHAndEnthalpy(
+    const outletRHPointAtSameHumidity = StatePointConverter.fromRHAndHumidity(
       outletRH,
-      targetEnthalpy,
+      fromPoint.humidity!,
       effectivePressure,
       resolved
     );
+    const enthalpyAtOutletRH = enthalpy(
+      outletRHPointAtSameHumidity.dryBulbTemp!,
+      outletRHPointAtSameHumidity.humidity!
+    );
+
+    const requiresLatentCooling = targetEnthalpy <= enthalpyAtOutletRH;
+
+    const toPoint = requiresLatentCooling
+      ? StatePointConverter.fromRHAndEnthalpy(
+          outletRH,
+          targetEnthalpy,
+          effectivePressure,
+          resolved
+        )
+      : StatePointConverter.fromHumidityAndEnthalpy(
+          fromPoint.humidity!,
+          targetEnthalpy,
+          effectivePressure,
+          resolved
+        );
 
     const humidityDiff = toPoint.humidity! - fromPoint.humidity!;
     const temperatureDiff = toPoint.dryBulbTemp! - fromPoint.dryBulbTemp!;
