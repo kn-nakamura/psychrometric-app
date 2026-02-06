@@ -13,8 +13,10 @@ interface PsychrometricChartProps {
   activeSeason: 'summer' | 'winter' | 'both';
   range?: ChartRange;
   selectedPointId?: string | null;
+  selectedProcessId?: string | null;
   draggablePointId?: string | null;
   onPointClick?: (pointId: string) => void;
+  onProcessClick?: (processId: string) => void;
   onBackgroundClick?: () => void;
   onPointMove?: (pointId: string, temp: number, humidity: number) => void;
 }
@@ -31,6 +33,7 @@ interface RenderPsychrometricChartOptions {
   processes: Process[];
   activeSeason: 'summer' | 'winter' | 'both';
   selectedPointId?: string | null;
+  selectedProcessId?: string | null;
   resolutionScale?: number;
   range?: ChartRange;
   styleScale?: number;
@@ -45,6 +48,7 @@ interface RenderPsychrometricChartContextOptions {
   processes: Process[];
   activeSeason: 'summer' | 'winter' | 'both';
   selectedPointId?: string | null;
+  selectedProcessId?: string | null;
   range?: ChartRange;
   styleScale?: number;
   dashScale?: number;
@@ -65,6 +69,7 @@ const drawPsychrometricChart = ({
   processes,
   activeSeason,
   selectedPointId,
+  selectedProcessId,
   range,
   styleScale = 1,
   dashScale = styleScale,
@@ -93,7 +98,16 @@ const drawPsychrometricChart = ({
   drawEnthalpyCurves(ctx, coordinates, chartRange, styleScale);
 
   // プロセス線を描画
-  drawProcesses(ctx, coordinates, processes, statePoints, activeSeason, styleScale, dashScale);
+  drawProcesses(
+    ctx,
+    coordinates,
+    processes,
+    statePoints,
+    activeSeason,
+    styleScale,
+    dashScale,
+    selectedProcessId
+  );
 
   // 状態点を描画
   drawStatePoints(ctx, coordinates, statePoints, activeSeason, selectedPointId, styleScale);
@@ -107,6 +121,7 @@ export const renderPsychrometricChart = ({
   processes,
   activeSeason,
   selectedPointId,
+  selectedProcessId,
   resolutionScale = getDefaultResolutionScale(),
   range,
   styleScale,
@@ -133,6 +148,7 @@ export const renderPsychrometricChart = ({
     processes,
     activeSeason,
     selectedPointId,
+    selectedProcessId,
     range,
     styleScale,
     dashScale,
@@ -147,6 +163,7 @@ export const renderPsychrometricChartToContext = ({
   processes,
   activeSeason,
   selectedPointId,
+  selectedProcessId,
   range,
   styleScale,
   dashScale,
@@ -159,6 +176,7 @@ export const renderPsychrometricChartToContext = ({
     processes,
     activeSeason,
     selectedPointId,
+    selectedProcessId,
     range,
     styleScale,
     dashScale,
@@ -173,8 +191,10 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   activeSeason,
   range,
   selectedPointId,
+  selectedProcessId,
   draggablePointId,
   onPointClick,
+  onProcessClick,
   onBackgroundClick,
   onPointMove,
 }, ref) => {
@@ -221,6 +241,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
       processes,
       activeSeason,
       selectedPointId,
+      selectedProcessId,
       resolutionScale,
       range: chartConfig.range,
     });
@@ -259,7 +280,20 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
         setIsDragging(true);
         setDraggedPointId(clickedPoint.id);
       }
+      return;
     } else {
+      const clickedProcess = findProcessAt(
+        point.x,
+        point.y,
+        processes,
+        statePoints,
+        activeSeason,
+        coordinates
+      );
+      if (clickedProcess) {
+        onProcessClick?.(clickedProcess.id);
+        return;
+      }
       onBackgroundClick?.();
     }
   };
@@ -581,8 +615,38 @@ function drawProcesses(
   points: StatePoint[],
   activeSeason: string,
   styleScale: number,
-  dashScale: number
+  dashScale: number,
+  selectedProcessId?: string | null
 ) {
+  const drawSegment = (
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+    color: string,
+    lineWidth: number,
+    dash: number[],
+    isSelected: boolean
+  ) => {
+    if (isSelected) {
+      ctx.save();
+      ctx.strokeStyle = '#111';
+      ctx.lineWidth = lineWidth + 2 * styleScale;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.setLineDash(dash);
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+  };
+
   processes.forEach((process) => {
     // 季節フィルター
     if (activeSeason !== 'both' && process.season !== 'both' && process.season !== activeSeason) {
@@ -600,14 +664,15 @@ function drawProcesses(
     const to = coordinates.toCanvas(toPoint.dryBulbTemp, toPoint.humidity);
     
     // プロセス線を描画
-    ctx.strokeStyle =
+    const processColor =
       process.season === 'summer'
         ? '#4dabf7'
         : process.season === 'winter'
         ? '#ff6b6b'
         : '#6b7280';
-    ctx.lineWidth = 3 * styleScale;
-    ctx.setLineDash([5 * dashScale, 5 * dashScale]);
+    const isSelected = selectedProcessId === process.id;
+    const baseLineWidth = (isSelected ? 4 : 3) * styleScale;
+    const mainDash = [5 * dashScale, 5 * dashScale];
     
     if (process.type === 'mixing') {
       const stream1Id = process.parameters.mixingRatios?.stream1.pointId ?? process.fromPointId;
@@ -620,14 +685,8 @@ function drawProcesses(
       const stream1 = coordinates.toCanvas(stream1Point.dryBulbTemp, stream1Point.humidity);
       const stream2 = coordinates.toCanvas(stream2Point.dryBulbTemp, stream2Point.humidity);
 
-      ctx.beginPath();
-      ctx.moveTo(stream1.x, stream1.y);
-      ctx.lineTo(to.x, to.y);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(stream2.x, stream2.y);
-      ctx.lineTo(to.x, to.y);
-      ctx.stroke();
+      drawSegment(stream1, to, processColor, baseLineWidth, mainDash, isSelected);
+      drawSegment(stream2, to, processColor, baseLineWidth, mainDash, isSelected);
 
       ctx.setLineDash([]);
       drawArrow(ctx, stream1.x, stream1.y, to.x, to.y);
@@ -649,22 +708,15 @@ function drawProcesses(
       if (exhaustPoint && exhaustPoint.dryBulbTemp && exhaustPoint.humidity) {
         const exhaustCanvas = coordinates.toCanvas(exhaustPoint.dryBulbTemp, exhaustPoint.humidity);
 
-        // Draw connection line from exhaust point to heat exchanger output (no arrow)
-        ctx.strokeStyle =
-          process.season === 'summer'
-            ? '#4dabf7'
-            : process.season === 'winter'
-            ? '#ff6b6b'
-            : '#6b7280';
-        ctx.lineWidth = 2 * styleScale;
-        ctx.setLineDash([2 * dashScale, 4 * dashScale]); // Dotted line to distinguish from main process flow
-
-        ctx.beginPath();
-        ctx.moveTo(exhaustCanvas.x, exhaustCanvas.y);
-        ctx.lineTo(to.x, to.y);
-        ctx.stroke();
-
-        ctx.setLineDash([5 * dashScale, 5 * dashScale]); // Return to dashed line for main flow
+        const exhaustLineWidth = (isSelected ? 3 : 2) * styleScale;
+        drawSegment(
+          exhaustCanvas,
+          to,
+          processColor,
+          exhaustLineWidth,
+          [2 * dashScale, 4 * dashScale],
+          isSelected
+        );
       }
     }
 
@@ -676,10 +728,14 @@ function drawProcesses(
     const toOffsetX = to.x - offsetDistance * Math.cos(angle);
     const toOffsetY = to.y - offsetDistance * Math.sin(angle);
 
-    ctx.beginPath();
-    ctx.moveTo(fromOffsetX, fromOffsetY);
-    ctx.lineTo(toOffsetX, toOffsetY);
-    ctx.stroke();
+    drawSegment(
+      { x: fromOffsetX, y: fromOffsetY },
+      { x: toOffsetX, y: toOffsetY },
+      processColor,
+      baseLineWidth,
+      mainDash,
+      isSelected
+    );
 
     ctx.setLineDash([]);
 
@@ -742,4 +798,94 @@ function findPointAt(
   }
   
   return null;
+}
+
+function findProcessAt(
+  x: number,
+  y: number,
+  processes: Process[],
+  points: StatePoint[],
+  activeSeason: string,
+  coordinates: ChartCoordinates
+): Process | null {
+  const threshold = 8;
+  let closestProcess: Process | null = null;
+  let closestDistance = Number.POSITIVE_INFINITY;
+
+  processes.forEach((process) => {
+    if (activeSeason !== 'both' && process.season !== 'both' && process.season !== activeSeason) {
+      return;
+    }
+
+    const fromPoint = points.find((p) => p.id === process.fromPointId);
+    const toPoint = points.find((p) => p.id === process.toPointId);
+    if (!fromPoint || !toPoint) return;
+    if (!fromPoint.dryBulbTemp || !fromPoint.humidity) return;
+    if (!toPoint.dryBulbTemp || !toPoint.humidity) return;
+
+    const segments: Array<{ start: { x: number; y: number }; end: { x: number; y: number } }> =
+      [];
+
+    if (process.type === 'mixing') {
+      const stream1Id = process.parameters.mixingRatios?.stream1.pointId ?? process.fromPointId;
+      const stream2Id = process.parameters.mixingRatios?.stream2.pointId;
+      const stream1Point = points.find((p) => p.id === stream1Id);
+      const stream2Point = points.find((p) => p.id === stream2Id);
+      if (!stream1Point || !stream2Point) return;
+      if (!stream1Point.dryBulbTemp || !stream1Point.humidity) return;
+      if (!stream2Point.dryBulbTemp || !stream2Point.humidity) return;
+      const stream1 = coordinates.toCanvas(stream1Point.dryBulbTemp, stream1Point.humidity);
+      const stream2 = coordinates.toCanvas(stream2Point.dryBulbTemp, stream2Point.humidity);
+      const to = coordinates.toCanvas(toPoint.dryBulbTemp, toPoint.humidity);
+      segments.push({ start: stream1, end: to }, { start: stream2, end: to });
+    } else {
+      const from = coordinates.toCanvas(fromPoint.dryBulbTemp, fromPoint.humidity);
+      const to = coordinates.toCanvas(toPoint.dryBulbTemp, toPoint.humidity);
+      segments.push({ start: from, end: to });
+
+      if (process.type === 'heatExchange') {
+        const exhaustPointId = process.parameters.exhaustPointId;
+        const exhaustPoint = points.find((p) => p.id === exhaustPointId);
+        if (exhaustPoint && exhaustPoint.dryBulbTemp && exhaustPoint.humidity) {
+          const exhaustCanvas = coordinates.toCanvas(
+            exhaustPoint.dryBulbTemp,
+            exhaustPoint.humidity
+          );
+          segments.push({ start: exhaustCanvas, end: to });
+        }
+      }
+    }
+
+    segments.forEach((segment) => {
+      const distance = distanceToSegment(
+        { x, y },
+        segment.start,
+        segment.end
+      );
+      if (distance <= threshold && distance < closestDistance) {
+        closestDistance = distance;
+        closestProcess = process;
+      }
+    });
+  });
+
+  return closestProcess;
+}
+
+function distanceToSegment(
+  point: { x: number; y: number },
+  start: { x: number; y: number },
+  end: { x: number; y: number }
+): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(point.x - start.x, point.y - start.y);
+  }
+
+  const t = ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy);
+  const clampedT = Math.max(0, Math.min(1, t));
+  const projectionX = start.x + clampedT * dx;
+  const projectionY = start.y + clampedT * dy;
+  return Math.hypot(point.x - projectionX, point.y - projectionY);
 }
