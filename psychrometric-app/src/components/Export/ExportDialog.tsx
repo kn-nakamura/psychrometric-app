@@ -206,14 +206,15 @@ export const ExportDialog = ({
     return false;
   };
 
-  const renderPdfPages = (chartCanvas: HTMLCanvasElement, pdf: jsPDF, hasJapaneseFont: boolean) => {
+  const renderPdfPages = (pdf: jsPDF, hasJapaneseFont: boolean) => {
 
     const marginMm = 8;
     const headerHeightMm = 14;
     const chartTopMm = marginMm + headerHeightMm + 2;
-    const chartHeightMm = 120;
-    const bottomSectionStartMm = chartTopMm + chartHeightMm + 6;
     const contentWidthMm = A4_WIDTH_MM - marginMm * 2;
+    const pdfChartAspectRatio = 1000 / 700;
+    const chartHeightMm = contentWidthMm / pdfChartAspectRatio;
+    const bottomSectionStartMm = chartTopMm + chartHeightMm + 6;
 
     const setFont = (style: 'normal' | 'bold', sizeMm: number) => {
       if (hasJapaneseFont) {
@@ -234,14 +235,9 @@ export const ExportDialog = ({
 
     // チャート画像を準備
     const chartWidthMm = contentWidthMm;
-    const chartAspectRatio = chartCanvas.width / chartCanvas.height;
-    let drawChartWidthMm = chartWidthMm;
-    let drawChartHeightMm = chartWidthMm / chartAspectRatio;
-    if (drawChartHeightMm > chartHeightMm) {
-      drawChartHeightMm = chartHeightMm;
-      drawChartWidthMm = chartHeightMm * chartAspectRatio;
-    }
-    const chartXOffset = marginMm + (chartWidthMm - drawChartWidthMm) / 2;
+    const drawChartWidthMm = chartWidthMm;
+    const drawChartHeightMm = chartHeightMm;
+    const chartXOffset = marginMm;
     const chartRenderWidth = Math.round((drawChartWidthMm / 25.4) * A4_DPI);
     const chartRenderHeight = Math.round((drawChartHeightMm / 25.4) * A4_DPI);
     const chartScaleX = drawChartWidthMm / chartRenderWidth;
@@ -1093,7 +1089,7 @@ export const ExportDialog = ({
           'PDF用フォントが読み込めませんでした。public/fonts/NotoSansJP-Regular.ttf を配置するか、外部フォントURLへのアクセスを許可してください。'
         );
       }
-      renderPdfPages(canvas, pdf, hasJapaneseFont);
+      renderPdfPages(pdf, hasJapaneseFont);
 
       // PDFをBlobとして生成し、新しいウィンドウで開く
       const pdfBlob = pdf.output('blob');
