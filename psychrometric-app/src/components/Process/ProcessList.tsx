@@ -186,6 +186,26 @@ export const ProcessList = ({
           typeof stream1Point?.airflow === 'number' && typeof stream2Point?.airflow === 'number'
             ? stream1Point.airflow + stream2Point.airflow
             : undefined;
+        const airflowDetails: string[] = [];
+        if (typeof process.parameters.airflow === 'number') {
+          airflowDetails.push(`風量: ${process.parameters.airflow.toFixed(0)} m³/h`);
+        }
+        if (typeof process.parameters.supplyAirflow === 'number') {
+          airflowDetails.push(`外気側風量: ${process.parameters.supplyAirflow.toFixed(0)} m³/h`);
+        }
+        if (typeof process.parameters.exhaustAirflow === 'number') {
+          airflowDetails.push(`排気側風量: ${process.parameters.exhaustAirflow.toFixed(0)} m³/h`);
+        }
+        if (process.type === 'mixing') {
+          const stream1Airflow = process.parameters.mixingRatios?.stream1.airflow;
+          const stream2Airflow = process.parameters.mixingRatios?.stream2.airflow;
+          if (typeof stream1Airflow === 'number') {
+            airflowDetails.push(`混合流1風量: ${stream1Airflow.toFixed(0)} m³/h`);
+          }
+          if (typeof stream2Airflow === 'number') {
+            airflowDetails.push(`混合流2風量: ${stream2Airflow.toFixed(0)} m³/h`);
+          }
+        }
 
         return (
           <div
@@ -254,6 +274,13 @@ export const ProcessList = ({
                 {process.type === 'mixing' && mixingAirflowTotal !== undefined && (
                   <div className="mt-1 text-xs text-gray-600">
                     混合後風量: {mixingAirflowTotal.toFixed(0)} m³/h
+                  </div>
+                )}
+                {airflowDetails.length > 0 && (
+                  <div className="mt-1 text-xs text-gray-600 space-y-0.5">
+                    {airflowDetails.map((detail) => (
+                      <div key={detail}>{detail}</div>
+                    ))}
                   </div>
                 )}
 
