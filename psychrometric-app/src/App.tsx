@@ -1745,28 +1745,28 @@ function App() {
 
         {/* メインコンテンツ */}
         <main className="order-1 flex-1 min-h-0 min-w-0 overflow-hidden p-3 sm:order-none sm:p-4">
-            <div className="bg-white rounded-lg shadow h-full min-h-0 min-w-0 p-3 sm:p-4">
+          <div className="bg-white rounded-lg shadow h-full min-h-0 min-w-0 p-3 sm:p-4">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setZoomMode((current) => !current)}
+                className={`rounded border px-3 py-1 text-xs font-semibold transition ${
+                  zoomMode
+                    ? 'border-blue-600 bg-blue-600 text-white'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-blue-200 hover:text-blue-700'
+                }`}
+              >
+                {zoomMode ? 'ズーム選択中' : 'ズーム'}
+              </button>
+              <button
+                type="button"
+                onClick={resetZoom}
+                className="rounded border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700 transition hover:border-blue-200 hover:text-blue-700"
+              >
+                フィット
+              </button>
+            </div>
             <div ref={chartContainerRef} className="h-full min-h-0 min-w-0 relative">
-              <div className="absolute left-3 top-3 z-20 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setZoomMode((current) => !current)}
-                  className={`rounded border px-3 py-1 text-xs font-semibold transition ${
-                    zoomMode
-                      ? 'border-blue-600 bg-blue-600 text-white'
-                      : 'border-gray-200 bg-white text-gray-700 hover:border-blue-200 hover:text-blue-700'
-                  }`}
-                >
-                  {zoomMode ? 'ズーム選択中' : 'ズーム'}
-                </button>
-                <button
-                  type="button"
-                  onClick={resetZoom}
-                  className="rounded border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700 transition hover:border-blue-200 hover:text-blue-700"
-                >
-                  フィット
-                </button>
-              </div>
               <PsychrometricChart
                 ref={chartRef}
                 width={chartSize.width}
