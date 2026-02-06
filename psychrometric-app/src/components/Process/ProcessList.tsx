@@ -46,6 +46,46 @@ export const ProcessList = ({
   onEditProcess,
   onDeleteProcess,
 }: ProcessListProps) => {
+  const filteredPoints = statePoints.filter((point) => {
+    if (activeSeason === 'both') return true;
+    return point.season === activeSeason || point.season === 'both';
+  });
+  const sortedPoints = [...filteredPoints].sort((a, b) => a.order - b.order);
+  const getPointLabel = (point: StatePoint, index: number): string => {
+    let summerCount = 0;
+    let winterCount = 0;
+    for (let i = 0; i <= index; i++) {
+      const p = sortedPoints[i];
+      if (p.season === 'summer') summerCount++;
+      else if (p.season === 'winter') winterCount++;
+    }
+
+    if (point.season === 'summer') {
+      return `C${summerCount}`;
+    }
+    if (point.season === 'winter') {
+      return `H${winterCount}`;
+    }
+
+    let bothSummerCount = 0;
+    let bothWinterCount = 0;
+    for (let i = 0; i <= index; i++) {
+      const p = sortedPoints[i];
+      if (p.season === 'summer' || p.season === 'both') bothSummerCount++;
+      if (p.season === 'winter' || p.season === 'both') bothWinterCount++;
+    }
+    if (activeSeason === 'summer') {
+      return `C${bothSummerCount}`;
+    }
+    if (activeSeason === 'winter') {
+      return `H${bothWinterCount}`;
+    }
+    return `C${bothSummerCount}/H${bothWinterCount}`;
+  };
+  const pointLabelMap = new Map(
+    sortedPoints.map((point, index) => [point.id, getPointLabel(point, index)])
+  );
+
   // 季節フィルター
   const filteredProcesses = processes.filter((process) => {
     if (activeSeason === 'both') return true;
@@ -103,6 +143,8 @@ export const ProcessList = ({
       {sortedProcesses.map((process) => {
         const fromPoint = statePoints.find((p) => p.id === process.fromPointId);
         const toPoint = statePoints.find((p) => p.id === process.toPointId);
+        const fromPointLabel = fromPoint ? pointLabelMap.get(fromPoint.id) : undefined;
+        const toPointLabel = toPoint ? pointLabelMap.get(toPoint.id) : undefined;
         const capacity = calculateCapacity(process);
         const inferredMode = capacity ? inferModeFromSigned(capacity.totalCapacity) : null;
         const modeMismatch =
@@ -156,9 +198,15 @@ export const ProcessList = ({
 
                 {/* 状態点表示 */}
                 <div className="mt-1 flex items-center text-sm text-gray-600">
-                  <span className="truncate">{fromPoint?.name || '不明'}</span>
+                  <span className="truncate">
+                    {fromPointLabel ? `${fromPointLabel}: ` : ''}
+                    {fromPoint?.name || '不明'}
+                  </span>
                   <ArrowRight className="w-4 h-4 mx-1 flex-shrink-0" />
-                  <span className="truncate">{toPoint?.name || '不明'}</span>
+                  <span className="truncate">
+                    {toPointLabel ? `${toPointLabel}: ` : ''}
+                    {toPoint?.name || '不明'}
+                  </span>
                 </div>
 
                 {process.type === 'mixing' && mixingAirflowTotal !== undefined && (
