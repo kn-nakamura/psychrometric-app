@@ -218,6 +218,10 @@ export const ProcessDialog = ({
       alert('終点の自動計算には能力欄に数値を入力してください');
       return;
     }
+    if (type === 'cooling' && toPointMode === 'auto' && parameters.coolingOutletRH === undefined) {
+      alert('終点の自動計算には冷却コイル出口条件を入力してください');
+      return;
+    }
     if (type === 'mixing') {
       const stream2Id = parameters.mixingRatios?.stream2.pointId;
       const stream1Airflow = parameters.mixingRatios?.stream1.airflow;
@@ -492,6 +496,11 @@ export const ProcessDialog = ({
                         checked={toPointMode === 'manual'}
                         onChange={() => {
                           setToPointMode('manual');
+                          setParameters((prev) => ({
+                            ...prev,
+                            capacity: undefined,
+                            coolingOutletRH: undefined,
+                          }));
                           if (!toPointId && filteredPoints[0]) {
                             setToPointId(filteredPoints[0].id);
                           }
@@ -560,10 +569,11 @@ export const ProcessDialog = ({
             {/* タイプ別パラメータ */}
             {(type === 'heating' || type === 'cooling') && (
               <>
-                <div className="mb-3">
-                  <label className="block text-sm text-gray-600 mb-1">
-                    能力 [kW]（オプション）
-                  </label>
+                {(type === 'heating' || (type === 'cooling' && toPointMode === 'auto')) && (
+                  <div className="mb-3">
+                    <label className="block text-sm text-gray-600 mb-1">
+                      能力 [kW]{type === 'heating' ? '（オプション）' : ''}
+                    </label>
                     <input
                       type="number"
                       min="0"
@@ -571,11 +581,12 @@ export const ProcessDialog = ({
                       onChange={(e) =>
                         handleParameterChange('capacity', parseOptionalNumber(e.target.value))
                       }
-                      placeholder="自動計算"
+                      placeholder={type === 'heating' ? '自動計算' : '必須入力'}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
-                {type === 'cooling' && (
+                )}
+                {type === 'cooling' && toPointMode === 'auto' && (
                   <div className="mb-3">
                     <label className="block text-sm text-gray-600 mb-1">
                       冷却コイル出口条件（相対湿度）[%]
@@ -592,7 +603,7 @@ export const ProcessDialog = ({
                           parseOptionalNumber(e.target.value)
                         )
                       }
-                      placeholder="相対湿度95%"
+                      placeholder="必須入力"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>

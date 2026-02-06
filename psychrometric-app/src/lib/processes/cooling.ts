@@ -7,6 +7,7 @@ import { toSignedCapacity } from '../sign';
 import { splitCapacity } from '../capacity';
 import { massFlowFromAirflow } from '../airflow';
 import { enthalpy } from '../psychrometrics';
+import { PsychrometricCalculator } from '../psychrometric/properties';
 
 /**
  * 冷却・除湿プロセスの計算
@@ -56,26 +57,38 @@ export class CoolingProcess {
       effectivePressure,
       resolved
     );
-    const enthalpyAtOutletRH = enthalpy(
+    const enthalpyAtOutletRh = enthalpy(
       outletRHPointAtSameHumidity.dryBulbTemp!,
       outletRHPointAtSameHumidity.humidity!
     );
+    const enthalpyDiffToOutletRh = Math.abs(enthalpyAtOutletRh - fromEnthalpy);
+    const sensibleCapacityLimit = enthalpyDiffToOutletRh * massFlow;
+    const useConstantHumidityLine = coolingCapacity <= sensibleCapacityLimit;
 
-    const requiresLatentCooling = targetEnthalpy <= enthalpyAtOutletRH;
+    const constantHumidityPoint = StatePointConverter.fromHumidityAndEnthalpy(
+      fromPoint.humidity!,
+      targetEnthalpy,
+      effectivePressure,
+      resolved
+    );
+    const constantHumidityRh = PsychrometricCalculator.relativeHumidity(
+      constantHumidityPoint.dryBulbTemp!,
+      constantHumidityPoint.humidity!,
+      effectivePressure,
+      resolved
+    );
+    const rhTolerance = 0.05;
+    const useLatentCoolingLine =
+      !useConstantHumidityLine || constantHumidityRh > outletRH + rhTolerance;
 
-    const toPoint = requiresLatentCooling
+    const toPoint = useLatentCoolingLine
       ? StatePointConverter.fromRHAndEnthalpy(
           outletRH,
           targetEnthalpy,
           effectivePressure,
           resolved
         )
-      : StatePointConverter.fromHumidityAndEnthalpy(
-          fromPoint.humidity!,
-          targetEnthalpy,
-          effectivePressure,
-          resolved
-        );
+      : constantHumidityPoint;
 
     const humidityDiff = toPoint.humidity! - fromPoint.humidity!;
     const temperatureDiff = toPoint.dryBulbTemp! - fromPoint.dryBulbTemp!;

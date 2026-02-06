@@ -930,9 +930,9 @@ function App() {
     if (processData.type === 'cooling' && processData.parameters.autoCalculateToPoint) {
       const inletPoint = statePoints.find((point) => point.id === processData.fromPointId);
       const coolingCapacity = processData.parameters.capacity;
-      if (inletPoint && coolingCapacity) {
+      const outletRH = processData.parameters.coolingOutletRH;
+      if (inletPoint && coolingCapacity && outletRH !== undefined) {
         const airflow = processData.parameters.airflow ?? 1000;
-        const outletRH = processData.parameters.coolingOutletRH ?? 95;
         try {
           const { toPoint } = CoolingProcess.calculateByCapacityAndOutletRH(
             inletPoint,
