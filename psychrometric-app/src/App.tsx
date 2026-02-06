@@ -97,6 +97,7 @@ function App() {
     addProcess,
     updateProcess,
     deleteProcess,
+    reorderProcesses,
     setSelectedPoint,
     setSelectedProcess,
     setActiveSeason,
@@ -1505,7 +1506,7 @@ function App() {
                   onSelectProcess={setSelectedProcess}
                   onEditProcess={handleEditProcess}
                   onDeleteProcess={deleteProcess}
-                  onReorderProcesses={() => {}}
+                  onReorderProcesses={reorderProcesses}
                 />
               </div>
             </div>
