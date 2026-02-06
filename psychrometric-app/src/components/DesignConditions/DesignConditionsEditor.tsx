@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, Building2, Thermometer, Wind, Settings, Calculator } from 'lucide-react';
 import { DesignConditions } from '@/types/designConditions';
 
@@ -19,6 +19,51 @@ export const DesignConditionsEditor = ({
 }: DesignConditionsEditorProps) => {
   const [activeTab, setActiveTab] = useState<TabType>('project');
   const [conditions, setConditions] = useState<DesignConditions>(designConditions);
+  const [panelWidth, setPanelWidth] = useState(720);
+  const [isResizing, setIsResizing] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(min-width: 640px)');
+    const handleChange = () => setIsDesktop(mediaQuery.matches);
+    handleChange();
+    mediaQuery.addEventListener('change', handleChange);
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMove = (event: MouseEvent) => {
+      const panelLeft = panelRef.current?.getBoundingClientRect().left ?? 0;
+      const minWidth = 520;
+      const maxWidth = Math.min(960, window.innerWidth - 32);
+      const nextWidth = Math.min(
+        Math.max(event.clientX - panelLeft, minWidth),
+        maxWidth
+      );
+      setPanelWidth(nextWidth);
+    };
+
+    const handleUp = () => {
+      setIsResizing(false);
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+
+    return () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [isResizing]);
 
   if (!isOpen) return null;
 
@@ -116,7 +161,19 @@ export const DesignConditionsEditor = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
+      <div
+        ref={panelRef}
+        className="relative bg-white rounded-lg shadow-xl w-full mx-4 max-h-[90vh] flex flex-col sm:mx-6 sm:max-w-[90vw] sm:min-w-[520px]"
+        style={isDesktop ? { width: panelWidth } : undefined}
+      >
+        <button
+          type="button"
+          onMouseDown={() => setIsResizing(true)}
+          className="absolute right-0 top-0 hidden h-full w-2 cursor-col-resize items-center justify-center text-gray-400 hover:bg-blue-50 sm:flex"
+          aria-label="設計条件パネルの幅を調整"
+        >
+          <span className="h-16 w-0.5 rounded-full bg-blue-300/70" />
+        </button>
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">設計条件の編集</h3>
           <button

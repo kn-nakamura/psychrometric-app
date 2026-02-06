@@ -117,6 +117,46 @@ function App() {
   const [showDesignEditor, setShowDesignEditor] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showProjectManager, setShowProjectManager] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(min-width: 640px)');
+    const handleChange = () => setIsDesktop(mediaQuery.matches);
+    handleChange();
+    mediaQuery.addEventListener('change', handleChange);
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isResizingSidebar) return;
+
+    const handleMove = (event: MouseEvent) => {
+      const minWidth = 240;
+      const maxWidth = Math.min(520, window.innerWidth * 0.5);
+      const nextWidth = Math.min(Math.max(event.clientX, minWidth), maxWidth);
+      setSidebarWidth(nextWidth);
+    };
+
+    const handleUp = () => {
+      setIsResizingSidebar(false);
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+
+    return () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [isResizingSidebar]);
 
   // Process editing state
   const [editingProcess, setEditingProcess] = useState<Process | null>(null);
@@ -899,7 +939,10 @@ function App() {
 
       <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
         {/* 左サイドバー */}
-        <aside className="order-2 w-full flex-none bg-white border-b border-gray-200 overflow-y-auto min-h-0 max-h-[45dvh] sm:order-none sm:w-80 sm:border-b-0 sm:border-r sm:max-h-none">
+        <aside
+          className="order-2 w-full flex-none bg-white border-b border-gray-200 overflow-y-auto min-h-0 max-h-[45dvh] sm:order-none sm:border-b-0 sm:border-r sm:max-h-none"
+          style={isDesktop ? { width: sidebarWidth } : undefined}
+        >
           {/* 季節切替 */}
           <div className="p-4 border-b border-gray-200">
             <h2 className="font-semibold text-sm text-gray-700 mb-2">表示モード</h2>
@@ -1522,6 +1565,16 @@ function App() {
             </div>
           </div>
         </aside>
+
+        <div
+          className="relative hidden w-1 cursor-col-resize items-center justify-center bg-transparent hover:bg-blue-100 sm:flex"
+          onMouseDown={() => setIsResizingSidebar(true)}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="サイドバー幅の調整"
+        >
+          <span className="h-12 w-0.5 rounded-full bg-blue-300/70" />
+        </div>
 
         {/* メインコンテンツ */}
         <main className="order-1 flex-1 min-h-0 min-w-0 overflow-hidden p-3 sm:order-none sm:p-4">
