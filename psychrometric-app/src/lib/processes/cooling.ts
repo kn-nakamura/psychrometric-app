@@ -56,22 +56,29 @@ export class CoolingProcess {
       effectivePressure,
       resolved
     );
-    const enthalpyAtOutletRH = enthalpy(
-      outletRHPointAtSameHumidity.dryBulbTemp!,
-      outletRHPointAtSameHumidity.humidity!
+    const { sensibleKw: sensibleAtOutletRh } = splitCapacity(
+      massFlow,
+      {
+        dryBulbTemp: fromPoint.dryBulbTemp!,
+        humidity: fromPoint.humidity!,
+      },
+      {
+        dryBulbTemp: outletRHPointAtSameHumidity.dryBulbTemp!,
+        humidity: outletRHPointAtSameHumidity.humidity!,
+      }
     );
+    const sensibleCapacityLimit = Math.abs(sensibleAtOutletRh);
+    const useConstantHumidityLine = coolingCapacity <= sensibleCapacityLimit;
 
-    const requiresLatentCooling = targetEnthalpy <= enthalpyAtOutletRH;
-
-    const toPoint = requiresLatentCooling
-      ? StatePointConverter.fromRHAndEnthalpy(
-          outletRH,
+    const toPoint = useConstantHumidityLine
+      ? StatePointConverter.fromHumidityAndEnthalpy(
+          fromPoint.humidity!,
           targetEnthalpy,
           effectivePressure,
           resolved
         )
-      : StatePointConverter.fromHumidityAndEnthalpy(
-          fromPoint.humidity!,
+      : StatePointConverter.fromRHAndEnthalpy(
+          outletRH,
           targetEnthalpy,
           effectivePressure,
           resolved
