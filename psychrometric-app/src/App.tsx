@@ -10,6 +10,7 @@ import { ProjectManager } from './components/Project/ProjectManager';
 import { StatePointConverter } from './lib/psychrometric/conversions';
 import { ChartCoordinates, ChartRange, createDynamicChartConfig } from './lib/chart/coordinates';
 import { resolvePsychrometricConstants } from './lib/psychrometric/constants';
+import { PsychrometricCalculator } from './lib/psychrometric/properties';
 import { MixingProcess } from './lib/processes/mixing';
 import { HeatExchangeProcess } from './lib/processes/heatExchange';
 import { CoolingProcess } from './lib/processes/cooling';
@@ -252,6 +253,11 @@ function App() {
     end: { x: number; y: number };
   } | null>(null);
   const [viewRange, setViewRange] = useState<ChartRange | null>(null);
+  const [moveWarning, setMoveWarning] = useState<{
+    x: number;
+    y: number;
+    visible: boolean;
+  } | null>(null);
   const inputOptionA =
     STATE_POINT_INPUT_OPTIONS.find((option) => option.key === inputTypeA) ??
     STATE_POINT_INPUT_OPTIONS[0];
@@ -698,7 +704,13 @@ function App() {
   };
 
   // 状態点の移動（ドラッグ）
-  const handlePointMove = (pointId: string, temp: number, humidity: number) => {
+  const handlePointMove = (
+    pointId: string,
+    temp: number,
+    humidity: number,
+    canvasPoint: { x: number; y: number },
+    isWithinRange: boolean
+  ) => {
     const currentPoint = statePoints.find((point) => point.id === pointId);
     if (!currentPoint) return;
     const constraint = moveConstraints[pointId] ?? 'free';
@@ -757,6 +769,28 @@ function App() {
     })();
 
     if (!stateData) return;
+    if (stateData.dryBulbTemp === undefined || stateData.humidity === undefined) return;
+
+    const saturationHumidity = PsychrometricCalculator.absoluteHumidity(
+      stateData.dryBulbTemp,
+      100,
+      defaultPressure,
+      calculationConstants
+    );
+    const epsilon = 1e-6;
+    const isOutsideChart =
+      !isWithinRange || stateData.humidity > saturationHumidity + epsilon;
+
+    if (isOutsideChart) {
+      const clampedX = Math.min(Math.max(canvasPoint.x, 8), chartSize.width - 8);
+      const clampedY = Math.min(Math.max(canvasPoint.y, 8), chartSize.height - 8);
+      setMoveWarning({ x: clampedX, y: clampedY, visible: true });
+      return;
+    }
+
+    if (moveWarning?.visible) {
+      setMoveWarning(null);
+    }
     updateStatePoint(pointId, stateData);
   };
 
@@ -1871,6 +1905,7 @@ function App() {
                   setSelectedProcess(null);
                 }}
                 onPointMove={handlePointMove}
+                onPointDragEnd={() => setMoveWarning(null)}
               />
               <div
                 className={`absolute inset-0 z-10 ${zoomMode ? 'cursor-crosshair' : ''}`}
@@ -1906,6 +1941,20 @@ function App() {
                   />
                 )}
               </div>
+              {moveWarning?.visible && (
+                <div
+                  className="absolute z-20 pointer-events-none"
+                  style={{
+                    left: moveWarning.x,
+                    top: moveWarning.y,
+                    transform: 'translate(12px, -12px)',
+                  }}
+                >
+                  <div className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-700 shadow-sm">
+                    空気線図の外です
+                  </div>
+                </div>
+              )}
               {selectedPoint && selectedPointPosition && (
                 <div
                   className="absolute z-10"
