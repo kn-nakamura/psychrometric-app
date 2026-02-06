@@ -1,7 +1,10 @@
 import { StatePoint } from '@/types/psychrometric';
 import type { PsychrometricConstants } from '@/types/calculationSettings';
-import { PsychrometricCalculator } from '../psychrometric/properties';
 import { resolvePsychrometricConstants } from '../psychrometric/constants';
+import { calculateSHF } from '../sign';
+import { splitCapacity } from '../capacity';
+import { massFlowFromAirflow } from '../airflow';
+import { enthalpy } from '../psychrometrics';
 
 /**
  * コイル能力計算
@@ -31,26 +34,22 @@ export class CoilCapacityCalculator {
     totalCapacity: number;      // 全熱容量 [kW]
     sensibleCapacity: number;   // 顕熱容量 [kW]
     latentCapacity: number;     // 潜熱容量 [kW]
-    SHF: number;                // 顕熱比 [-]
+    SHF: number | null;         // 顕熱比 [-]
     temperatureDiff: number;    // 温度差 [°C]
     humidityDiff: number;       // 絶対湿度差 [kg/kg']
     enthalpyDiff: number;       // エンタルピー差 [kJ/kg']
-    massFlow: number;           // 質量流量 [kg/h]
+    massFlow: number;           // 質量流量 [kgDA/s]
   } {
     
-    // 質量流量を計算
+    // 質量流量を計算 [kgDA/s]
     const resolved = resolvePsychrometricConstants(constants);
     const effectivePressure = pressure ?? resolved.standardPressure;
-    const density = PsychrometricCalculator.airDensity(
-      inletPoint.dryBulbTemp!,
-      inletPoint.humidity!,
-      effectivePressure,
-      resolved
-    );
-    const massFlow = airflow * density; // [kg/h]
+    const massFlow = massFlowFromAirflow(airflow, inletPoint, effectivePressure);
     
     // エンタルピー差
-    const enthalpyDiff = outletPoint.enthalpy! - inletPoint.enthalpy!;
+    const enthalpyDiff =
+      enthalpy(outletPoint.dryBulbTemp!, outletPoint.humidity!) -
+      enthalpy(inletPoint.dryBulbTemp!, inletPoint.humidity!);
     
     // 温度差
     const temperatureDiff = outletPoint.dryBulbTemp! - inletPoint.dryBulbTemp!;
@@ -58,27 +57,24 @@ export class CoilCapacityCalculator {
     // 絶対湿度差
     const humidityDiff = outletPoint.humidity! - inletPoint.humidity!;
     
-    // 全熱容量 [kW]
-    // Q = G × Δh / 3600
-    const totalCapacity = (massFlow * enthalpyDiff) / 3600;
+    const { totalKw, sensibleKw, latentKw } = splitCapacity(
+      massFlow,
+      {
+        dryBulbTemp: inletPoint.dryBulbTemp!,
+        humidity: inletPoint.humidity!,
+      },
+      {
+        dryBulbTemp: outletPoint.dryBulbTemp!,
+        humidity: outletPoint.humidity!,
+      }
+    );
     
-    // 顕熱容量 [kW]
-    // Q_s = G × cp × Δt / 3600
-    const sensibleCapacity = (massFlow * resolved.cpAir * temperatureDiff) / 3600;
-    
-    // 潜熱容量 [kW]
-    // Q_l = G × L0 × Δx / 3600
-    const latentCapacity = (massFlow * resolved.latentHeat0c * humidityDiff) / 3600;
-    
-    // 顕熱比
-    const SHF = Math.abs(totalCapacity) > 0.001 
-      ? sensibleCapacity / totalCapacity 
-      : 1.0;
+    const SHF = calculateSHF(sensibleKw, totalKw);
     
     return {
-      totalCapacity,
-      sensibleCapacity,
-      latentCapacity,
+      totalCapacity: totalKw,
+      sensibleCapacity: sensibleKw,
+      latentCapacity: latentKw,
       SHF,
       temperatureDiff,
       humidityDiff,
@@ -112,7 +108,7 @@ export class CoilCapacityCalculator {
     heatBalance?: number;       // 熱収支差 [%]
     sensibleCapacity: number;
     latentCapacity: number;
-    SHF: number;
+    SHF: number | null;
     condensateRemoval: number;  // 除湿水量 [L/h]
   } {
     
@@ -120,7 +116,7 @@ export class CoilCapacityCalculator {
     
     // 除湿水量 [L/h]
     // 密度を1kg/L と仮定
-    const condensateRemoval = airSide.massFlow * Math.abs(airSide.humidityDiff);
+    const condensateRemoval = airSide.massFlow * 3600 * Math.abs(airSide.humidityDiff);
     
     let waterSideCapacity: number | undefined;
     let heatBalance: number | undefined;
@@ -135,9 +131,10 @@ export class CoilCapacityCalculator {
       const waterTempDiff = outletWaterTemp - inletWaterTemp;
       waterSideCapacity = (waterFlowRate * 4.186 * waterTempDiff) / 60;
       
-      // 熱収支確認 [%]
-      heatBalance = Math.abs((waterSideCapacity - Math.abs(airSide.totalCapacity)) / 
-                             Math.abs(airSide.totalCapacity)) * 100;
+      // 熱収支確認 [%] (水側 + 空気側 = 0 が理想)
+      heatBalance =
+        Math.abs((waterSideCapacity + airSide.totalCapacity) / Math.max(Math.abs(airSide.totalCapacity), 1e-6)) *
+        100;
     }
     
     return {
@@ -183,12 +180,13 @@ export class CoilCapacityCalculator {
     
     // 水側熱量を計算（データがある場合）
     if (waterFlowRate && inletWaterTemp !== undefined && outletWaterTemp !== undefined) {
-      const waterTempDiff = inletWaterTemp - outletWaterTemp; // 加熱なので逆
+      const waterTempDiff = outletWaterTemp - inletWaterTemp;
       waterSideCapacity = (waterFlowRate * 4.186 * waterTempDiff) / 60;
       
-      // 熱収支確認
-      heatBalance = Math.abs((waterSideCapacity - airSide.totalCapacity) / 
-                             airSide.totalCapacity) * 100;
+      // 熱収支確認 (水側 + 空気側 = 0 が理想)
+      heatBalance =
+        Math.abs((waterSideCapacity + airSide.totalCapacity) / Math.max(Math.abs(airSide.totalCapacity), 1e-6)) *
+        100;
     }
     
     return {

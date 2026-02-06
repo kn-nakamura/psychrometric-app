@@ -6,6 +6,7 @@ import { StatePoint } from '@/types/psychrometric';
 import { Process } from '@/types/process';
 import { renderPsychrometricChart, renderPsychrometricChartToContext } from '@/components/Chart/PsychrometricChart';
 import { CoilCapacityCalculator } from '@/lib/equipment/coilCapacity';
+import { inferModeFromSigned } from '@/lib/sign';
 
 interface ExportDialogProps {
   onClose: () => void;
@@ -175,6 +176,9 @@ export const ExportDialog = ({
     return stream1Point.airflow + stream2Point.airflow;
   };
 
+  const formatSHF = (value: number | null | undefined) =>
+    value === null || value === undefined ? '—' : value.toFixed(2);
+
   const preparePdfFonts = async (pdf: jsPDF): Promise<boolean> => {
     try {
       if (!pdf.existsFileInVFS('NotoSansJP-Regular.ttf')) {
@@ -279,7 +283,7 @@ export const ExportDialog = ({
           `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${Math.abs(capacity.sensibleCapacity).toFixed(2)} kW | 潜熱: ${Math.abs(capacity.latentCapacity).toFixed(2)} kW`
         );
         detailLines.push(
-          `SHF: ${capacity.SHF.toFixed(2)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
+          `SHF: ${formatSHF(capacity.SHF)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
         );
         detailLines.push(`比エンタルピー差: ${capacity.enthalpyDiff.toFixed(2)} kJ/kg'`);
         if (process.parameters.airflow && capacity.humidityDiff !== 0) {
@@ -292,6 +296,17 @@ export const ExportDialog = ({
           const waterFlowRate = (Math.abs(capacity.totalCapacity) * 60) / (4.186 * waterTempDiff);
           detailLines.push(
             `水温度差: ${waterTempDiff.toFixed(1)}℃ | 水量: ${waterFlowRate.toFixed(2)} L/min`
+          );
+        }
+        if (
+          (process.type === 'heating' || process.type === 'cooling') &&
+          ((process.type === 'heating' && inferModeFromSigned(capacity.totalCapacity) === 'cooling') ||
+            (process.type === 'cooling' && inferModeFromSigned(capacity.totalCapacity) === 'heating'))
+        ) {
+          detailLines.push(
+            `警告: 運転モードと計算結果が一致しません（結果は${
+              inferModeFromSigned(capacity.totalCapacity) === 'cooling' ? '冷却' : '加熱'
+            }）`
           );
         }
       }
@@ -466,7 +481,7 @@ export const ExportDialog = ({
           `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${Math.abs(capacity.sensibleCapacity).toFixed(2)} kW | 潜熱: ${Math.abs(capacity.latentCapacity).toFixed(2)} kW`
         );
         detailLines.push(
-          `SHF: ${capacity.SHF.toFixed(2)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
+          `SHF: ${formatSHF(capacity.SHF)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
         );
         detailLines.push(`比エンタルピー差: ${capacity.enthalpyDiff.toFixed(2)} kJ/kg'`);
         if (process.parameters.airflow && capacity.humidityDiff !== 0) {
@@ -479,6 +494,17 @@ export const ExportDialog = ({
           const waterFlowRate = (Math.abs(capacity.totalCapacity) * 60) / (4.186 * waterTempDiff);
           detailLines.push(
             `水温度差: ${waterTempDiff.toFixed(1)}℃ | 水量: ${waterFlowRate.toFixed(2)} L/min`
+          );
+        }
+        if (
+          (process.type === 'heating' || process.type === 'cooling') &&
+          ((process.type === 'heating' && inferModeFromSigned(capacity.totalCapacity) === 'cooling') ||
+            (process.type === 'cooling' && inferModeFromSigned(capacity.totalCapacity) === 'heating'))
+        ) {
+          detailLines.push(
+            `警告: 運転モードと計算結果が一致しません（結果は${
+              inferModeFromSigned(capacity.totalCapacity) === 'cooling' ? '冷却' : '加熱'
+            }）`
           );
         }
       }
@@ -777,7 +803,7 @@ export const ExportDialog = ({
           `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${Math.abs(capacity.sensibleCapacity).toFixed(2)} kW | 潜熱: ${Math.abs(capacity.latentCapacity).toFixed(2)} kW`
         );
         detailLines.push(
-          `SHF: ${capacity.SHF.toFixed(2)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
+          `SHF: ${formatSHF(capacity.SHF)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
         );
         detailLines.push(`比エンタルピー差: ${capacity.enthalpyDiff.toFixed(2)} kJ/kg'`);
         if (process.parameters.airflow && capacity.humidityDiff !== 0) {
@@ -790,6 +816,17 @@ export const ExportDialog = ({
           const waterFlowRate = (Math.abs(capacity.totalCapacity) * 60) / (4.186 * waterTempDiff);
           detailLines.push(
             `水温度差: ${waterTempDiff.toFixed(1)}℃ | 水量: ${waterFlowRate.toFixed(2)} L/min`
+          );
+        }
+        if (
+          (process.type === 'heating' || process.type === 'cooling') &&
+          ((process.type === 'heating' && inferModeFromSigned(capacity.totalCapacity) === 'cooling') ||
+            (process.type === 'cooling' && inferModeFromSigned(capacity.totalCapacity) === 'heating'))
+        ) {
+          detailLines.push(
+            `警告: 運転モードと計算結果が一致しません（結果は${
+              inferModeFromSigned(capacity.totalCapacity) === 'cooling' ? '冷却' : '加熱'
+            }）`
           );
         }
       }
@@ -928,7 +965,7 @@ export const ExportDialog = ({
               `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${Math.abs(capacity.sensibleCapacity).toFixed(2)} kW | 潜熱: ${Math.abs(capacity.latentCapacity).toFixed(2)} kW`
             );
             detailLines.push(
-              `SHF: ${capacity.SHF.toFixed(2)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
+              `SHF: ${formatSHF(capacity.SHF)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
             );
             detailLines.push(`比エンタルピー差: ${capacity.enthalpyDiff.toFixed(2)} kJ/kg'`);
             if (process.parameters.airflow && capacity.humidityDiff !== 0) {
@@ -941,6 +978,17 @@ export const ExportDialog = ({
               const waterFlowRate = (Math.abs(capacity.totalCapacity) * 60) / (4.186 * waterTempDiff);
               detailLines.push(
                 `水温度差: ${waterTempDiff.toFixed(1)}℃ | 水量: ${waterFlowRate.toFixed(2)} L/min`
+              );
+            }
+            if (
+              (process.type === 'heating' || process.type === 'cooling') &&
+              ((process.type === 'heating' && inferModeFromSigned(capacity.totalCapacity) === 'cooling') ||
+                (process.type === 'cooling' && inferModeFromSigned(capacity.totalCapacity) === 'heating'))
+            ) {
+              detailLines.push(
+                `警告: 運転モードと計算結果が一致しません（結果は${
+                  inferModeFromSigned(capacity.totalCapacity) === 'cooling' ? '冷却' : '加熱'
+                }）`
               );
             }
           }
