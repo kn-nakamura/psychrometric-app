@@ -182,6 +182,29 @@ export const ProcessDialog = ({
     }
   }, [type]);
 
+  // 季節に応じてフィルターされた状態点
+  const filteredPoints = statePoints.filter((point) => {
+    if (season === 'both') return true;
+    return point.season === season || point.season === 'both';
+  });
+  const availableToPoints = filteredPoints.filter((point) => point.id !== fromPointId);
+
+  useEffect(() => {
+    if (type !== 'cooling') return;
+    if (availableToPoints.length === 0) {
+      if (toPointMode !== 'auto') {
+        setToPointMode('auto');
+      }
+      if (toPointId) {
+        setToPointId('');
+      }
+      return;
+    }
+    if (toPointMode === 'manual' && !toPointId) {
+      setToPointId(availableToPoints[0].id);
+    }
+  }, [type, availableToPoints, toPointMode, toPointId]);
+
   if (!isOpen) return null;
 
   const parseOptionalNumber = (value: string) =>
@@ -355,12 +378,6 @@ export const ProcessDialog = ({
     }));
   };
 
-  // 季節に応じてフィルターされた状態点
-  const filteredPoints = statePoints.filter((point) => {
-    if (season === 'both') return true;
-    return point.season === season || point.season === 'both';
-  });
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
@@ -501,10 +518,11 @@ export const ProcessDialog = ({
                             capacity: undefined,
                             coolingOutletRH: undefined,
                           }));
-                          if (!toPointId && filteredPoints[0]) {
-                            setToPointId(filteredPoints[0].id);
+                          if (!toPointId && availableToPoints[0]) {
+                            setToPointId(availableToPoints[0].id);
                           }
                         }}
+                        disabled={availableToPoints.length === 0}
                       />
                       選択
                     </label>
@@ -535,7 +553,7 @@ export const ProcessDialog = ({
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">選択してください</option>
-                  {filteredPoints.map((point) => (
+                  {availableToPoints.map((point) => (
                     <option key={point.id} value={point.id}>
                       {point.name} ({point.dryBulbTemp?.toFixed(1)}°C, RH{point.relativeHumidity?.toFixed(0)}%)
                     </option>
