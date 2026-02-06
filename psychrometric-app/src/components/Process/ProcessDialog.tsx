@@ -177,7 +177,7 @@ export const ProcessDialog = ({
   }, [type, season, designConditions]);
 
   useEffect(() => {
-    if (type !== 'cooling') {
+    if (type !== 'cooling' && type !== 'heating') {
       setToPointMode('manual');
     }
   }, [type]);
@@ -193,14 +193,18 @@ export const ProcessDialog = ({
       ...parameters,
       capacity:
         parameters.capacity !== undefined ? Math.abs(parameters.capacity) : parameters.capacity,
-      autoCalculateToPoint: type === 'cooling' ? toPointMode === 'auto' : undefined,
+      autoCalculateToPoint:
+        type === 'cooling' || type === 'heating' ? toPointMode === 'auto' : undefined,
     };
     if (
       !fromPointId ||
       (!toPointId &&
         type !== 'mixing' &&
         type !== 'heatExchange' &&
-        !(type === 'cooling' && toPointMode === 'auto'))
+        !(
+          (type === 'cooling' && toPointMode === 'auto') ||
+          (type === 'heating' && toPointMode === 'auto')
+        ))
     ) {
       alert('始点と終点を選択してください');
       return;
@@ -208,13 +212,20 @@ export const ProcessDialog = ({
     if (
       type !== 'mixing' &&
       type !== 'heatExchange' &&
-      !(type === 'cooling' && toPointMode === 'auto') &&
+      !(
+        (type === 'cooling' && toPointMode === 'auto') ||
+        (type === 'heating' && toPointMode === 'auto')
+      ) &&
       fromPointId === toPointId
     ) {
       alert('始点と終点は異なる状態点を選択してください');
       return;
     }
     if (type === 'cooling' && toPointMode === 'auto' && !parameters.capacity) {
+      alert('終点の自動計算には能力欄に数値を入力してください');
+      return;
+    }
+    if (type === 'heating' && toPointMode === 'auto' && !parameters.capacity) {
       alert('終点の自動計算には能力欄に数値を入力してください');
       return;
     }
@@ -486,7 +497,7 @@ export const ProcessDialog = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   終点（出口）
                 </label>
-                {type === 'cooling' && (
+                {(type === 'cooling' || type === 'heating') && (
                   <div className="flex items-center gap-3 text-xs text-gray-600">
                     <label className="flex items-center gap-1">
                       <input
@@ -499,7 +510,7 @@ export const ProcessDialog = ({
                           setParameters((prev) => ({
                             ...prev,
                             capacity: undefined,
-                            coolingOutletRH: undefined,
+                            coolingOutletRH: type === 'cooling' ? undefined : prev.coolingOutletRH,
                           }));
                           if (!toPointId && filteredPoints[0]) {
                             setToPointId(filteredPoints[0].id);
@@ -524,9 +535,11 @@ export const ProcessDialog = ({
                   </div>
                 )}
               </div>
-              {type === 'cooling' && toPointMode === 'auto' ? (
+              {(type === 'cooling' || type === 'heating') && toPointMode === 'auto' ? (
                 <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                  能力と冷却コイル出口条件から終点を自動計算します。
+                  {type === 'cooling'
+                    ? '能力と冷却コイル出口条件から終点を自動計算します。'
+                    : '能力から終点を自動計算します（絶対湿度一定で温度上昇）。'}
                 </div>
               ) : (
                 <select
@@ -569,10 +582,11 @@ export const ProcessDialog = ({
             {/* タイプ別パラメータ */}
             {(type === 'heating' || type === 'cooling') && (
               <>
-                {(type === 'heating' || (type === 'cooling' && toPointMode === 'auto')) && (
+                {((type === 'cooling' && toPointMode === 'auto') ||
+                  (type === 'heating' && toPointMode === 'auto')) && (
                   <div className="mb-3">
                     <label className="block text-sm text-gray-600 mb-1">
-                      能力 [kW]{type === 'heating' ? '（オプション）' : ''}
+                      能力 [kW]
                     </label>
                     <input
                       type="number"
@@ -581,7 +595,7 @@ export const ProcessDialog = ({
                       onChange={(e) =>
                         handleParameterChange('capacity', parseOptionalNumber(e.target.value))
                       }
-                      placeholder={type === 'heating' ? '自動計算' : '必須入力'}
+                      placeholder="必須入力"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
