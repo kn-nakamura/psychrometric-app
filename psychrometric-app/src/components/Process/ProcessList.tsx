@@ -145,6 +145,14 @@ export const ProcessList = ({
         const toPoint = statePoints.find((p) => p.id === process.toPointId);
         const fromPointLabel = fromPoint ? pointLabelMap.get(fromPoint.id) : undefined;
         const toPointLabel = toPoint ? pointLabelMap.get(toPoint.id) : undefined;
+        const labelSeason =
+          fromPoint?.season ?? toPoint?.season ?? (activeSeason === 'both' ? 'both' : activeSeason);
+        const labelClassName =
+          labelSeason === 'summer'
+            ? 'bg-blue-600 text-white'
+            : labelSeason === 'winter'
+            ? 'bg-red-600 text-white'
+            : 'bg-purple-600 text-white';
         const capacity = calculateCapacity(process);
         const inferredMode = capacity ? inferModeFromSigned(capacity.totalCapacity) : null;
         const modeMismatch =
@@ -177,7 +185,12 @@ export const ProcessList = ({
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`font-bold text-sm px-2 py-0.5 rounded ${labelClassName}`}>
+                    {fromPointLabel || '—'}→{toPointLabel || '—'}
+                  </span>
                   <span className="font-semibold text-gray-900">{process.name}</span>
+                </div>
+                <div className="mt-1 flex items-center gap-2 flex-wrap">
                   <span
                     className={`text-xs px-2 py-0.5 rounded ${processTypeColors[process.type]}`}
                   >
@@ -198,15 +211,9 @@ export const ProcessList = ({
 
                 {/* 状態点表示 */}
                 <div className="mt-1 flex items-center text-sm text-gray-600">
-                  <span className="truncate">
-                    {fromPointLabel ? `${fromPointLabel}: ` : ''}
-                    {fromPoint?.name || '不明'}
-                  </span>
+                  <span className="truncate">{fromPoint?.name || '不明'}</span>
                   <ArrowRight className="w-4 h-4 mx-1 flex-shrink-0" />
-                  <span className="truncate">
-                    {toPointLabel ? `${toPointLabel}: ` : ''}
-                    {toPoint?.name || '不明'}
-                  </span>
+                  <span className="truncate">{toPoint?.name || '不明'}</span>
                 </div>
 
                 {process.type === 'mixing' && mixingAirflowTotal !== undefined && (
