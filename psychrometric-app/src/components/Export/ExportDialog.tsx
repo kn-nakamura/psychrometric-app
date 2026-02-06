@@ -286,7 +286,7 @@ export const ExportDialog = ({
       const capacity = calculateProcessCapacity(process, filteredStatePoints);
       if (capacity) {
         detailLines.push(
-          `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${formatSignedHeat(capacity.sensibleCapacity)} kW | 潜熱: ${formatSignedHeat(capacity.latentCapacity)} kW`
+          `全熱: ${formatSignedHeat(capacity.totalCapacity)} kW | 顕熱: ${formatSignedHeat(capacity.sensibleCapacity)} kW | 潜熱: ${formatSignedHeat(capacity.latentCapacity)} kW`
         );
         detailLines.push(
           `SHF: ${formatSHF(capacity.SHF)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
@@ -484,7 +484,7 @@ export const ExportDialog = ({
       const capacity = calculateProcessCapacity(process, filteredStatePoints);
       if (capacity) {
         detailLines.push(
-          `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${formatSignedHeat(capacity.sensibleCapacity)} kW | 潜熱: ${formatSignedHeat(capacity.latentCapacity)} kW`
+          `全熱: ${formatSignedHeat(capacity.totalCapacity)} kW | 顕熱: ${formatSignedHeat(capacity.sensibleCapacity)} kW | 潜熱: ${formatSignedHeat(capacity.latentCapacity)} kW`
         );
         detailLines.push(
           `SHF: ${formatSHF(capacity.SHF)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
@@ -806,7 +806,7 @@ export const ExportDialog = ({
       const capacity = calculateProcessCapacity(process, filteredStatePoints);
       if (capacity) {
         detailLines.push(
-          `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${formatSignedHeat(capacity.sensibleCapacity)} kW | 潜熱: ${formatSignedHeat(capacity.latentCapacity)} kW`
+          `全熱: ${formatSignedHeat(capacity.totalCapacity)} kW | 顕熱: ${formatSignedHeat(capacity.sensibleCapacity)} kW | 潜熱: ${formatSignedHeat(capacity.latentCapacity)} kW`
         );
         detailLines.push(
           `SHF: ${formatSHF(capacity.SHF)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`
@@ -968,7 +968,7 @@ export const ExportDialog = ({
           const capacity = calculateProcessCapacity(process, filteredStatePoints);
           if (capacity) {
             detailLines.push(
-              `全熱: ${Math.abs(capacity.totalCapacity).toFixed(2)} kW | 顕熱: ${formatSignedHeat(capacity.sensibleCapacity)} kW | 潜熱: ${formatSignedHeat(capacity.latentCapacity)} kW`
+              `全熱: ${formatSignedHeat(capacity.totalCapacity)} kW | 顕熱: ${formatSignedHeat(capacity.sensibleCapacity)} kW | 潜熱: ${formatSignedHeat(capacity.latentCapacity)} kW`
             );
             detailLines.push(
               `SHF: ${formatSHF(capacity.SHF)} | 温度差: ${capacity.temperatureDiff.toFixed(1)}°C | 湿度差: ${(capacity.humidityDiff * 1000).toFixed(2)} g/kg'`

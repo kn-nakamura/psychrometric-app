@@ -170,7 +170,7 @@ export const ProcessList = ({
                 {/* 能力表示 */}
                 {capacity && (
                   <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                    <div>全熱: {Math.abs(capacity.totalCapacity).toFixed(2)} kW</div>
+                    <div>全熱: {formatSignedHeat(capacity.totalCapacity)} kW</div>
                     <div>顕熱: {formatSignedHeat(capacity.sensibleCapacity)} kW</div>
                     <div>潜熱: {formatSignedHeat(capacity.latentCapacity)} kW</div>
                     <div>SHF: {formatSHF(capacity.SHF)}</div>
