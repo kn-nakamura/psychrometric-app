@@ -78,6 +78,15 @@ export const ProcessList = ({
   };
   const formatSHF = (value: number | null | undefined) =>
     value === null || value === undefined ? '—' : value.toFixed(2);
+  const formatSignedHeat = (value: number) => {
+    if (Object.is(value, -0)) {
+      return '0.00';
+    }
+    if (value > 0) {
+      return `+${value.toFixed(2)}`;
+    }
+    return value.toFixed(2);
+  };
 
   if (sortedProcesses.length === 0) {
     return (
@@ -161,9 +170,9 @@ export const ProcessList = ({
                 {/* 能力表示 */}
                 {capacity && (
                   <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                    <div>全熱: {Math.abs(capacity.totalCapacity).toFixed(2)} kW</div>
-                    <div>顕熱: {Math.abs(capacity.sensibleCapacity).toFixed(2)} kW</div>
-                    <div>潜熱: {Math.abs(capacity.latentCapacity).toFixed(2)} kW</div>
+                    <div>全熱: {formatSignedHeat(capacity.totalCapacity)} kW</div>
+                    <div>顕熱: {formatSignedHeat(capacity.sensibleCapacity)} kW</div>
+                    <div>潜熱: {formatSignedHeat(capacity.latentCapacity)} kW</div>
                     <div>SHF: {formatSHF(capacity.SHF)}</div>
                     <div>温度差: {capacity.temperatureDiff.toFixed(1)}°C</div>
                     <div>湿度差: {(capacity.humidityDiff * 1000).toFixed(2)} g/kg'</div>
