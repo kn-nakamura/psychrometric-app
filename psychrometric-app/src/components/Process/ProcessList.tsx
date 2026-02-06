@@ -1,4 +1,4 @@
-import { Trash2, Edit2, GripVertical, ArrowRight } from 'lucide-react';
+import { Trash2, Edit2, GripVertical, ArrowRight, ChevronUp, ChevronDown } from 'lucide-react';
 import { Process, ProcessType } from '@/types/process';
 import { StatePoint } from '@/types/psychrometric';
 import { CoilCapacityCalculator } from '@/lib/equipment/coilCapacity';
@@ -45,6 +45,7 @@ export const ProcessList = ({
   onSelectProcess,
   onEditProcess,
   onDeleteProcess,
+  onReorderProcesses,
 }: ProcessListProps) => {
   const filteredPoints = statePoints.filter((point) => {
     if (activeSeason === 'both') return true;
@@ -95,6 +96,22 @@ export const ProcessList = ({
   // 順番でソート
   const sortedProcesses = [...filteredProcesses].sort((a, b) => a.order - b.order);
 
+  const handleMoveUp = (e: React.MouseEvent, processId: string) => {
+    e.stopPropagation();
+    const index = processes.findIndex((process) => process.id === processId);
+    if (index > 0) {
+      onReorderProcesses(index, index - 1);
+    }
+  };
+
+  const handleMoveDown = (e: React.MouseEvent, processId: string) => {
+    e.stopPropagation();
+    const index = processes.findIndex((process) => process.id === processId);
+    if (index < processes.length - 1) {
+      onReorderProcesses(index, index + 1);
+    }
+  };
+
   // 能力を計算
   const calculateCapacity = (process: Process) => {
     const fromPoint = statePoints.find((p) => p.id === process.fromPointId);
@@ -140,7 +157,7 @@ export const ProcessList = ({
 
   return (
     <div className="space-y-2">
-      {sortedProcesses.map((process) => {
+      {sortedProcesses.map((process, index) => {
         const fromPoint = statePoints.find((p) => p.id === process.fromPointId);
         const toPoint = statePoints.find((p) => p.id === process.toPointId);
         const fromPointLabel = fromPoint ? pointLabelMap.get(fromPoint.id) : undefined;
@@ -181,6 +198,24 @@ export const ProcessList = ({
             }`}
           >
             <div className="flex items-start gap-2">
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={(e) => handleMoveUp(e, process.id)}
+                  disabled={index === 0}
+                  className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="上に移動"
+                >
+                  <ChevronUp className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={(e) => handleMoveDown(e, process.id)}
+                  disabled={index === sortedProcesses.length - 1}
+                  className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="下に移動"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+              </div>
               <GripVertical className="w-4 h-4 text-gray-400 mt-1 flex-shrink-0" />
 
               <div className="flex-1 min-w-0">
