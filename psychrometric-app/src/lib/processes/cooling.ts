@@ -37,7 +37,7 @@ export class CoolingProcess {
     const resolved = resolvePsychrometricConstants(constants);
     const effectivePressure = pressure ?? resolved.standardPressure;
     
-    // 質量流量を計算 [kg/h]
+    // 質量流量を計算 [kg/s]
     const massFlow = massFlowFromAirflow(airflow, fromPoint, effectivePressure);
     if (massFlow <= 0) {
       throw new Error('Invalid airflow for cooling calculation.');
@@ -48,7 +48,6 @@ export class CoolingProcess {
     // 全熱量（エンタルピー差） [kJ/kg']
     const totalEnthalpyDiff = totalHeat / massFlow;
     const fromEnthalpy = enthalpy(fromPoint.dryBulbTemp!, fromPoint.humidity!);
-    const targetEnthalpy = fromEnthalpy + totalEnthalpyDiff;
 
     const outletRHPointAtSameHumidity = StatePointConverter.fromRHAndHumidity(
       outletRH,
@@ -61,18 +60,23 @@ export class CoolingProcess {
       outletRHPointAtSameHumidity.humidity!
     );
 
-    const requiresLatentCooling = targetEnthalpy <= enthalpyAtOutletRH;
+    const enthalpyDiffToOutletRH = enthalpyAtOutletRH - fromEnthalpy;
+    const reachesOutletRH = totalEnthalpyDiff <= enthalpyDiffToOutletRH;
 
-    const toPoint = requiresLatentCooling
-      ? StatePointConverter.fromRHAndEnthalpy(
-          outletRH,
-          targetEnthalpy,
-          effectivePressure,
-          resolved
-        )
+    const toPoint = reachesOutletRH
+      ? (() => {
+          const remainingEnthalpyDiff = totalEnthalpyDiff - enthalpyDiffToOutletRH;
+          const targetEnthalpy = enthalpyAtOutletRH + remainingEnthalpyDiff;
+          return StatePointConverter.fromRHAndEnthalpy(
+            outletRH,
+            targetEnthalpy,
+            effectivePressure,
+            resolved
+          );
+        })()
       : StatePointConverter.fromHumidityAndEnthalpy(
           fromPoint.humidity!,
-          targetEnthalpy,
+          fromEnthalpy + totalEnthalpyDiff,
           effectivePressure,
           resolved
         );
