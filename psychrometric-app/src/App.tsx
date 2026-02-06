@@ -12,6 +12,7 @@ import { ChartCoordinates, ChartRange, createDynamicChartConfig } from './lib/ch
 import { resolvePsychrometricConstants } from './lib/psychrometric/constants';
 import { MixingProcess } from './lib/processes/mixing';
 import { HeatExchangeProcess } from './lib/processes/heatExchange';
+import { CoolingProcess } from './lib/processes/cooling';
 import { CoilCapacityCalculator } from './lib/equipment/coilCapacity';
 import { inferModeFromSigned } from './lib/sign';
 import { Process } from './types/process';
@@ -95,8 +96,6 @@ const processTypeLabels: Record<Process['type'], string> = {
   airSupply: '空調吹き出し',
 };
 
-const formatSHF = (value: number | null | undefined) =>
-  value === null || value === undefined ? '—' : value.toFixed(2);
 const formatSignedHeat = (value: number) => {
   if (Object.is(value, -0)) {
     return '0.00';
@@ -928,6 +927,45 @@ function App() {
       }
     }
 
+    if (processData.type === 'cooling' && processData.parameters.autoCalculateToPoint) {
+      const inletPoint = statePoints.find((point) => point.id === processData.fromPointId);
+      const coolingCapacity = processData.parameters.capacity;
+      const outletRH = processData.parameters.coolingOutletRH;
+      if (inletPoint && coolingCapacity && outletRH !== undefined) {
+        const airflow = processData.parameters.airflow ?? 1000;
+        try {
+          const { toPoint } = CoolingProcess.calculateByCapacityAndOutletRH(
+            inletPoint,
+            coolingCapacity,
+            outletRH,
+            airflow,
+            defaultPressure,
+            calculationConstants
+          );
+          const newPointId = `point-${Date.now()}`;
+          addStatePoint({
+            id: newPointId,
+            name: `${processData.name} 冷却コイル出口`,
+            season: processData.season,
+            order: statePoints.length,
+            airflow,
+            ...toPoint,
+          });
+          resolvedProcessData = {
+            ...processData,
+            toPointId: newPointId,
+            parameters: {
+              ...processData.parameters,
+              airflow,
+              coolingOutletRH: outletRH,
+            },
+          };
+        } catch {
+          // ignore calculation errors and fall back to manual settings
+        }
+      }
+    }
+
     if (processData.type === 'heatExchange' && processData.parameters.heatExchangeEfficiency) {
       const nextEquipment = {
         ...designConditions.equipment,
@@ -959,7 +997,11 @@ function App() {
         ...resolvedProcessData,
       } as Process);
     }
-    if (processData.type === 'mixing' || processData.type === 'heatExchange') {
+    if (
+      processData.type === 'mixing' ||
+      processData.type === 'heatExchange' ||
+      (processData.type === 'cooling' && processData.parameters.autoCalculateToPoint)
+    ) {
       setSelectedPoint(resolvedProcessData.toPointId);
     }
 
@@ -2000,7 +2042,6 @@ function App() {
                               潜熱:{' '}
                               {formatSignedHeat(selectedProcessDetails.capacity.latentCapacity)} kW
                             </div>
-                            <div>SHF: {formatSHF(selectedProcessDetails.capacity.SHF)}</div>
                             <div>
                               温度差: {selectedProcessDetails.capacity.temperatureDiff.toFixed(1)}
                               °C

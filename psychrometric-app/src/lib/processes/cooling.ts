@@ -6,36 +6,31 @@ import { resolvePsychrometricConstants } from '../psychrometric/constants';
 import { toSignedCapacity } from '../sign';
 import { splitCapacity } from '../capacity';
 import { massFlowFromAirflow } from '../airflow';
-import {
-  cpMoistAir,
-  enthalpy,
-  humidityRatioFromEnthalpy,
-} from '../psychrometrics';
+import { enthalpy } from '../psychrometrics';
+import { PsychrometricCalculator } from '../psychrometric/properties';
 
 /**
  * 冷却・除湿プロセスの計算
  * 
  * 特徴:
- * - SHF(顕熱比)によって除湿量が決まる
- * - SHF = 1.0: 顕熱のみの冷却（絶対湿度変化なし）
- * - SHF < 1.0: 除湿を伴う冷却
+ * - 冷却能力と出口相対湿度から状態点を計算
  */
 export class CoolingProcess {
   
   /**
-   * 冷却能力とSHFから出口状態を計算
+   * 冷却能力と出口相対湿度から出口状態を計算
    * 
    * @param fromPoint 入口状態点
    * @param coolingCapacity 冷却能力 [kW] (正の値)
-   * @param SHF 顕熱比 [-] (0.5〜1.0)
+   * @param outletRH 出口相対湿度 [%]
    * @param airflow 風量 [m³/h]
    * @param pressure 大気圧 [kPa]
    * @returns 出口状態点と計算結果
    */
-  static calculateByCapacityAndSHF(
+  static calculateByCapacityAndOutletRH(
     fromPoint: StatePoint,
     coolingCapacity: number,
-    SHF: number,
+    outletRH: number,
     airflow: number,
     pressure?: number,
     constants?: Partial<PsychrometricConstants>
@@ -54,46 +49,67 @@ export class CoolingProcess {
     // 全熱量（エンタルピー差） [kJ/kg']
     const totalEnthalpyDiff = totalHeat / massFlow;
     const fromEnthalpy = enthalpy(fromPoint.dryBulbTemp!, fromPoint.humidity!);
-    
-    // 顕熱と潜熱に分解
-    const sensibleHeat = totalHeat * SHF;
-    const latentHeat = totalHeat - sensibleHeat;
-    
-    // 温度差 [°C]
-    // 顕熱: Q_s = cp × Δt × G
-    // Δt = Q_s / (cp × G) × 3600
-    let toHumidity = fromPoint.humidity!;
-    let temperatureDiff = 0;
-    let toTemp = fromPoint.dryBulbTemp!;
-    let estimatedHumidity = fromPoint.humidity!;
-    for (let iteration = 0; iteration < 5; iteration += 1) {
-      const humidityAverage = (fromPoint.humidity! + estimatedHumidity) / 2;
-      const cpMoist = cpMoistAir(humidityAverage);
-      temperatureDiff = sensibleHeat / (cpMoist * massFlow);
-      toTemp = fromPoint.dryBulbTemp! + temperatureDiff;
-      const targetEnthalpy = fromEnthalpy + totalEnthalpyDiff;
-      estimatedHumidity = humidityRatioFromEnthalpy(toTemp, targetEnthalpy);
-    }
-    toHumidity = estimatedHumidity;
-    
-    // 絶対湿度差 [kg/kg']
-    // 潜熱: Q_l = L0 × Δx × G
-    // Δx = Q_l / (L0 × G) × 3600
-    const humidityDiff = toHumidity - fromPoint.humidity!;
-    
-    // 状態点を完成
-    const toPoint = StatePointConverter.fromDryBulbAndHumidity(
-      toTemp,
-      toHumidity,
+    const targetEnthalpy = fromEnthalpy + totalEnthalpyDiff;
+
+    const outletRHPointAtSameHumidity = StatePointConverter.fromRHAndHumidity(
+      outletRH,
+      fromPoint.humidity!,
       effectivePressure,
       resolved
+    );
+    const enthalpyAtOutletRh = enthalpy(
+      outletRHPointAtSameHumidity.dryBulbTemp!,
+      outletRHPointAtSameHumidity.humidity!
+    );
+    const enthalpyDiffToOutletRh = Math.abs(enthalpyAtOutletRh - fromEnthalpy);
+    const sensibleCapacityLimit = enthalpyDiffToOutletRh * massFlow;
+    const useConstantHumidityLine = coolingCapacity <= sensibleCapacityLimit;
+
+    const constantHumidityPoint = StatePointConverter.fromHumidityAndEnthalpy(
+      fromPoint.humidity!,
+      targetEnthalpy,
+      effectivePressure,
+      resolved
+    );
+    const constantHumidityRh = PsychrometricCalculator.relativeHumidity(
+      constantHumidityPoint.dryBulbTemp!,
+      constantHumidityPoint.humidity!,
+      effectivePressure,
+      resolved
+    );
+    const rhTolerance = 0.05;
+    const useLatentCoolingLine =
+      !useConstantHumidityLine || constantHumidityRh > outletRH + rhTolerance;
+
+    const toPoint = useLatentCoolingLine
+      ? StatePointConverter.fromRHAndEnthalpy(
+          outletRH,
+          targetEnthalpy,
+          effectivePressure,
+          resolved
+        )
+      : constantHumidityPoint;
+
+    const humidityDiff = toPoint.humidity! - fromPoint.humidity!;
+    const temperatureDiff = toPoint.dryBulbTemp! - fromPoint.dryBulbTemp!;
+
+    const { totalKw, sensibleKw, latentKw } = splitCapacity(
+      massFlow,
+      {
+        dryBulbTemp: fromPoint.dryBulbTemp!,
+        humidity: fromPoint.humidity!,
+      },
+      {
+        dryBulbTemp: toPoint.dryBulbTemp!,
+        humidity: toPoint.humidity!,
+      }
     );
     
     // 計算結果
     const results: ProcessResults = {
-      sensibleHeat,
-      latentHeat,
-      totalHeat,
+      sensibleHeat: sensibleKw,
+      latentHeat: latentKw,
+      totalHeat: totalKw,
       enthalpyDiff: totalEnthalpyDiff,
       humidityDiff,
       temperatureDiff,

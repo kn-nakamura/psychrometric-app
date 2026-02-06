@@ -112,22 +112,21 @@ const coolingInput = {
   ...StatePointConverter.fromDryBulbAndRH(28, 60),
 };
 
-const coolingResult = CoolingProcess.calculateByCapacityAndSHF(
+const coolingResult = CoolingProcess.calculateByCapacityAndOutletRH(
   coolingInput,
   20, // 20kW冷却
-  0.75, // SHF=0.75
+  95, // 出口相対湿度
   1000, // 1000m³/h
 );
 
 console.log('入口: 28°C, RH60%');
-console.log('冷却能力: 20kW, SHF: 0.75, 風量: 1000m³/h');
+console.log('冷却能力: 20kW, 出口RH: 95%, 風量: 1000m³/h');
 console.log(`出口温度: ${coolingResult.toPoint.dryBulbTemp?.toFixed(2)}°C`);
 console.log(`出口RH: ${coolingResult.toPoint.relativeHumidity?.toFixed(1)}%`);
 console.log(`温度低下: ${Math.abs(coolingResult.results.temperatureDiff || 0).toFixed(2)}°C`);
 console.log(`除湿量: ${Math.abs(coolingResult.results.humidityDiff || 0).toFixed(6)} kg/kg'`);
-console.log(`顕熱: ${coolingResult.results.sensibleHeat?.toFixed(2)}kW (期待値: -15kW)`);
-console.log(`潜熱: ${coolingResult.results.latentHeat?.toFixed(2)}kW (期待値: -5kW)`);
-console.log(`  SHF計算が正しい? → ${Math.abs((coolingResult.results.sensibleHeat || 0) + 15) < 0.5 ? '✓' : '✗'}`);
+console.log(`顕熱: ${coolingResult.results.sensibleHeat?.toFixed(2)}kW`);
+console.log(`潜熱: ${coolingResult.results.latentHeat?.toFixed(2)}kW`);
 console.log(
   `  冷却能力の符号が負? → ${coolingResult.results.totalHeat && coolingResult.results.totalHeat < 0 ? '✓' : '✗'}`
 );

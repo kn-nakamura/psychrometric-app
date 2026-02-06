@@ -50,6 +50,7 @@ export const ProcessDialog = ({
   const [type, setType] = useState<ProcessType>('cooling');
   const [fromPointId, setFromPointId] = useState('');
   const [toPointId, setToPointId] = useState('');
+  const [toPointMode, setToPointMode] = useState<'manual' | 'auto'>('manual');
   const [season, setSeason] = useState<'summer' | 'winter' | 'both'>(activeSeason);
   const [parameters, setParameters] = useState<ProcessParameters>({
     airflow: 1000,
@@ -62,6 +63,7 @@ export const ProcessDialog = ({
       setType(editingProcess.type);
       setFromPointId(editingProcess.fromPointId);
       setToPointId(editingProcess.toPointId);
+      setToPointMode(editingProcess.parameters.autoCalculateToPoint ? 'auto' : 'manual');
       setSeason(editingProcess.season);
       setParameters(editingProcess.parameters);
     } else {
@@ -69,6 +71,7 @@ export const ProcessDialog = ({
       setType('cooling');
       setFromPointId(statePoints.length > 0 ? statePoints[0].id : '');
       setToPointId(statePoints.length > 1 ? statePoints[1].id : '');
+      setToPointMode('manual');
       setSeason(activeSeason);
       setParameters({ airflow: 1000 });
     }
@@ -173,6 +176,12 @@ export const ProcessDialog = ({
     });
   }, [type, season, designConditions]);
 
+  useEffect(() => {
+    if (type !== 'cooling') {
+      setToPointMode('manual');
+    }
+  }, [type]);
+
   if (!isOpen) return null;
 
   const parseOptionalNumber = (value: string) =>
@@ -184,13 +193,33 @@ export const ProcessDialog = ({
       ...parameters,
       capacity:
         parameters.capacity !== undefined ? Math.abs(parameters.capacity) : parameters.capacity,
+      autoCalculateToPoint: type === 'cooling' ? toPointMode === 'auto' : undefined,
     };
-    if (!fromPointId || (!toPointId && type !== 'mixing' && type !== 'heatExchange')) {
+    if (
+      !fromPointId ||
+      (!toPointId &&
+        type !== 'mixing' &&
+        type !== 'heatExchange' &&
+        !(type === 'cooling' && toPointMode === 'auto'))
+    ) {
       alert('始点と終点を選択してください');
       return;
     }
-    if (type !== 'mixing' && type !== 'heatExchange' && fromPointId === toPointId) {
+    if (
+      type !== 'mixing' &&
+      type !== 'heatExchange' &&
+      !(type === 'cooling' && toPointMode === 'auto') &&
+      fromPointId === toPointId
+    ) {
       alert('始点と終点は異なる状態点を選択してください');
+      return;
+    }
+    if (type === 'cooling' && toPointMode === 'auto' && !parameters.capacity) {
+      alert('終点の自動計算には能力欄に数値を入力してください');
+      return;
+    }
+    if (type === 'cooling' && toPointMode === 'auto' && parameters.coolingOutletRH === undefined) {
+      alert('終点の自動計算には冷却コイル出口条件を入力してください');
       return;
     }
     if (type === 'mixing') {
@@ -453,21 +482,66 @@ export const ProcessDialog = ({
             </div>
           ) : (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                終点（出口）
-              </label>
-              <select
-                value={toPointId}
-                onChange={(e) => setToPointId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">選択してください</option>
-                {filteredPoints.map((point) => (
-                  <option key={point.id} value={point.id}>
-                    {point.name} ({point.dryBulbTemp?.toFixed(1)}°C, RH{point.relativeHumidity?.toFixed(0)}%)
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between gap-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  終点（出口）
+                </label>
+                {type === 'cooling' && (
+                  <div className="flex items-center gap-3 text-xs text-gray-600">
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="radio"
+                        name="toPointMode"
+                        value="manual"
+                        checked={toPointMode === 'manual'}
+                        onChange={() => {
+                          setToPointMode('manual');
+                          setParameters((prev) => ({
+                            ...prev,
+                            capacity: undefined,
+                            coolingOutletRH: undefined,
+                          }));
+                          if (!toPointId && filteredPoints[0]) {
+                            setToPointId(filteredPoints[0].id);
+                          }
+                        }}
+                      />
+                      選択
+                    </label>
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="radio"
+                        name="toPointMode"
+                        value="auto"
+                        checked={toPointMode === 'auto'}
+                        onChange={() => {
+                          setToPointMode('auto');
+                          setToPointId('');
+                        }}
+                      />
+                      自動計算
+                    </label>
+                  </div>
+                )}
+              </div>
+              {type === 'cooling' && toPointMode === 'auto' ? (
+                <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                  能力と冷却コイル出口条件から終点を自動計算します。
+                </div>
+              ) : (
+                <select
+                  value={toPointId}
+                  onChange={(e) => setToPointId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">選択してください</option>
+                  {filteredPoints.map((point) => (
+                    <option key={point.id} value={point.id}>
+                      {point.name} ({point.dryBulbTemp?.toFixed(1)}°C, RH{point.relativeHumidity?.toFixed(0)}%)
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           )}
 
@@ -495,10 +569,11 @@ export const ProcessDialog = ({
             {/* タイプ別パラメータ */}
             {(type === 'heating' || type === 'cooling') && (
               <>
-                <div className="mb-3">
-                  <label className="block text-sm text-gray-600 mb-1">
-                    能力 [kW]（オプション）
-                  </label>
+                {(type === 'heating' || (type === 'cooling' && toPointMode === 'auto')) && (
+                  <div className="mb-3">
+                    <label className="block text-sm text-gray-600 mb-1">
+                      能力 [kW]{type === 'heating' ? '（オプション）' : ''}
+                    </label>
                     <input
                       type="number"
                       min="0"
@@ -506,23 +581,29 @@ export const ProcessDialog = ({
                       onChange={(e) =>
                         handleParameterChange('capacity', parseOptionalNumber(e.target.value))
                       }
-                      placeholder="自動計算"
+                      placeholder={type === 'heating' ? '自動計算' : '必須入力'}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
-                {type === 'cooling' && (
+                )}
+                {type === 'cooling' && toPointMode === 'auto' && (
                   <div className="mb-3">
                     <label className="block text-sm text-gray-600 mb-1">
-                      顕熱比 SHF [-]
+                      冷却コイル出口条件（相対湿度）[%]
                     </label>
                     <input
                       type="number"
-                      step="0.01"
-                      value={parameters.SHF || ''}
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={parameters.coolingOutletRH || ''}
                       onChange={(e) =>
-                        handleParameterChange('SHF', parseOptionalNumber(e.target.value))
+                        handleParameterChange(
+                          'coolingOutletRH',
+                          parseOptionalNumber(e.target.value)
+                        )
                       }
-                      placeholder="0.0 - 1.0"
+                      placeholder="必須入力"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
