@@ -89,7 +89,7 @@ export class HeatExchangeProcess {
     );
     
     const enthalpyDiff = saEnthalpy - oaEnthalpy;
-    const exchangedHeat = (massFlow * enthalpyDiff) / 3600; // [kW]
+    const exchangedHeat = massFlow * enthalpyDiff; // [kW]
     
     const temperatureDiff = supplyAir.dryBulbTemp! - outdoorAir.dryBulbTemp!;
     const humidityDiff = saHumidity - oaHumidity;
