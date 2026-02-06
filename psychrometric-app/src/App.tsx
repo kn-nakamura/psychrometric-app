@@ -253,7 +253,11 @@ function App() {
     end: { x: number; y: number };
   } | null>(null);
   const [viewRange, setViewRange] = useState<ChartRange | null>(null);
-  const moveErrorShownRef = useRef(false);
+  const [moveWarning, setMoveWarning] = useState<{
+    x: number;
+    y: number;
+    visible: boolean;
+  } | null>(null);
   const inputOptionA =
     STATE_POINT_INPUT_OPTIONS.find((option) => option.key === inputTypeA) ??
     STATE_POINT_INPUT_OPTIONS[0];
@@ -700,7 +704,13 @@ function App() {
   };
 
   // 状態点の移動（ドラッグ）
-  const handlePointMove = (pointId: string, temp: number, humidity: number) => {
+  const handlePointMove = (
+    pointId: string,
+    temp: number,
+    humidity: number,
+    canvasPoint: { x: number; y: number },
+    isWithinRange: boolean
+  ) => {
     const currentPoint = statePoints.find((point) => point.id === pointId);
     if (!currentPoint) return;
     const constraint = moveConstraints[pointId] ?? 'free';
@@ -761,7 +771,6 @@ function App() {
     if (!stateData) return;
     if (stateData.dryBulbTemp === undefined || stateData.humidity === undefined) return;
 
-    const chartRange = viewRange ?? baseChartConfig.range;
     const saturationHumidity = PsychrometricCalculator.absoluteHumidity(
       stateData.dryBulbTemp,
       100,
@@ -769,22 +778,19 @@ function App() {
       calculationConstants
     );
     const epsilon = 1e-6;
-    const isOutsideRange =
-      stateData.dryBulbTemp < chartRange.tempMin ||
-      stateData.dryBulbTemp > chartRange.tempMax ||
-      stateData.humidity < chartRange.humidityMin ||
-      stateData.humidity > chartRange.humidityMax;
-    const isOutsideChart = isOutsideRange || stateData.humidity > saturationHumidity + epsilon;
+    const isOutsideChart =
+      !isWithinRange || stateData.humidity > saturationHumidity + epsilon;
 
     if (isOutsideChart) {
-      if (!moveErrorShownRef.current) {
-        alert('空気線図の外です。範囲内に移動してください。');
-        moveErrorShownRef.current = true;
-      }
+      const clampedX = Math.min(Math.max(canvasPoint.x, 8), chartSize.width - 8);
+      const clampedY = Math.min(Math.max(canvasPoint.y, 8), chartSize.height - 8);
+      setMoveWarning({ x: clampedX, y: clampedY, visible: true });
       return;
     }
 
-    moveErrorShownRef.current = false;
+    if (moveWarning?.visible) {
+      setMoveWarning(null);
+    }
     updateStatePoint(pointId, stateData);
   };
 
@@ -1899,6 +1905,7 @@ function App() {
                   setSelectedProcess(null);
                 }}
                 onPointMove={handlePointMove}
+                onPointDragEnd={() => setMoveWarning(null)}
               />
               <div
                 className={`absolute inset-0 z-10 ${zoomMode ? 'cursor-crosshair' : ''}`}
@@ -1934,6 +1941,20 @@ function App() {
                   />
                 )}
               </div>
+              {moveWarning?.visible && (
+                <div
+                  className="absolute z-20 pointer-events-none"
+                  style={{
+                    left: moveWarning.x,
+                    top: moveWarning.y,
+                    transform: 'translate(12px, -12px)',
+                  }}
+                >
+                  <div className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-700 shadow-sm">
+                    空気線図の外です
+                  </div>
+                </div>
+              )}
               {selectedPoint && selectedPointPosition && (
                 <div
                   className="absolute z-10"

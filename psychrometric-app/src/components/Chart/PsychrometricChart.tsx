@@ -18,7 +18,14 @@ interface PsychrometricChartProps {
   onPointClick?: (pointId: string) => void;
   onProcessClick?: (processId: string) => void;
   onBackgroundClick?: () => void;
-  onPointMove?: (pointId: string, temp: number, humidity: number) => void;
+  onPointMove?: (
+    pointId: string,
+    temp: number,
+    humidity: number,
+    canvasPoint: { x: number; y: number },
+    isWithinRange: boolean
+  ) => void;
+  onPointDragEnd?: () => void;
 }
 
 export interface PsychrometricChartRef {
@@ -197,6 +204,7 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
   onProcessClick,
   onBackgroundClick,
   onPointMove,
+  onPointDragEnd,
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -306,20 +314,19 @@ export const PsychrometricChart = forwardRef<PsychrometricChartRef, Psychrometri
     // 座標変換
     const { temp, humidity } = coordinates.fromCanvas(point.x, point.y);
 
-    // 範囲チェック
-    if (
+    const isWithinRange =
       temp >= chartConfig.range.tempMin &&
       temp <= chartConfig.range.tempMax &&
       humidity >= chartConfig.range.humidityMin &&
       humidity <= chartConfig.range.humidityMax
-    ) {
-      onPointMove?.(draggedPointId, temp, humidity);
-    }
+    ;
+    onPointMove?.(draggedPointId, temp, humidity, point, isWithinRange);
   };
 
   const handlePointerUp = () => {
     setIsDragging(false);
     setDraggedPointId(null);
+    onPointDragEnd?.();
   };
   
   return (
