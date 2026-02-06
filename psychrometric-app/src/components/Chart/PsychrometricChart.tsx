@@ -34,6 +34,7 @@ interface RenderPsychrometricChartOptions {
   resolutionScale?: number;
   range?: ChartRange;
   styleScale?: number;
+  dashScale?: number;
 }
 
 interface RenderPsychrometricChartContextOptions {
@@ -46,6 +47,7 @@ interface RenderPsychrometricChartContextOptions {
   selectedPointId?: string | null;
   range?: ChartRange;
   styleScale?: number;
+  dashScale?: number;
 }
 
 const getDefaultResolutionScale = () => {
@@ -65,6 +67,7 @@ const drawPsychrometricChart = ({
   selectedPointId,
   range,
   styleScale = 1,
+  dashScale = styleScale,
 }: RenderPsychrometricChartContextOptions) => {
   const chartConfig = createDynamicChartConfig(width, height, statePoints);
   const chartRange = range ?? chartConfig.range;
@@ -90,7 +93,7 @@ const drawPsychrometricChart = ({
   drawEnthalpyCurves(ctx, coordinates, chartRange, styleScale);
 
   // プロセス線を描画
-  drawProcesses(ctx, coordinates, processes, statePoints, activeSeason, styleScale);
+  drawProcesses(ctx, coordinates, processes, statePoints, activeSeason, styleScale, dashScale);
 
   // 状態点を描画
   drawStatePoints(ctx, coordinates, statePoints, activeSeason, selectedPointId, styleScale);
@@ -107,6 +110,7 @@ export const renderPsychrometricChart = ({
   resolutionScale = getDefaultResolutionScale(),
   range,
   styleScale,
+  dashScale,
 }: RenderPsychrometricChartOptions) => {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -131,6 +135,7 @@ export const renderPsychrometricChart = ({
     selectedPointId,
     range,
     styleScale,
+    dashScale,
   });
 };
 
@@ -144,6 +149,7 @@ export const renderPsychrometricChartToContext = ({
   selectedPointId,
   range,
   styleScale,
+  dashScale,
 }: RenderPsychrometricChartContextOptions) => {
   drawPsychrometricChart({
     ctx,
@@ -155,6 +161,7 @@ export const renderPsychrometricChartToContext = ({
     selectedPointId,
     range,
     styleScale,
+    dashScale,
   });
 };
 
@@ -573,9 +580,9 @@ function drawProcesses(
   processes: Process[],
   points: StatePoint[],
   activeSeason: string,
-  styleScale: number
+  styleScale: number,
+  dashScale: number
 ) {
-  const dashScale = styleScale;
   processes.forEach((process) => {
     // 季節フィルター
     if (activeSeason !== 'both' && process.season !== 'both' && process.season !== activeSeason) {
