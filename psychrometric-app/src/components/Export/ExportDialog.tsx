@@ -242,6 +242,7 @@ export const ExportDialog = ({
     const chartRenderHeight = Math.round((drawChartHeightMm / 25.4) * A4_DPI);
     const chartScaleX = drawChartWidthMm / chartRenderWidth;
     const chartScaleY = drawChartHeightMm / chartRenderHeight;
+    const pdfStyleScale = 72 / A4_DPI;
 
     const drawStatePointCard = (point: StatePoint, index: number, x: number, y: number) => {
       const label = getPointLabel(point, index);
@@ -430,6 +431,7 @@ export const ExportDialog = ({
       statePoints: filteredStatePoints,
       processes: filteredProcesses,
       activeSeason,
+      styleScale: pdfStyleScale,
     });
     chartContext.restore();
 

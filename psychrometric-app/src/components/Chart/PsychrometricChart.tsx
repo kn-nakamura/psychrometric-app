@@ -33,6 +33,7 @@ interface RenderPsychrometricChartOptions {
   selectedPointId?: string | null;
   resolutionScale?: number;
   range?: ChartRange;
+  styleScale?: number;
 }
 
 interface RenderPsychrometricChartContextOptions {
@@ -44,6 +45,7 @@ interface RenderPsychrometricChartContextOptions {
   activeSeason: 'summer' | 'winter' | 'both';
   selectedPointId?: string | null;
   range?: ChartRange;
+  styleScale?: number;
 }
 
 const getDefaultResolutionScale = () => {
@@ -62,6 +64,7 @@ const drawPsychrometricChart = ({
   activeSeason,
   selectedPointId,
   range,
+  styleScale = 1,
 }: RenderPsychrometricChartContextOptions) => {
   const chartConfig = createDynamicChartConfig(width, height, statePoints);
   const chartRange = range ?? chartConfig.range;
@@ -75,22 +78,22 @@ const drawPsychrometricChart = ({
   ctx.fillRect(0, 0, width, height);
 
   // グリッド線を描画
-  drawGrid(ctx, coordinates, chartRange);
+  drawGrid(ctx, coordinates, chartRange, styleScale);
 
   // 相対湿度曲線を描画
-  drawRHCurves(ctx, coordinates, chartRange);
+  drawRHCurves(ctx, coordinates, chartRange, styleScale);
 
   // 湿球温度線を描画（薄く）
-  drawWetBulbCurves(ctx, coordinates, chartRange);
+  drawWetBulbCurves(ctx, coordinates, chartRange, styleScale);
 
   // エンタルピー線を描画（薄く）
-  drawEnthalpyCurves(ctx, coordinates, chartRange);
+  drawEnthalpyCurves(ctx, coordinates, chartRange, styleScale);
 
   // プロセス線を描画
-  drawProcesses(ctx, coordinates, processes, statePoints, activeSeason);
+  drawProcesses(ctx, coordinates, processes, statePoints, activeSeason, styleScale);
 
   // 状態点を描画
-  drawStatePoints(ctx, coordinates, statePoints, activeSeason, selectedPointId);
+  drawStatePoints(ctx, coordinates, statePoints, activeSeason, selectedPointId, styleScale);
 };
 
 export const renderPsychrometricChart = ({
@@ -103,6 +106,7 @@ export const renderPsychrometricChart = ({
   selectedPointId,
   resolutionScale = getDefaultResolutionScale(),
   range,
+  styleScale,
 }: RenderPsychrometricChartOptions) => {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -126,6 +130,7 @@ export const renderPsychrometricChart = ({
     activeSeason,
     selectedPointId,
     range,
+    styleScale,
   });
 };
 
@@ -138,6 +143,7 @@ export const renderPsychrometricChartToContext = ({
   activeSeason,
   selectedPointId,
   range,
+  styleScale,
 }: RenderPsychrometricChartContextOptions) => {
   drawPsychrometricChart({
     ctx,
@@ -148,6 +154,7 @@ export const renderPsychrometricChartToContext = ({
     activeSeason,
     selectedPointId,
     range,
+    styleScale,
   });
 };
 
@@ -318,10 +325,11 @@ PsychrometricChart.displayName = 'PsychrometricChart';
 function drawGrid(
   ctx: CanvasRenderingContext2D,
   coordinates: ChartCoordinates,
-  range: ChartRange
+  range: ChartRange,
+  styleScale: number
 ) {
   ctx.strokeStyle = '#e0e0e0';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1 * styleScale;
 
   // 縦線（温度）
   for (let temp = Math.ceil(range.tempMin / 5) * 5; temp <= range.tempMax; temp += 5) {
@@ -364,7 +372,8 @@ function drawGrid(
 function drawRHCurves(
   ctx: CanvasRenderingContext2D,
   coordinates: ChartCoordinates,
-  range: ChartRange
+  range: ChartRange,
+  styleScale: number
 ) {
   const rhCurves = RHCurveGenerator.generateStandardSet(range.tempMin, range.tempMax);
 
@@ -374,7 +383,7 @@ function drawRHCurves(
 
   rhCurves.forEach((points, rh) => {
     ctx.strokeStyle = rh === 100 ? saturationColor : curveColor;
-    ctx.lineWidth = rh === 100 ? 2 : 1;
+    ctx.lineWidth = (rh === 100 ? 2 : 1) * styleScale;
 
     // 範囲内のポイントのみをフィルタリング
     const clippedPoints = points.filter(
@@ -412,12 +421,13 @@ function drawRHCurves(
 function drawWetBulbCurves(
   ctx: CanvasRenderingContext2D,
   coordinates: ChartCoordinates,
-  range: ChartRange
+  range: ChartRange,
+  styleScale: number
 ) {
   const wbCurves = WetBulbCurveGenerator.generateStandardSet(range.tempMin, range.tempMax);
 
   ctx.strokeStyle = '#dddddd';
-  ctx.lineWidth = 0.5;
+  ctx.lineWidth = 0.5 * styleScale;
 
   wbCurves.forEach((points) => {
     // 範囲内のポイントのみをフィルタリング
@@ -447,12 +457,13 @@ function drawWetBulbCurves(
 function drawEnthalpyCurves(
   ctx: CanvasRenderingContext2D,
   coordinates: ChartCoordinates,
-  range: ChartRange
+  range: ChartRange,
+  styleScale: number
 ) {
   const hCurves = EnthalpyCurveGenerator.generateStandardSet(range.tempMin, range.tempMax);
 
   ctx.strokeStyle = '#eeeeee';
-  ctx.lineWidth = 0.5;
+  ctx.lineWidth = 0.5 * styleScale;
 
   hCurves.forEach((points) => {
     // 範囲内のポイントのみをフィルタリング
@@ -484,8 +495,10 @@ function drawStatePoints(
   coordinates: ChartCoordinates,
   points: StatePoint[],
   activeSeason: string,
-  selectedId?: string | null
+  selectedId?: string | null,
+  styleScale?: number
 ) {
+  const effectiveScale = styleScale ?? 1;
   // Filter and sort points by order for proper numbering
   const filteredPoints = points
     .filter(point => {
@@ -541,7 +554,7 @@ function drawStatePoints(
     // 選択された点は外枠を描画
     if (selectedId === point.id) {
       ctx.strokeStyle = '#000';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2 * effectiveScale;
       ctx.stroke();
     }
 
@@ -559,8 +572,10 @@ function drawProcesses(
   coordinates: ChartCoordinates,
   processes: Process[],
   points: StatePoint[],
-  activeSeason: string
+  activeSeason: string,
+  styleScale: number
 ) {
+  const dashScale = styleScale;
   processes.forEach((process) => {
     // 季節フィルター
     if (activeSeason !== 'both' && process.season !== 'both' && process.season !== activeSeason) {
@@ -584,8 +599,8 @@ function drawProcesses(
         : process.season === 'winter'
         ? '#ff6b6b'
         : '#6b7280';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 3 * styleScale;
+    ctx.setLineDash([5 * dashScale, 5 * dashScale]);
     
     if (process.type === 'mixing') {
       const stream1Id = process.parameters.mixingRatios?.stream1.pointId ?? process.fromPointId;
@@ -634,15 +649,15 @@ function drawProcesses(
             : process.season === 'winter'
             ? '#ff6b6b'
             : '#6b7280';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([2, 4]); // Dotted line to distinguish from main process flow
+        ctx.lineWidth = 2 * styleScale;
+        ctx.setLineDash([2 * dashScale, 4 * dashScale]); // Dotted line to distinguish from main process flow
 
         ctx.beginPath();
         ctx.moveTo(exhaustCanvas.x, exhaustCanvas.y);
         ctx.lineTo(to.x, to.y);
         ctx.stroke();
 
-        ctx.setLineDash([5, 5]); // Return to dashed line for main flow
+        ctx.setLineDash([5 * dashScale, 5 * dashScale]); // Return to dashed line for main flow
       }
     }
 
