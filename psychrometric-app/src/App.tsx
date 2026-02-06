@@ -13,6 +13,7 @@ import { resolvePsychrometricConstants } from './lib/psychrometric/constants';
 import { MixingProcess } from './lib/processes/mixing';
 import { HeatExchangeProcess } from './lib/processes/heatExchange';
 import { CoolingProcess } from './lib/processes/cooling';
+import { HeatingProcess } from './lib/processes/heating';
 import { CoilCapacityCalculator } from './lib/equipment/coilCapacity';
 import { inferModeFromSigned } from './lib/sign';
 import { Process } from './types/process';
@@ -966,6 +967,42 @@ function App() {
       }
     }
 
+    if (processData.type === 'heating' && processData.parameters.autoCalculateToPoint) {
+      const inletPoint = statePoints.find((point) => point.id === processData.fromPointId);
+      const heatingCapacity = processData.parameters.capacity;
+      if (inletPoint && heatingCapacity) {
+        const airflow = processData.parameters.airflow ?? 1000;
+        try {
+          const { toPoint } = HeatingProcess.calculateByCapacity(
+            inletPoint,
+            heatingCapacity,
+            airflow,
+            defaultPressure,
+            calculationConstants
+          );
+          const newPointId = `point-${Date.now()}`;
+          addStatePoint({
+            id: newPointId,
+            name: `${processData.name} 加熱コイル出口`,
+            season: processData.season,
+            order: statePoints.length,
+            airflow,
+            ...toPoint,
+          });
+          resolvedProcessData = {
+            ...processData,
+            toPointId: newPointId,
+            parameters: {
+              ...processData.parameters,
+              airflow,
+            },
+          };
+        } catch {
+          // ignore calculation errors and fall back to manual settings
+        }
+      }
+    }
+
     if (processData.type === 'heatExchange' && processData.parameters.heatExchangeEfficiency) {
       const nextEquipment = {
         ...designConditions.equipment,
@@ -1000,7 +1037,8 @@ function App() {
     if (
       processData.type === 'mixing' ||
       processData.type === 'heatExchange' ||
-      (processData.type === 'cooling' && processData.parameters.autoCalculateToPoint)
+      ((processData.type === 'cooling' || processData.type === 'heating') &&
+        processData.parameters.autoCalculateToPoint)
     ) {
       setSelectedPoint(resolvedProcessData.toPointId);
     }
