@@ -49,24 +49,24 @@ export class CoolingProcess {
     const totalEnthalpyDiff = totalHeat / massFlow;
     const fromEnthalpy = enthalpy(fromPoint.dryBulbTemp!, fromPoint.humidity!);
 
-    const outletRHPointAtSameHumidity = StatePointConverter.fromRHAndHumidity(
-      outletRH,
+    const saturationPointAtSameHumidity = StatePointConverter.fromRHAndHumidity(
+      100,
       fromPoint.humidity!,
       effectivePressure,
       resolved
     );
-    const enthalpyAtOutletRH = enthalpy(
-      outletRHPointAtSameHumidity.dryBulbTemp!,
-      outletRHPointAtSameHumidity.humidity!
+    const enthalpyAtSaturation = enthalpy(
+      saturationPointAtSameHumidity.dryBulbTemp!,
+      saturationPointAtSameHumidity.humidity!
     );
 
-    const enthalpyDiffToOutletRH = enthalpyAtOutletRH - fromEnthalpy;
-    const reachesOutletRH = totalEnthalpyDiff <= enthalpyDiffToOutletRH;
+    const enthalpyDiffToSaturation = enthalpyAtSaturation - fromEnthalpy;
+    const reachesSaturation = totalEnthalpyDiff <= enthalpyDiffToSaturation;
 
-    const toPoint = reachesOutletRH
+    const toPoint = reachesSaturation
       ? (() => {
-          const remainingEnthalpyDiff = totalEnthalpyDiff - enthalpyDiffToOutletRH;
-          const targetEnthalpy = enthalpyAtOutletRH + remainingEnthalpyDiff;
+          const remainingEnthalpyDiff = totalEnthalpyDiff - enthalpyDiffToSaturation;
+          const targetEnthalpy = enthalpyAtSaturation + remainingEnthalpyDiff;
           return StatePointConverter.fromRHAndEnthalpy(
             outletRH,
             targetEnthalpy,
