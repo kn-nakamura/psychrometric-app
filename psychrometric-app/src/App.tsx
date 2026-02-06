@@ -82,6 +82,46 @@ const formatPointValue = (point: StatePoint, key: StatePointValueKey) => {
   return value.toString();
 };
 
+const processTypeLabels: Record<Process['type'], string> = {
+  heating: '加熱',
+  cooling: '冷却',
+  humidifying: '加湿',
+  dehumidifying: '除湿',
+  mixing: '混合',
+  heatExchange: '全熱交換',
+  fanHeating: 'ファン発熱',
+  airSupply: '空調吹き出し',
+};
+
+const getProcessAnchorPosition = (
+  process: Process,
+  statePoints: StatePoint[],
+  chartCoordinates: ChartCoordinates
+) => {
+  const fromPoint = statePoints.find((point) => point.id === process.fromPointId);
+  const toPoint = statePoints.find((point) => point.id === process.toPointId);
+  if (!fromPoint?.dryBulbTemp || !fromPoint.humidity) return null;
+  if (!toPoint?.dryBulbTemp || !toPoint.humidity) return null;
+
+  if (process.type === 'mixing') {
+    return chartCoordinates.toCanvas(toPoint.dryBulbTemp, toPoint.humidity);
+  }
+
+  if (process.type === 'heatExchange') {
+    const exhaustPointId = process.parameters.exhaustPointId;
+    const exhaustPoint = statePoints.find((point) => point.id === exhaustPointId);
+    if (exhaustPoint?.dryBulbTemp && exhaustPoint.humidity) {
+      const from = chartCoordinates.toCanvas(exhaustPoint.dryBulbTemp, exhaustPoint.humidity);
+      const to = chartCoordinates.toCanvas(toPoint.dryBulbTemp, toPoint.humidity);
+      return { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+    }
+  }
+
+  const from = chartCoordinates.toCanvas(fromPoint.dryBulbTemp, fromPoint.humidity);
+  const to = chartCoordinates.toCanvas(toPoint.dryBulbTemp, toPoint.humidity);
+  return { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+};
+
 function App() {
   const {
     statePoints,
@@ -239,6 +279,7 @@ function App() {
   }, [movePointId, selectedPointId]);
 
   const selectedPoint = statePoints.find((point) => point.id === selectedPointId) ?? null;
+  const selectedProcess = processes.find((process) => process.id === selectedProcessId) ?? null;
 
   const baseChartConfig = useMemo(() => {
     return createDynamicChartConfig(chartSize.width, chartSize.height, statePoints);
@@ -255,6 +296,44 @@ function App() {
     }
     return chartCoordinates.toCanvas(selectedPoint.dryBulbTemp, selectedPoint.humidity);
   }, [chartCoordinates, selectedPoint]);
+
+  const selectedProcessPosition = useMemo(() => {
+    if (!selectedProcess) return null;
+    return getProcessAnchorPosition(selectedProcess, statePoints, chartCoordinates);
+  }, [chartCoordinates, selectedProcess, statePoints]);
+
+  const selectedProcessDetails = useMemo(() => {
+    if (!selectedProcess) return null;
+    const fromPoint = statePoints.find((point) => point.id === selectedProcess.fromPointId);
+    const toPoint = statePoints.find((point) => point.id === selectedProcess.toPointId);
+    const airflowDetails: string[] = [];
+
+    if (typeof selectedProcess.parameters.airflow === 'number') {
+      airflowDetails.push(`風量: ${selectedProcess.parameters.airflow.toFixed(0)} m³/h`);
+    }
+    if (typeof selectedProcess.parameters.supplyAirflow === 'number') {
+      airflowDetails.push(`外気側風量: ${selectedProcess.parameters.supplyAirflow.toFixed(0)} m³/h`);
+    }
+    if (typeof selectedProcess.parameters.exhaustAirflow === 'number') {
+      airflowDetails.push(`排気側風量: ${selectedProcess.parameters.exhaustAirflow.toFixed(0)} m³/h`);
+    }
+    if (selectedProcess.type === 'mixing') {
+      const stream1Airflow = selectedProcess.parameters.mixingRatios?.stream1.airflow;
+      const stream2Airflow = selectedProcess.parameters.mixingRatios?.stream2.airflow;
+      if (typeof stream1Airflow === 'number') {
+        airflowDetails.push(`混合流1風量: ${stream1Airflow.toFixed(0)} m³/h`);
+      }
+      if (typeof stream2Airflow === 'number') {
+        airflowDetails.push(`混合流2風量: ${stream2Airflow.toFixed(0)} m³/h`);
+      }
+    }
+
+    return {
+      fromLabel: fromPoint?.name ?? '-',
+      toLabel: toPoint?.name ?? '-',
+      airflowDetails,
+    };
+  }, [selectedProcess, statePoints]);
 
   const handleZoomStart = (clientX: number, clientY: number) => {
     if (!zoomMode) return;
@@ -1612,12 +1691,18 @@ function App() {
                 selectedPointId={selectedPointId}
                 selectedProcessId={selectedProcessId}
                 draggablePointId={zoomMode ? null : movePointId}
-                onPointClick={setSelectedPoint}
+                onPointClick={(pointId) => {
+                  setSelectedPoint(pointId);
+                  setSelectedProcess(null);
+                }}
                 onProcessClick={(processId) => {
                   setSelectedProcess(processId);
                   setSelectedPoint(null);
                 }}
-                onBackgroundClick={() => setSelectedPoint(null)}
+                onBackgroundClick={() => {
+                  setSelectedPoint(null);
+                  setSelectedProcess(null);
+                }}
                 onPointMove={handlePointMove}
               />
               <div
@@ -1749,6 +1834,55 @@ function App() {
                             <option value="free">任意</option>
                           </select>
                         </label>
+                      </div>
+                    )}
+                    <div className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1 rotate-45 border-b border-r border-gray-200 bg-white" />
+                  </div>
+                </div>
+              )}
+              {selectedProcess && selectedProcessPosition && selectedProcessDetails && (
+                <div
+                  className="absolute z-10"
+                  style={{
+                    left: selectedProcessPosition.x,
+                    top: selectedProcessPosition.y,
+                    transform: 'translate(-50%, -120%)',
+                  }}
+                >
+                  <div className="relative rounded-lg border border-gray-200 bg-white shadow-lg px-4 py-3 text-xs text-gray-700 min-w-[220px]">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-semibold text-sm text-gray-900">
+                        {selectedProcess.name}
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+                        {processTypeLabels[selectedProcess.type]}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-gray-500">
+                      <span
+                        className={`px-2 py-0.5 rounded ${
+                          selectedProcess.season === 'summer'
+                            ? 'bg-blue-100 text-blue-700'
+                            : selectedProcess.season === 'winter'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-purple-100 text-purple-700'
+                        }`}
+                      >
+                        {selectedProcess.season === 'summer'
+                          ? '夏'
+                          : selectedProcess.season === 'winter'
+                          ? '冬'
+                          : '通年'}
+                      </span>
+                      <span>
+                        {selectedProcessDetails.fromLabel} → {selectedProcessDetails.toLabel}
+                      </span>
+                    </div>
+                    {selectedProcessDetails.airflowDetails.length > 0 && (
+                      <div className="mt-2 space-y-1 text-[11px] text-gray-600">
+                        {selectedProcessDetails.airflowDetails.map((detail) => (
+                          <div key={detail}>{detail}</div>
+                        ))}
                       </div>
                     )}
                     <div className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1 rotate-45 border-b border-r border-gray-200 bg-white" />
