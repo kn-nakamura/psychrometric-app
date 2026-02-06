@@ -2,8 +2,10 @@ import { StatePoint } from '@/types/psychrometric';
 import type { PsychrometricConstants } from '@/types/calculationSettings';
 import { ProcessResults } from '@/types/process';
 import { StatePointConverter } from '../psychrometric/conversions';
-import { PsychrometricCalculator } from '../psychrometric/properties';
 import { resolvePsychrometricConstants } from '../psychrometric/constants';
+import { massFlowFromAirflow } from '../airflow';
+import { splitCapacity } from '../capacity';
+import { enthalpy } from '../psychrometrics';
 
 /**
  * 全熱交換プロセスの計算
@@ -58,8 +60,8 @@ export class HeatExchangeProcess {
     const effectiveEfficiency = (efficiency / 100) * airflowRatio;
     
     // エンタルピー交換
-    const oaEnthalpy = outdoorAir.enthalpy!;
-    const eaEnthalpy = exhaustAir.enthalpy!;
+    const oaEnthalpy = enthalpy(outdoorAir.dryBulbTemp!, outdoorAir.humidity!);
+    const eaEnthalpy = enthalpy(exhaustAir.dryBulbTemp!, exhaustAir.humidity!);
     
     // 処理後外気のエンタルピー
     // h_sa = h_oa + ε × (h_ea - h_oa)
@@ -80,13 +82,11 @@ export class HeatExchangeProcess {
     );
     
     // 交換熱量を計算
-    const density = PsychrometricCalculator.airDensity(
-      outdoorAir.dryBulbTemp!,
-      outdoorAir.humidity!,
-      effectivePressure,
-      resolved
+    const massFlow = massFlowFromAirflow(
+      effectiveSupplyAirflow,
+      outdoorAir,
+      effectivePressure
     );
-    const massFlow = effectiveSupplyAirflow * density;
     
     const enthalpyDiff = saEnthalpy - oaEnthalpy;
     const exchangedHeat = (massFlow * enthalpyDiff) / 3600; // [kW]
@@ -94,10 +94,22 @@ export class HeatExchangeProcess {
     const temperatureDiff = supplyAir.dryBulbTemp! - outdoorAir.dryBulbTemp!;
     const humidityDiff = saHumidity - oaHumidity;
     
+    const { sensibleKw, latentKw } = splitCapacity(
+      massFlow,
+      {
+        dryBulbTemp: outdoorAir.dryBulbTemp!,
+        humidity: outdoorAir.humidity!,
+      },
+      {
+        dryBulbTemp: supplyAir.dryBulbTemp!,
+        humidity: supplyAir.humidity!,
+      }
+    );
+    
     const results: ProcessResults = {
       totalHeat: exchangedHeat,
-      sensibleHeat: 0, // 後で計算可能
-      latentHeat: 0,   // 後で計算可能
+      sensibleHeat: sensibleKw,
+      latentHeat: latentKw,
       enthalpyDiff,
       temperatureDiff,
       humidityDiff,
@@ -161,26 +173,34 @@ export class HeatExchangeProcess {
     );
     
     // 交換熱量を計算
-    const density = PsychrometricCalculator.airDensity(
-      outdoorAir.dryBulbTemp!,
-      outdoorAir.humidity!,
-      effectivePressure,
-      resolved
+    const massFlow = massFlowFromAirflow(
+      effectiveSupplyAirflow,
+      outdoorAir,
+      effectivePressure
     );
-    const massFlow = effectiveSupplyAirflow * density;
     
     const temperatureDiff = saTemp - oaTemp;
     const humidityDiff = saHumidity - oaHumidity;
-    const enthalpyDiff = supplyAir.enthalpy! - outdoorAir.enthalpy!;
+    const enthalpyDiff =
+      enthalpy(supplyAir.dryBulbTemp!, supplyAir.humidity!) -
+      enthalpy(outdoorAir.dryBulbTemp!, outdoorAir.humidity!);
     
-    // 顕熱・潜熱を個別に計算
-    const sensibleHeat = (massFlow * resolved.cpAir * temperatureDiff) / 3600; // [kW]
-    const latentHeat = (massFlow * resolved.latentHeat0c * humidityDiff) / 3600;       // [kW]
+    const { totalKw, sensibleKw, latentKw } = splitCapacity(
+      massFlow,
+      {
+        dryBulbTemp: oaTemp,
+        humidity: oaHumidity,
+      },
+      {
+        dryBulbTemp: saTemp,
+        humidity: saHumidity,
+      }
+    );
     
     const results: ProcessResults = {
-      sensibleHeat,
-      latentHeat,
-      totalHeat: sensibleHeat + latentHeat,
+      sensibleHeat: sensibleKw,
+      latentHeat: latentKw,
+      totalHeat: totalKw,
       enthalpyDiff,
       temperatureDiff,
       humidityDiff,
@@ -236,8 +256,8 @@ export class HeatExchangeProcess {
     const airflowRatio = this.getAirflowRatio(effectiveSupplyAirflow, effectiveExhaustAirflow);
     const effectiveEfficiency = (efficiency / 100) * airflowRatio;
     
-    const eaEnthalpy = exhaustAir.enthalpy!;
-    const oaEnthalpy = outdoorAir.enthalpy!;
+    const eaEnthalpy = enthalpy(exhaustAir.dryBulbTemp!, exhaustAir.humidity!);
+    const oaEnthalpy = enthalpy(outdoorAir.dryBulbTemp!, outdoorAir.humidity!);
     
     // 処理後排気のエンタルピー
     // h_eo = h_ea - ε × (h_ea - h_oa)
@@ -274,8 +294,10 @@ export class HeatExchangeProcess {
     
     // ε = (h_target - h_oa) / (h_ea - h_oa)
     const efficiency = 
-      (targetSupplyAir.enthalpy! - outdoorAir.enthalpy!) /
-      (exhaustAir.enthalpy! - outdoorAir.enthalpy!) * 100;
+      (enthalpy(targetSupplyAir.dryBulbTemp!, targetSupplyAir.humidity!) -
+        enthalpy(outdoorAir.dryBulbTemp!, outdoorAir.humidity!)) /
+      (enthalpy(exhaustAir.dryBulbTemp!, exhaustAir.humidity!) -
+        enthalpy(outdoorAir.dryBulbTemp!, outdoorAir.humidity!)) * 100;
     
     // 0-100%の範囲にクリップ
     return Math.max(0, Math.min(100, efficiency));

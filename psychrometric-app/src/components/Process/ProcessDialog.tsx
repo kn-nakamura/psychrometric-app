@@ -180,6 +180,11 @@ export const ProcessDialog = ({
 
   const handleSave = () => {
     const resolvedName = name.trim() || processTypeLabels[type];
+    const sanitizedParameters: ProcessParameters = {
+      ...parameters,
+      capacity:
+        parameters.capacity !== undefined ? Math.abs(parameters.capacity) : parameters.capacity,
+    };
     if (!fromPointId || (!toPointId && type !== 'mixing' && type !== 'heatExchange')) {
       alert('始点と終点を選択してください');
       return;
@@ -235,7 +240,7 @@ export const ProcessDialog = ({
       season,
       fromPointId,
       toPointId,
-      parameters,
+      parameters: sanitizedParameters,
     });
 
     onClose();
@@ -496,6 +501,7 @@ export const ProcessDialog = ({
                   </label>
                     <input
                       type="number"
+                      min="0"
                       value={parameters.capacity || ''}
                       onChange={(e) =>
                         handleParameterChange('capacity', parseOptionalNumber(e.target.value))

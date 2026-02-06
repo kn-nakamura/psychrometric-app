@@ -2,6 +2,7 @@ import { Trash2, Edit2, GripVertical, ArrowRight } from 'lucide-react';
 import { Process, ProcessType } from '@/types/process';
 import { StatePoint } from '@/types/psychrometric';
 import { CoilCapacityCalculator } from '@/lib/equipment/coilCapacity';
+import { inferModeFromSigned } from '@/lib/sign';
 
 interface ProcessListProps {
   processes: Process[];
@@ -75,6 +76,8 @@ export const ProcessList = ({
       return null;
     }
   };
+  const formatSHF = (value: number | null | undefined) =>
+    value === null || value === undefined ? '—' : value.toFixed(2);
 
   if (sortedProcesses.length === 0) {
     return (
@@ -92,6 +95,12 @@ export const ProcessList = ({
         const fromPoint = statePoints.find((p) => p.id === process.fromPointId);
         const toPoint = statePoints.find((p) => p.id === process.toPointId);
         const capacity = calculateCapacity(process);
+        const inferredMode = capacity ? inferModeFromSigned(capacity.totalCapacity) : null;
+        const modeMismatch =
+          capacity &&
+          (process.type === 'heating' || process.type === 'cooling') &&
+          ((process.type === 'heating' && inferredMode === 'cooling') ||
+            (process.type === 'cooling' && inferredMode === 'heating'));
         const stream1Id =
           process.parameters.mixingRatios?.stream1.pointId ?? process.fromPointId;
         const stream2Id = process.parameters.mixingRatios?.stream2.pointId;
@@ -155,7 +164,7 @@ export const ProcessList = ({
                     <div>全熱: {Math.abs(capacity.totalCapacity).toFixed(2)} kW</div>
                     <div>顕熱: {Math.abs(capacity.sensibleCapacity).toFixed(2)} kW</div>
                     <div>潜熱: {Math.abs(capacity.latentCapacity).toFixed(2)} kW</div>
-                    <div>SHF: {capacity.SHF.toFixed(2)}</div>
+                    <div>SHF: {formatSHF(capacity.SHF)}</div>
                     <div>温度差: {capacity.temperatureDiff.toFixed(1)}°C</div>
                     <div>湿度差: {(capacity.humidityDiff * 1000).toFixed(2)} g/kg'</div>
                     <div>比エンタルピー差: {capacity.enthalpyDiff.toFixed(2)} kJ/kg'</div>
@@ -178,6 +187,12 @@ export const ProcessList = ({
                           );
                         })()}
                       </>
+                    )}
+                    {modeMismatch && (
+                      <div className="col-span-2 text-amber-600">
+                        警告: 運転モードと計算結果が一致しません（結果は
+                        {inferredMode === 'cooling' ? '冷却' : '加熱'}）。
+                      </div>
                     )}
                   </div>
                 )}

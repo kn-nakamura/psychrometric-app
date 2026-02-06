@@ -8,6 +8,7 @@ import { PsychrometricCalculator } from '../psychrometric/properties';
 import { StatePointConverter } from '../psychrometric/conversions';
 import { HeatingProcess } from '../processes/heating';
 import { CoolingProcess } from '../processes/cooling';
+import { splitCapacity } from '../capacity';
 
 console.log('='.repeat(60));
 console.log('空気線図計算ロジック検算');
@@ -91,6 +92,9 @@ console.log(`出口RH: ${heatingResult.toPoint.relativeHumidity?.toFixed(1)}%`);
 console.log(`温度上昇: ${heatingResult.results.temperatureDiff?.toFixed(2)}°C`);
 console.log(`絶対湿度変化: ${heatingResult.results.humidityDiff?.toFixed(6)} kg/kg' (変化なしのはず)`);
 console.log(`  加熱後の湿度変化が0? → ${Math.abs(heatingResult.results.humidityDiff || 0) < 0.0001 ? '✓' : '✗'}`);
+console.log(
+  `  加熱能力の符号が正? → ${heatingResult.results.totalHeat && heatingResult.results.totalHeat > 0 ? '✓' : '✗'}`
+);
 
 // ========================================
 // テスト4: 冷却・除湿プロセス
@@ -121,9 +125,18 @@ console.log(`出口温度: ${coolingResult.toPoint.dryBulbTemp?.toFixed(2)}°C`)
 console.log(`出口RH: ${coolingResult.toPoint.relativeHumidity?.toFixed(1)}%`);
 console.log(`温度低下: ${Math.abs(coolingResult.results.temperatureDiff || 0).toFixed(2)}°C`);
 console.log(`除湿量: ${Math.abs(coolingResult.results.humidityDiff || 0).toFixed(6)} kg/kg'`);
-console.log(`顕熱: ${coolingResult.results.sensibleHeat?.toFixed(2)}kW (期待値: 15kW)`);
-console.log(`潜熱: ${coolingResult.results.latentHeat?.toFixed(2)}kW (期待値: 5kW)`);
-console.log(`  SHF計算が正しい? → ${Math.abs((coolingResult.results.sensibleHeat || 0) - 15) < 0.5 ? '✓' : '✗'}`);
+console.log(`顕熱: ${coolingResult.results.sensibleHeat?.toFixed(2)}kW (期待値: -15kW)`);
+console.log(`潜熱: ${coolingResult.results.latentHeat?.toFixed(2)}kW (期待値: -5kW)`);
+console.log(`  SHF計算が正しい? → ${Math.abs((coolingResult.results.sensibleHeat || 0) + 15) < 0.5 ? '✓' : '✗'}`);
+console.log(
+  `  冷却能力の符号が負? → ${coolingResult.results.totalHeat && coolingResult.results.totalHeat < 0 ? '✓' : '✗'}`
+);
+console.log(
+  `  全熱=顕熱+潜熱? → ${Math.abs(
+    (coolingResult.results.totalHeat || 0) -
+      ((coolingResult.results.sensibleHeat || 0) + (coolingResult.results.latentHeat || 0))
+  ) < 0.01 ? '✓' : '✗'}`
+);
 
 // ========================================
 // テスト5: 実務的なケース（夏季の外気処理）
@@ -158,6 +171,30 @@ console.log(`  必要冷却能力: ${targetResult.results.totalHeat?.toFixed(2)}
 console.log(`  顕熱: ${targetResult.results.sensibleHeat?.toFixed(2)}kW`);
 console.log(`  潜熱: ${targetResult.results.latentHeat?.toFixed(2)}kW`);
 console.log(`  除湿量: ${Math.abs(targetResult.results.humidityDiff || 0).toFixed(6)} kg/kg'`);
+console.log(
+  `  全熱=顕熱+潜熱? → ${Math.abs(
+    (targetResult.results.totalHeat || 0) -
+      ((targetResult.results.sensibleHeat || 0) + (targetResult.results.latentHeat || 0))
+  ) < 0.01 ? '✓' : '✗'}`
+);
+
+// ========================================
+// テスト6: 分解関数の一致確認
+// ========================================
+console.log('\n【テスト6】全熱=顕熱+潜熱の一致確認');
+console.log('-'.repeat(60));
+
+const splitResult = splitCapacity(
+  0.4, // kgDA/s
+  { dryBulbTemp: 30, humidity: 0.012 },
+  { dryBulbTemp: 15, humidity: 0.008 }
+);
+console.log(`全熱: ${splitResult.totalKw.toFixed(4)}kW`);
+console.log(`顕熱: ${splitResult.sensibleKw.toFixed(4)}kW`);
+console.log(`潜熱: ${splitResult.latentKw.toFixed(4)}kW`);
+console.log(
+  `  一致? → ${Math.abs(splitResult.totalKw - (splitResult.sensibleKw + splitResult.latentKw)) < 1e-6 ? '✓' : '✗'}`
+);
 
 // ========================================
 // 検算まとめ

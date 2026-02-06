@@ -2,8 +2,11 @@ import { StatePoint } from '@/types/psychrometric';
 import type { PsychrometricConstants } from '@/types/calculationSettings';
 import { ProcessResults } from '@/types/process';
 import { StatePointConverter } from '../psychrometric/conversions';
-import { PsychrometricCalculator } from '../psychrometric/properties';
 import { resolvePsychrometricConstants } from '../psychrometric/constants';
+import { toSignedCapacity } from '../sign';
+import { massFlowFromAirflow } from '../airflow';
+import { enthalpy } from '../psychrometrics';
+import { splitCapacity } from '../capacity';
 
 /**
  * 加熱プロセスの計算
@@ -35,21 +38,19 @@ export class HeatingProcess {
     const effectivePressure = pressure ?? resolved.standardPressure;
     
     // 質量流量を計算 [kg/h]
-    const density = PsychrometricCalculator.airDensity(
-      fromPoint.dryBulbTemp!,
-      fromPoint.humidity!,
-      effectivePressure,
-      resolved
-    );
-    const massFlow = airflow * density; // [kg/h]
+    const massFlow = massFlowFromAirflow(airflow, fromPoint, effectivePressure);
+    if (massFlow <= 0) {
+      throw new Error('Invalid airflow for heating calculation.');
+    }
     
     // エンタルピー差を計算 [kJ/kg']
     // Q[kW] = G[kg/h] × Δh[kJ/kg'] / 3600
     // Δh = Q × 3600 / G
-    const enthalpyDiff = (heatingCapacity * 3600) / massFlow;
+    const totalHeat = toSignedCapacity('heating', heatingCapacity);
+    const enthalpyDiff = totalHeat / massFlow;
     
     // 出口エンタルピー
-    const toEnthalpy = fromPoint.enthalpy! + enthalpyDiff;
+    const toEnthalpy = enthalpy(fromPoint.dryBulbTemp!, fromPoint.humidity!) + enthalpyDiff;
     
     // 絶対湿度は変化しない
     const toHumidity = fromPoint.humidity!;
@@ -67,9 +68,9 @@ export class HeatingProcess {
     
     // 計算結果
     const results: ProcessResults = {
-      sensibleHeat: heatingCapacity,  // 加熱は100%顕熱
+      sensibleHeat: totalHeat,  // 加熱は100%顕熱
       latentHeat: 0,
-      totalHeat: heatingCapacity,
+      totalHeat,
       enthalpyDiff,
       humidityDiff: 0,  // 絶対湿度変化なし
       temperatureDiff,
@@ -109,28 +110,32 @@ export class HeatingProcess {
     );
     
     // エンタルピー差
-    const enthalpyDiff = toPoint.enthalpy! - fromPoint.enthalpy!;
+    const enthalpyDiff = enthalpy(toPoint.dryBulbTemp!, toPoint.humidity!) -
+      enthalpy(fromPoint.dryBulbTemp!, fromPoint.humidity!);
     
     // 質量流量
-    const density = PsychrometricCalculator.airDensity(
-      fromPoint.dryBulbTemp!,
-      fromPoint.humidity!,
-      effectivePressure,
-      resolved
-    );
-    const massFlow = airflow * density;
+    const massFlow = massFlowFromAirflow(airflow, fromPoint, effectivePressure);
     
-    // 加熱能力 [kW]
-    const heatingCapacity = (massFlow * enthalpyDiff) / 3600;
+    const { totalKw, sensibleKw, latentKw } = splitCapacity(
+      massFlow,
+      {
+        dryBulbTemp: fromPoint.dryBulbTemp!,
+        humidity: fromPoint.humidity!,
+      },
+      {
+        dryBulbTemp: toPoint.dryBulbTemp!,
+        humidity: toPoint.humidity!,
+      }
+    );
     
     // 温度差
     const temperatureDiff = toTemp - fromPoint.dryBulbTemp!;
     
     // 計算結果
     const results: ProcessResults = {
-      sensibleHeat: heatingCapacity,
-      latentHeat: 0,
-      totalHeat: heatingCapacity,
+      sensibleHeat: sensibleKw,
+      latentHeat: latentKw,
+      totalHeat: totalKw,
       enthalpyDiff,
       humidityDiff: 0,
       temperatureDiff,
