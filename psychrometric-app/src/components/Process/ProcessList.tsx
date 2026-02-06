@@ -276,48 +276,51 @@ export const ProcessList = ({
                     混合後風量: {mixingAirflowTotal.toFixed(0)} m³/h
                   </div>
                 )}
-                {airflowDetails.length > 0 && (
-                  <div className="mt-1 text-xs text-gray-600 space-y-0.5">
-                    {airflowDetails.map((detail) => (
-                      <div key={detail}>{detail}</div>
-                    ))}
-                  </div>
-                )}
-
                 {/* 能力表示 */}
-                {capacity && (
+                {(capacity || airflowDetails.length > 0) && (
                   <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                    <div>全熱: {formatSignedHeat(capacity.totalCapacity)} kW</div>
-                    <div>顕熱: {formatSignedHeat(capacity.sensibleCapacity)} kW</div>
-                    <div>潜熱: {formatSignedHeat(capacity.latentCapacity)} kW</div>
-                    <div>SHF: {formatSHF(capacity.SHF)}</div>
-                    <div>温度差: {capacity.temperatureDiff.toFixed(1)}°C</div>
-                    <div>湿度差: {(capacity.humidityDiff * 1000).toFixed(2)} g/kg'</div>
-                    <div>比エンタルピー差: {capacity.enthalpyDiff.toFixed(2)} kJ/kg'</div>
-                    {process.parameters.airflow && capacity.humidityDiff !== 0 && (
-                      <div>
-                        {capacity.humidityDiff < 0 ? '除湿量' : '加湿量'}:{' '}
-                        {(Math.abs(capacity.humidityDiff) * process.parameters.airflow * 1.2).toFixed(2)} L/h
-                      </div>
-                    )}
-                    {(process.type === 'heating' || process.type === 'cooling') && (
+                    {capacity && (
                       <>
-                        {(() => {
-                          const waterTempDiff = process.parameters.waterTempDiff || 7;
-                          const waterFlowRate = (Math.abs(capacity.totalCapacity) * 60) / (4.186 * waterTempDiff);
-                          return (
-                            <>
-                              <div>水温度差: {waterTempDiff.toFixed(1)}℃</div>
-                              <div>水量: {waterFlowRate.toFixed(2)} L/min</div>
-                            </>
-                          );
-                        })()}
+                        <div>全熱: {formatSignedHeat(capacity.totalCapacity)} kW</div>
+                        <div>顕熱: {formatSignedHeat(capacity.sensibleCapacity)} kW</div>
+                        <div>潜熱: {formatSignedHeat(capacity.latentCapacity)} kW</div>
+                        <div>SHF: {formatSHF(capacity.SHF)}</div>
+                        <div>温度差: {capacity.temperatureDiff.toFixed(1)}°C</div>
+                        <div>湿度差: {(capacity.humidityDiff * 1000).toFixed(2)} g/kg'</div>
+                        <div>比エンタルピー差: {capacity.enthalpyDiff.toFixed(2)} kJ/kg'</div>
+                        {process.parameters.airflow && capacity.humidityDiff !== 0 && (
+                          <div>
+                            {capacity.humidityDiff < 0 ? '除湿量' : '加湿量'}:{' '}
+                            {(Math.abs(capacity.humidityDiff) * process.parameters.airflow * 1.2).toFixed(2)} L/h
+                          </div>
+                        )}
+                        {(process.type === 'heating' || process.type === 'cooling') && (
+                          <>
+                            {(() => {
+                              const waterTempDiff = process.parameters.waterTempDiff || 7;
+                              const waterFlowRate = (Math.abs(capacity.totalCapacity) * 60) / (4.186 * waterTempDiff);
+                              return (
+                                <>
+                                  <div>水温度差: {waterTempDiff.toFixed(1)}℃</div>
+                                  <div>水量: {waterFlowRate.toFixed(2)} L/min</div>
+                                </>
+                              );
+                            })()}
+                          </>
+                        )}
+                        {modeMismatch && (
+                          <div className="col-span-2 text-amber-600">
+                            警告: 運転モードと計算結果が一致しません（結果は
+                            {inferredMode === 'cooling' ? '冷却' : '加熱'}）。
+                          </div>
+                        )}
                       </>
                     )}
-                    {modeMismatch && (
-                      <div className="col-span-2 text-amber-600">
-                        警告: 運転モードと計算結果が一致しません（結果は
-                        {inferredMode === 'cooling' ? '冷却' : '加熱'}）。
+                    {airflowDetails.length > 0 && (
+                      <div className="col-span-2 space-y-0.5">
+                        {airflowDetails.map((detail) => (
+                          <div key={detail}>{detail}</div>
+                        ))}
                       </div>
                     )}
                   </div>
