@@ -133,7 +133,7 @@ export const StatePointList = () => {
                 </span>
               </div>
 
-              <div className="mt-1 grid w-full grid-cols-1 gap-x-4 text-sm text-gray-600 sm:grid-cols-2">
+              <div className="-mx-2 mt-1 grid w-full grid-cols-1 gap-x-4 px-2 text-sm text-gray-600 sm:grid-cols-2 sm:-mx-3 sm:px-3">
                 <div>温度: {point.dryBulbTemp?.toFixed(1)}°C</div>
                 <div>RH: {point.relativeHumidity?.toFixed(0)}%</div>
                 <div>絶対湿度: {point.humidity?.toFixed(4)} kg/kg'</div>
