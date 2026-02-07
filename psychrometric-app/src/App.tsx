@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Settings, Download, FolderOpen, Edit2, Trash2, Copy, ChevronUp, ChevronDown, FilePlus, ArrowRight } from 'lucide-react';
+import { Plus, Settings, Download, FolderOpen, Edit2, Trash2, Copy, ChevronUp, ChevronDown, FilePlus, ArrowRight, Moon, Sun } from 'lucide-react';
 import { useProjectStore } from './store/projectStore';
 import { PsychrometricChart, PsychrometricChartRef } from './components/Chart/PsychrometricChart';
 import { ProcessDialog } from './components/Process/ProcessDialog';
 import { ProcessList } from './components/Process/ProcessList';
+import { CalculationDetailPanel } from './components/Process/CalculationDetailPanel';
 import { DesignConditionsEditor } from './components/DesignConditions/DesignConditionsEditor';
 import { ExportDialog } from './components/Export/ExportDialog';
 import { ProjectManager } from './components/Project/ProjectManager';
@@ -176,6 +177,7 @@ function App() {
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 640px)');
@@ -186,6 +188,25 @@ function App() {
       mediaQuery.removeEventListener('change', handleChange);
     };
   }, []);
+
+  // Dark mode initialization and management
+  useEffect(() => {
+    const savedDarkMode = localStorage.getItem('darkMode') === 'true';
+    setDarkMode(savedDarkMode);
+    if (savedDarkMode) {
+      document.documentElement.classList.add('dark');
+    }
+  }, []);
+
+  // Update dark mode when state changes
+  useEffect(() => {
+    localStorage.setItem('darkMode', darkMode.toString());
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
 
   useEffect(() => {
     if (!isResizingSidebar) return;
@@ -506,6 +527,90 @@ function App() {
     }
     setInputValueB('');
   }, [inputTypeB, editingPointSnapshot]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ctrl+S or Cmd+S: Save project
+      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault();
+        // Auto-save is handled by Zustand persist middleware
+        // Just show a notification
+        const notification = document.createElement('div');
+        notification.textContent = 'プロジェクトが保存されました';
+        notification.style.position = 'fixed';
+        notification.style.bottom = '20px';
+        notification.style.right = '20px';
+        notification.style.backgroundColor = '#4ade80';
+        notification.style.color = 'white';
+        notification.style.padding = '12px 16px';
+        notification.style.borderRadius = '4px';
+        notification.style.zIndex = '10000';
+        notification.style.fontSize = '14px';
+        document.body.appendChild(notification);
+        setTimeout(() => notification.remove(), 2000);
+      }
+
+      // Delete: Delete selected state point or process
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        if (selectedPointId && !editingPointId) {
+          event.preventDefault();
+          deleteStatePoint(selectedPointId);
+          setSelectedPoint(null);
+        } else if (selectedProcessId) {
+          event.preventDefault();
+          deleteProcess(selectedProcessId);
+          setSelectedProcess(null);
+        }
+      }
+
+      // Ctrl+D or Cmd+D: Duplicate state point
+      if ((event.ctrlKey || event.metaKey) && event.key === 'd') {
+        event.preventDefault();
+        if (selectedPointId) {
+          const pointToDuplicate = statePoints.find((p) => p.id === selectedPointId);
+          if (pointToDuplicate) {
+            const newPoint: StatePoint = {
+              ...pointToDuplicate,
+              id: Date.now().toString(),
+              name: pointToDuplicate.name + ' (複製)',
+              order: Math.max(...statePoints.map((p) => p.order), 0) + 1,
+            };
+            addStatePoint(newPoint);
+            setSelectedPoint(newPoint.id);
+          }
+        }
+      }
+
+      // Ctrl+C or Cmd+C: Copy state point properties to clipboard
+      if ((event.ctrlKey || event.metaKey) && event.key === 'c' && !event.shiftKey) {
+        if (selectedPointId) {
+          event.preventDefault();
+          const point = statePoints.find((p) => p.id === selectedPointId);
+          if (point) {
+            const copyText = `${point.name}\n温度: ${point.dryBulbTemp ?? '-'}°C\n相対湿度: ${point.relativeHumidity ?? '-'}%\n絶対湿度: ${point.humidity ?? '-'} kg/kg'\nエンタルピー: ${point.enthalpy ?? '-'} kJ/kg'`;
+            navigator.clipboard.writeText(copyText);
+            const notification = document.createElement('div');
+            notification.textContent = 'クリップボードにコピーしました';
+            notification.style.position = 'fixed';
+            notification.style.bottom = '20px';
+            notification.style.right = '20px';
+            notification.style.backgroundColor = '#3b82f6';
+            notification.style.color = 'white';
+            notification.style.padding = '12px 16px';
+            notification.style.borderRadius = '4px';
+            notification.style.zIndex = '10000';
+            notification.style.fontSize = '14px';
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 2000);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedPointId, selectedProcessId, editingPointId, statePoints, deleteStatePoint, deleteProcess, setSelectedPoint, setSelectedProcess, addStatePoint]);
 
   const resetPointForm = () => {
     setNewPointName('');
@@ -1173,36 +1278,36 @@ function App() {
   };
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-gray-50">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-gray-50 dark:bg-gray-950">
       {/* ヘッダー */}
-      <header className="flex-none bg-white border-b border-gray-200 px-4 py-3">
+      <header className="flex-none bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
         <div className="max-w-full mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900">
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
               空気線図アプリケーション
             </h1>
-            <p className="text-xs sm:text-sm text-gray-600">
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
               {designConditions.project.name} - {designConditions.project.location}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             <button
               onClick={handleNewProject}
-              className="flex items-center gap-2 px-2.5 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-2.5 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
               <FilePlus className="w-4 h-4" />
               <span className="hidden sm:inline">新規プロジェクト</span>
             </button>
             <button
               onClick={() => setShowDesignEditor(true)}
-              className="flex items-center gap-2 px-2.5 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-2.5 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
               <Settings className="w-4 h-4" />
               <span className="hidden sm:inline">設計条件</span>
             </button>
             <button
               onClick={() => setShowProjectManager(true)}
-              className="flex items-center gap-2 px-2.5 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-2.5 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
               <FolderOpen className="w-4 h-4" />
               <span className="hidden sm:inline">プロジェクト</span>
@@ -1214,6 +1319,14 @@ function App() {
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">エクスポート</span>
             </button>
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="flex items-center gap-2 px-2.5 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              title={darkMode ? 'ライトモードに切り替え' : 'ダークモードに切り替え'}
+            >
+              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              <span className="hidden sm:inline">{darkMode ? 'ライト' : 'ダーク'}</span>
+            </button>
           </div>
         </div>
       </header>
@@ -1221,12 +1334,12 @@ function App() {
       <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
         {/* 左サイドバー */}
         <aside
-          className="order-2 w-full flex-none bg-white border-b border-gray-200 overflow-y-auto min-h-0 max-h-[45dvh] sm:order-none sm:border-b-0 sm:border-r sm:max-h-none"
+          className="order-2 w-full flex-none bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 overflow-y-auto min-h-0 max-h-[45dvh] sm:order-none sm:border-b-0 sm:border-r sm:max-h-none"
           style={isDesktop ? { width: sidebarWidth } : undefined}
         >
           {/* 季節切替 */}
-          <div className="p-4 border-b border-gray-200">
-            <h2 className="font-semibold text-sm text-gray-700 mb-2">表示モード</h2>
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="font-semibold text-sm text-gray-700 dark:text-gray-300 mb-2">表示モード</h2>
             <div className="flex gap-1">
               <button
                 onClick={() => setActiveSeason('summer')}
@@ -1789,6 +1902,23 @@ function App() {
                   onReorderProcesses={reorderProcesses}
                 />
               </div>
+
+              {selectedProcessId && (
+                <div className="mt-4">
+                  {(() => {
+                    const process = processes.find((p) => p.id === selectedProcessId);
+                    const fromPoint = statePoints.find((p) => p.id === process?.fromPointId);
+                    const toPoint = statePoints.find((p) => p.id === process?.toPointId);
+                    return (
+                      <CalculationDetailPanel
+                        process={process!}
+                        fromPoint={fromPoint}
+                        toPoint={toPoint}
+                      />
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           )}
 

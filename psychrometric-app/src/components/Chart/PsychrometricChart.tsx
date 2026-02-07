@@ -390,11 +390,12 @@ function drawGrid(
     ctx.lineTo(x, y2);
     ctx.stroke();
 
-    // ラベル
+    // ラベル - マージン内に配置
     ctx.fillStyle = '#666';
-    ctx.font = '10px sans-serif';
+    ctx.font = '11px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`${temp}°C`, x, y1 + 20);
+    ctx.textBaseline = 'top';
+    ctx.fillText(`${temp}°C`, x, y1 + 8);
   }
 
   // 横線（絶対湿度）- g/kg' 形式で表示
@@ -408,12 +409,13 @@ function drawGrid(
     ctx.lineTo(x2, y);
     ctx.stroke();
 
-    // ラベル - g/kg' 形式 (kg/kg' × 1000 = g/kg')
+    // ラベル - g/kg' 形式 (kg/kg' × 1000 = g/kg') - マージン内に配置
     ctx.fillStyle = '#666';
-    ctx.font = '10px sans-serif';
+    ctx.font = '11px sans-serif';
     ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
     const gPerKg = h * 1000;
-    ctx.fillText(`${gPerKg.toFixed(0)} g/kg'`, x1 - 10, y + 4);
+    ctx.fillText(`${gPerKg.toFixed(0)} g/kg'`, x1 - 12, y);
   }
 }
 
