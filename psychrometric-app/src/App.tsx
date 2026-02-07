@@ -1807,7 +1807,7 @@ function App() {
                                   : '通年'}
                               </span>
                             </div>
-                            <div className="text-xs text-gray-600 mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+                            <div className="-mx-2 mt-2 grid w-full grid-cols-1 gap-x-3 gap-y-1 px-2 text-xs text-gray-600 sm:grid-cols-2 sm:-mx-3 sm:px-3">
                               <div>
                                 乾球温度: {point.dryBulbTemp?.toFixed(1) ?? '-'}°C
                               </div>
