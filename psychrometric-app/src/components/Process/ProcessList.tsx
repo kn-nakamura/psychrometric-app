@@ -276,7 +276,7 @@ export const ProcessList = ({
                 )}
                 {/* 能力表示 */}
                 {(capacity || airflowDetails.length > 0) && (
-                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                  <div className="mt-2 grid w-full grid-cols-1 gap-x-4 gap-y-1 text-xs text-gray-600 bg-gray-50 p-2 rounded sm:grid-cols-2">
                     {capacity && (
                       <>
                         <div>全熱: {formatSignedHeat(capacity.totalCapacity)} kW</div>
