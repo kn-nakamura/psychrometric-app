@@ -178,10 +178,10 @@ export function createDefaultChartConfig(
     dimensions: {
       width,
       height,
-      marginTop: 32,
-      marginRight: 28,
-      marginBottom: 28,
-      marginLeft: 56,
+      marginTop: 40,
+      marginRight: 40,
+      marginBottom: 70,
+      marginLeft: 70,
     },
     range: {
       tempMin: -5,
