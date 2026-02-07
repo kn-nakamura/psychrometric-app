@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, FileImage, FileText, Loader2 } from 'lucide-react';
+import { X, FileImage, FileText, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { DesignConditions } from '@/types/designConditions';
 import { StatePoint } from '@/types/psychrometric';
@@ -7,6 +7,7 @@ import { Process } from '@/types/process';
 import { renderPsychrometricChart, renderPsychrometricChartToContext } from '@/components/Chart/PsychrometricChart';
 import { CoilCapacityCalculator } from '@/lib/equipment/coilCapacity';
 import { inferModeFromSigned } from '@/lib/sign';
+import { exportToExcel } from '@/lib/export/excel';
 
 interface ExportDialogProps {
   onClose: () => void;
@@ -68,7 +69,7 @@ export const ExportDialog = ({
   activeSeason,
 }: ExportDialogProps) => {
   const [isExporting, setIsExporting] = useState(false);
-  const [exportType, setExportType] = useState<'pdf' | 'png' | null>(null);
+  const [exportType, setExportType] = useState<'pdf' | 'png' | 'excel' | null>(null);
 
   // A4縦向き (mm)
   const A4_WIDTH_MM = 210;
@@ -1123,6 +1124,22 @@ export const ExportDialog = ({
     }
   };
 
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    setExportType('excel');
+
+    try {
+      await exportToExcel(statePoints, processes, designConditions, activeSeason);
+      onClose();
+    } catch (error) {
+      console.error('Excel export failed:', error);
+      alert('Excel出力に失敗しました');
+    } finally {
+      setIsExporting(false);
+      setExportType(null);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
@@ -1175,6 +1192,24 @@ export const ExportDialog = ({
                 <div className="font-semibold">PNG画像</div>
                 <div className="text-sm text-gray-600">
                   空気線図と状態点・プロセスを含む
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={handleExportExcel}
+              disabled={isExporting}
+              className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3"
+            >
+              {isExporting && exportType === 'excel' ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="w-5 h-5" />
+              )}
+              <div>
+                <div className="font-semibold">Excelファイル</div>
+                <div className="text-sm text-green-100">
+                  状態点一覧・プロセス一覧（計算式付き）を含む
                 </div>
               </div>
             </button>
